@@ -1,5 +1,3 @@
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::DataType::*;
 use crate::FuncType::*;
@@ -185,6 +183,7 @@ enum Value {
 }
 
 impl Value {
+    #[inline(always)]
     fn getNum(&self) -> isize {
         match self {
             Num(v) => *v,
@@ -194,6 +193,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn getFlo(&self) -> f32 {
         match self {
             Num(_) => panic!(),
@@ -203,6 +203,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn getRefFlo(&mut self) -> &mut f32 {
         match self {
             Num(_) => panic!(),
@@ -212,6 +213,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn getRefNum(&mut self) -> &mut isize {
         match self {
             Num(v) => v,
@@ -221,6 +223,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn getRefBol(&mut self) -> &mut bool {
         match self {
             Num(_) => panic!(),
@@ -230,6 +233,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn getBool(&self) -> bool {
         match self {
             Num(_) => panic!(),
@@ -241,16 +245,19 @@ impl Value {
 }
 
 impl Value {
+    #[inline(always)]
     fn or(&mut self, val: Value) {
         let r = self.getRefBol();
         *r = *r || val.getBool();
     }
 
+    #[inline(always)]
     fn and(&mut self, val: Value) {
         let r = self.getRefBol();
         *r = *r && val.getBool();
     }
 
+    #[inline(always)]
     fn not(&mut self) {
         let r = self.getRefBol();
         *r = !*r;
@@ -258,6 +265,7 @@ impl Value {
 }
 
 impl Value {
+    #[inline(always)]
     fn gt(&self, val: Value, typ: &DataType) -> bool {
         match typ {
             Int => {
@@ -267,13 +275,14 @@ impl Value {
                 self.getFlo() > val.getFlo()
             },
             Bool => {
-                self.getBool() > val.getBool()
+                self.getBool() & !val.getBool()
             },
             Array { .. } => panic!(),
             Object { .. } => panic!()
         }
     }
 
+    #[inline(always)]
     fn inc(&mut self, typ: &DataType) {
         match typ {
             Int => {
@@ -288,6 +297,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn dec(&mut self, typ: &DataType) {
         match typ {
             Int => {
@@ -302,6 +312,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn less(&self, val: Value, typ: &DataType) -> bool {
         match typ {
             Int => {
@@ -311,13 +322,14 @@ impl Value {
                 self.getFlo() < val.getFlo()
             },
             Bool => {
-                self.getBool() < val.getBool()
+                !self.getBool() & val.getBool()
             },
             Array { .. } => panic!(),
             Object { .. } => panic!()
         }
     }
 
+    #[inline(always)]
     fn eq(&self, val: Value, typ: &DataType) -> bool {
         match typ {
             Int => {
@@ -336,6 +348,7 @@ impl Value {
 }
 
 impl Value {
+    #[inline(always)]
     fn add(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -350,6 +363,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn sub(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -364,6 +378,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -378,6 +393,7 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -392,35 +408,29 @@ impl Value {
         }
     }
 
+    #[inline(always)]
     fn f2i(&mut self) -> Value {
         Num(self.getFlo() as isize)
     }
 
+    #[inline(always)]
     fn i2f(&mut self) -> Value {
         Flo(self.getNum() as f32)
     }
 }
 
 impl Value {
+    #[inline(always)]
     fn isType(&self, typ: &DataType) -> bool {
         match self {
             Num(_) => {
-                match typ {
-                    Int => true,
-                    _ => false
-                }
+                matches!(typ, Int)
             }
             Flo(_) => {
-                match typ {
-                    Float => true,
-                    _ => false
-                }
+                matches!(typ, Float)
             }
             Bol(_) => {
-                match typ {
-                    Bool => true,
-                    _ => false
-                }
+                matches!(typ, Bool)
             }
             Reference() => panic!()
         }
@@ -497,11 +507,13 @@ struct SeekableOpcodes<'a> {
 }
 
 impl SeekableOpcodes<'_> {
+    #[inline(always)]
     fn seek(&mut self, offset: isize) {
         // FIXME boundary check
         self.index += offset;
     }
 
+    #[inline(always)]
     fn next(&mut self) -> Option<&OpCode> {
         let n = self.opCodes.get(self.index as usize);
         self.index += 1;
@@ -510,6 +522,7 @@ impl SeekableOpcodes<'_> {
     }
 }
 
+#[inline(always)]
 fn argsToString(args: &[DataType]) -> String {
     let mut buf = String::new();
 
@@ -522,6 +535,7 @@ fn argsToString(args: &[DataType]) -> String {
     buf
 }
 
+#[inline(always)]
 fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
@@ -534,14 +548,17 @@ fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     buf
 }
 
+#[inline(always)]
 fn genFunName(name: &str, args: &[DataType]) -> String {
     format!("{}({})", name, argsToString(args))
 }
 
+#[inline(always)]
 fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
     format!("{}({})", name, argsToStringMeta(args))
 }
 
+#[inline(always)]
 fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFrame: &mut StackFrame) {
     loop {
         let op = match opCodes.next() {
@@ -593,7 +610,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
             Jmp { offset, jmpType, typ } => {
                 match jmpType {
                     JmpType::One => {
-                        let mut a = vm.stack.pop().unwrap();
+                        vm.stack.pop().unwrap();
                         let b = vm.stack.pop().unwrap();
                     }
                     JmpType::Zero => {}
@@ -602,7 +619,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                         opCodes.seek(x)
                     }
                     JmpType::Gt => {
-                        let mut a = vm.stack.pop().unwrap();
+                        let a = vm.stack.pop().unwrap();
                         let b = vm.stack.pop().unwrap();
                         if a.gt(b, typ) {
                             let x = *offset;
@@ -610,18 +627,15 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                         }
                     }
                     JmpType::Less => {
-                        let mut a = vm.stack.pop().unwrap();
+                        let a = vm.stack.pop().unwrap();
                         let b = vm.stack.pop().unwrap();
                         if a.less(b, typ) {
-                            unsafe {
-                                // opCodes.as_ptr().as_ref().unwrap().seek(offset);
-                                let x = *offset;
-                                opCodes.seek(x)
-                            }
+                            let x = *offset;
+                            opCodes.seek(x)
                         }
                     }
                     JmpType::True => {
-                        let mut a = vm.stack.pop().unwrap();
+                        let a = vm.stack.pop().unwrap();
                         if a.getBool() {
                             let x = *offset;
                             opCodes.seek(x)
@@ -631,7 +645,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
             }
             Call { name, args, encoded } => {
                 // let genName = genFunName(name, args);
-                let mut f = vm.functions.get(*encoded).unwrap();
+                let f = vm.functions.get(*encoded).unwrap();
 
                 let mut localVars = Vec::with_capacity(f.varTable.len());
 
@@ -688,19 +702,19 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                 vm.stack.push(a)
             }
             Equals(v) => {
-                let mut a = vm.stack.pop().unwrap();
+                let a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.eq(b, v);
                 vm.stack.push(a);
             }
             Greater(v) => {
-                let mut a = vm.stack.pop().unwrap();
+                let a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 let res = a.gt(b, v);
                 vm.stack.push(Bol(res));
             }
             Less(v) => {
-                let mut a = vm.stack.pop().unwrap();
+                let a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 let res = a.less(b, v);
                 vm.stack.push(Bol(res));
@@ -748,15 +762,15 @@ fn main() {
 
     let a = [VariableMetadata { name: "value".to_string(), typ: Int }];
     let b = [VariableMetadata { name: "value".to_string(), typ: Float }];
-    vm.makeNative(String::from("print"), &a, |a, mut b|{
+    vm.makeNative(String::from("print"), &a, |a, b|{
         println!("{}", b.localVariables[0].getNum())
     }, None);
 
-    vm.makeNative(String::from("print"), &b, |a, mut b|{
+    vm.makeNative(String::from("print"), &b, |a, b|{
         println!("{}", b.localVariables[0].getFlo())
     }, None);
 
-    vm.makeNative(String::from("exec"), &[], |mut a, mut b| {
+    vm.makeNative(String::from("exec"), &[], |a, b| {
         let stack = match b.previous {
             None => &b,
             Some(v) => v
@@ -775,7 +789,7 @@ fn main() {
             end: None,
         };
 
-        run(&mut seek, &mut a, &mut b);
+        run(&mut seek, a, b);
     }, None);
 
     let ops = [
@@ -791,8 +805,8 @@ fn main() {
         },
         Return,
         PushLocal { index: 0 },
-        // Pop,
-        Call { name: "print", args: &[Float], encoded: "print(float)" },
+        Pop,
+        // Call { name: "print", args: &[Float], encoded: "print(float)" },
         Dec { typ: Float, index: 0 },
         Jmp {
             offset: -9,
