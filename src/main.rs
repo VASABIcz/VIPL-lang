@@ -1,47 +1,44 @@
-use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Iter;
-use std::rc::Rc;
-use crate::DataType::Object;
-use crate::FuncType::Native;
-use crate::JmpType::Less;
-use crate::OpCode::{Call, Jmp, Pop, PushFloat, PushLocal, Return, SetLocal, Sub};
-use crate::Value::Bool;
+use crate::DataType::*;
+use crate::FuncType::*;
+use crate::OpCode::*;
+use crate::Value::*;
 
 #[derive(Clone, Debug)]
-enum DataType {
+enum DataType<'a> {
     Int,
     Float,
     Bool,
     Array {
-        inner: Box<DataType>
+        inner: &'a DataType<'a>
     },
     Object {
         name: String
     }
 }
 
-impl DataType {
+impl DataType<'_> {
     fn toString(&self) -> &str {
         match self {
-            DataType::Int => "int",
-            DataType::Float => "float",
-            DataType::Bool => "bool",
-            DataType::Array { inner } => "uwu",
-            DataType::Object { name } => &name
+            Int => "int",
+            Float => "float",
+            Bool => "bool",
+            Array { inner } => "",
+            Object { name } => &name
         }
     }
 }
 
-impl DataType {
+impl DataType<'_> {
     fn toDefaultValue(&self) -> Value {
         match self {
-            DataType::Int => Value::Num(0),
-            DataType::Float => Value::Flo(0.),
-            DataType::Bool => Value::Bool(false),
-            DataType::Array { .. } => panic!(),
-            DataType::Object { .. } => panic!()
+            Int => Num(0),
+            Float => Flo(0.),
+            Bool => Bol(false),
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
         }
     }
 }
@@ -57,22 +54,22 @@ enum JmpType {
 }
 
 #[derive(Clone, Debug)]
-struct VariableMetadata {
+struct VariableMetadata<'a> {
     pub name: String,
-    pub typ: DataType
+    pub typ: DataType<'a>
 }
 
-#[derive(Clone, Debug)]
-enum OpCode {
+#[derive(Clone)]
+enum OpCode<'a> {
     FunBegin,
     FunName {
         name: String
     },
     FunReturn {
-        typ: Option<DataType>
+        typ: Option<DataType<'a>>
     },
     LocalVarTable {
-        typ: Box<[VariableMetadata]>,
+        typ: &'a [VariableMetadata<'a>],
         argsCount: usize
     },
     FunEnd,
@@ -88,27 +85,28 @@ enum OpCode {
     },
     SetLocal {
         index: usize,
-        typ: DataType
+        typ: DataType<'a>
     },
     Jmp {
         offset: isize,
         jmpType: JmpType,
-        typ: DataType
+        typ: DataType<'a>
     },
     Call {
-        name: String,
-        args: Box<[DataType]>
+        name: &'a str,
+        args: &'a [DataType<'a>],
+        encoded: &'a str
     },
     Return,
 
-    Add(DataType),
-    Sub(DataType),
-    Div(DataType),
-    Mul(DataType),
+    Add(DataType<'a>),
+    Sub(DataType<'a>),
+    Div(DataType<'a>),
+    Mul(DataType<'a>),
 
-    Equals(DataType),
-    Greater(DataType),
-    Less(DataType),
+    Equals(DataType<'a>),
+    Greater(DataType<'a>),
+    Less(DataType<'a>),
 
     Or,
     And,
@@ -120,7 +118,7 @@ enum OpCode {
     },
     ClassField {
         name: String,
-        typ: DataType
+        typ: DataType<'a>
     },
     ClassEnd,
     New {
@@ -128,176 +126,211 @@ enum OpCode {
     },
     GetField {
         name: String,
-        typ: DataType
+        typ: DataType<'a>
     },
     SetField {
         name: String,
-        typ: DataType
+        typ: DataType<'a>
     },
 
-    ArrayNew(DataType),
-    ArrayStore(DataType),
-    ArrayLoad(DataType),
-    ArrayLength
+    ArrayNew(DataType<'a>),
+    ArrayStore(DataType<'a>),
+    ArrayLoad(DataType<'a>),
+    ArrayLength,
+    Inc {
+        typ: DataType<'a>,
+        index: usize
+    },
+    Dec {
+        typ: DataType<'a>,
+        index: usize
+    }
 }
 
-struct MyObjectField {
-    pub typ: DataType,
+struct MyObjectField<'a> {
+    pub typ: DataType<'a>,
     pub value: Value
 }
 
-enum MyObject {
+enum MyObject<'a> {
     ArrayObj {
         values: Vec<Value>,
-        typ: DataType,
+        typ: DataType<'a>,
         size: usize
     },
     RuntimeObj {
         name: String,
-        fields: Option<HashMap<String, MyObjectField>>
+        fields: Option<HashMap<String, MyObjectField<'a>>>
     }
 }
 
 #[derive(Clone)]
-struct MyClassField {
+struct MyClassField<'a> {
     pub name: String,
-    pub typ: DataType
+    pub typ: DataType<'a>,
 }
 
 #[derive(Clone)]
-struct MyClass {
+struct MyClass<'a> {
     pub name: String,
-    pub fields: HashMap<String, MyClassField>
+    pub fields: HashMap<String, MyClassField<'a>>
 }
 
 #[derive(Clone, Debug)]
 enum Value {
     Num(isize),
     Flo(f32),
-    Bool(bool),
+    Bol(bool),
     Reference()
 }
 
 impl Value {
     fn getNum(&self) -> isize {
         match self {
-            Value::Num(v) => *v,
-            Value::Flo(_) => panic!(),
-            Value::Bool(_) => panic!(),
-            Value::Reference() => panic!()
+            Num(v) => *v,
+            Flo(_) => panic!(),
+            Bol(_) => panic!(),
+            Reference() => panic!()
         }
     }
 
     fn getFlo(&self) -> f32 {
         match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(v) => *v,
-            Value::Bool(_) => panic!(),
-            Value::Reference() => panic!()
+            Num(_) => panic!(),
+            Flo(v) => *v,
+            Bol(_) => panic!(),
+            Reference() => panic!()
+        }
+    }
+
+    fn getRefFlo(&mut self) -> &mut f32 {
+        match self {
+            Num(_) => panic!(),
+            Flo(v) => v,
+            Bol(_) => panic!(),
+            Reference() => panic!()
+        }
+    }
+
+    fn getRefNum(&mut self) -> &mut isize {
+        match self {
+            Num(v) => v,
+            Flo(_) => panic!(),
+            Bol(_) => panic!(),
+            Reference() => panic!()
+        }
+    }
+
+    fn getRefBol(&mut self) -> &mut bool {
+        match self {
+            Num(_) => panic!(),
+            Flo(_) => panic!(),
+            Bol(v) => v,
+            Reference() => panic!()
         }
     }
 
     fn getBool(&self) -> bool {
         match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(_) => panic!(),
-            Value::Bool(v) => *v,
-            Value::Reference() => panic!()
+            Num(_) => panic!(),
+            Flo(_) => panic!(),
+            Bol(v) => *v,
+            Reference() => panic!()
         }
     }
 }
 
 impl Value {
     fn or(&mut self, val: Value) {
-        match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(_) => panic!(),
-            Value::Bool(mut v) => {
-                v = v || match val {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(v) => v,
-                    Value::Reference() => panic!()
-                };
-            }
-            Value::Reference() => panic!(),
-        }
+        let r = self.getRefBol();
+        *r = *r || val.getBool();
     }
 
     fn and(&mut self, val: Value) {
-        match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(_) => panic!(),
-            Value::Bool(mut v) => {
-                v = v && match val {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(v) => v,
-                    Value::Reference() => panic!()
-                };
-            }
-            Value::Reference() => panic!(),
-        }
+        let r = self.getRefBol();
+        *r = *r && val.getBool();
     }
 
     fn not(&mut self) {
-        match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(_) => panic!(),
-            Value::Bool(mut v) => {
-                v = !v;
-            }
-            Value::Reference() => panic!(),
-        }
+        let r = self.getRefBol();
+        *r = !*r;
     }
 }
 
 impl Value {
     fn gt(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            DataType::Int => {
+            Int => {
                 self.getNum() > val.getNum()
             }
-            DataType::Float => {
+            Float => {
                 self.getFlo() > val.getFlo()
             },
-            DataType::Bool => {
+            Bool => {
                 self.getBool() > val.getBool()
             },
-            DataType::Array { .. } => panic!(),
-            DataType::Object { .. } => panic!()
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
+        }
+    }
+
+    fn inc(&mut self, typ: &DataType) {
+        match typ {
+            Int => {
+                *self.getRefNum()+=1;
+            }
+            Float => {
+                *self.getRefFlo()+=1.;
+            }
+            Bool => panic!(),
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
+        }
+    }
+
+    fn dec(&mut self, typ: &DataType) {
+        match typ {
+            Int => {
+                *self.getRefNum()-=1;
+            }
+            Float => {
+                *self.getRefFlo()-=1.;
+            }
+            Bool => panic!(),
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
         }
     }
 
     fn less(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            DataType::Int => {
+            Int => {
                 self.getNum() < val.getNum()
             }
-            DataType::Float => {
+            Float => {
                 self.getFlo() < val.getFlo()
             },
-            DataType::Bool => {
+            Bool => {
                 self.getBool() < val.getBool()
             },
-            DataType::Array { .. } => panic!(),
-            DataType::Object { .. } => panic!()
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
         }
     }
 
     fn eq(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            DataType::Int => {
+            Int => {
                 self.getNum() == val.getNum()
             }
-            DataType::Float => {
+            Float => {
                 self.getFlo() == val.getFlo()
             },
-            DataType::Bool => {
+            Bool => {
                 self.getBool() == val.getBool()
             },
-            DataType::Array { .. } => panic!(),
-            DataType::Object { .. } => panic!()
+            Array { .. } => panic!(),
+            Object { .. } => panic!()
         }
     }
 }
@@ -305,193 +338,107 @@ impl Value {
 impl Value {
     fn add(&mut self, value: &Value, typ: &DataType) {
         match typ {
-            DataType::Int => {
-                match self {
-                    Value::Num(v) => {
-                        *v += value.getNum();
-                    }
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Int => {
+                *self.getRefNum() += value.getNum();
             }
-            DataType::Float => {
-                match self {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(v) => {
-                        *v += value.getFlo();
-                    },
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Float => {
+                *self.getRefFlo() += value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Array { .. } => {}
-            DataType::Object { .. } => {}
+            Bool => {}
+            Array { .. } => {}
+            Object { .. } => {}
         }
     }
 
     fn sub(&mut self, value: &Value, typ: &DataType) {
         match typ {
-            DataType::Int => {
-                match self {
-                    Value::Num(v) => {
-                        *v -= value.getNum();
-                    }
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Int => {
+                *self.getRefNum() -= value.getNum();
             }
-            DataType::Float => {
-                match self {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(v) => {
-                        *v -= value.getFlo();
-                    },
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Float => {
+                *self.getRefFlo() -= value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Array { .. } => {}
-            DataType::Object { .. } => {}
+            Bool => {}
+            Array { .. } => {}
+            Object { .. } => {}
         }
     }
 
     fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
-            DataType::Int => {
-                match self {
-                    Value::Num(mut v) => {
-                        v *= match value {
-                            Value::Num(v) => v,
-                            Value::Flo(_) => panic!(),
-                            Value::Bool(_) => panic!(),
-                            Value::Reference() => panic!(),
-                        };
-                    }
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Int => {
+                *self.getRefNum() *= value.getNum();
             }
-            DataType::Float => {
-                match self {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(mut v) => {
-                        v *= match value {
-                            Value::Num(_) => panic!(),
-                            Value::Flo(v) => v,
-                            Value::Bool(_) => panic!(),
-                            Value::Reference() => panic!(),
-                        };
-                    },
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Float => {
+                *self.getRefFlo() *= value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Array { .. } => {}
-            DataType::Object { .. } => {}
+            Bool => {}
+            Array { .. } => {}
+            Object { .. } => {}
         }
     }
 
     fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
-            DataType::Int => {
-                match self {
-                    Value::Num(mut v) => {
-                        v /= match value {
-                            Value::Num(v) => v,
-                            Value::Flo(_) => panic!(),
-                            Value::Bool(_) => panic!(),
-                            Value::Reference() => panic!(),
-                        };
-                    }
-                    Value::Flo(_) => panic!(),
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Int => {
+                *self.getRefNum() /= value.getNum();
             }
-            DataType::Float => {
-                match self {
-                    Value::Num(_) => panic!(),
-                    Value::Flo(mut v) => {
-                        v /= match value {
-                            Value::Num(_) => panic!(),
-                            Value::Flo(v) => v,
-                            Value::Bool(_) => panic!(),
-                            Value::Reference() => panic!(),
-                        };
-                    },
-                    Value::Bool(_) => panic!(),
-                    Value::Reference() => panic!()
-                }
+            Float => {
+                *self.getRefFlo() /= value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Array { .. } => {}
-            DataType::Object { .. } => {}
+            Bool => {}
+            Array { .. } => {}
+            Object { .. } => {}
         }
     }
 
     fn f2i(&mut self) -> Value {
-        return match self {
-            Value::Num(_) => panic!(),
-            Value::Flo(v) => Value::Num(*v as isize),
-            Value::Bool(_) => panic!(),
-            Value::Reference() => panic!()
-        };
+        Num(self.getFlo() as isize)
     }
 
     fn i2f(&mut self) -> Value {
-        return match self {
-            Value::Num(v) => Value::Flo(*v as f32),
-            Value::Flo(_) => panic!(),
-            Value::Bool(_) => panic!(),
-            Value::Reference() => panic!()
-        };
+        Flo(self.getNum() as f32)
     }
 }
 
 impl Value {
     fn isType(&self, typ: &DataType) -> bool {
         match self {
-            Value::Num(_) => {
+            Num(_) => {
                 match typ {
-                    DataType::Int => true,
+                    Int => true,
                     _ => false
                 }
             }
-            Value::Flo(_) => {
+            Flo(_) => {
                 match typ {
-                    DataType::Float => true,
+                    Float => true,
                     _ => false
                 }
             }
-            Value::Bool(_) => {
+            Bol(_) => {
                 match typ {
-                    DataType::Bool => true,
+                    Bool => true,
                     _ => false
                 }
             }
-            Value::Reference() => panic!()
+            Reference() => panic!()
         }
     }
 }
 
 #[derive(Debug)]
-struct StackFrame {
-    // previous: Box<Option<Cell<StackFrame>>>,
-    localVariables: Box<[Value]>,
-    name: Option<String>
+struct StackFrame<'a> {
+    previous: Option<&'a StackFrame<'a>>,
+    localVariables: &'a mut [Value],
+    name: Option<&'a str>
 }
 
 #[derive(Clone)]
-struct Func {
+struct Func<'a> {
     name: String,
-    returnType: Option<DataType>,
-    varTable: Vec<VariableMetadata>,
+    returnType: Option<DataType<'a>>,
+    varTable: &'a [VariableMetadata<'a>],
     argAmount: usize,
     typ: FuncType,
 }
@@ -503,19 +450,19 @@ enum FuncType {
         rangeStop: usize,
     },
     Native {
-        callback: fn(&VirtualMachine, StackFrame) -> (),
+        callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
     }
 }
 
 #[derive(Clone)]
-struct VirtualMachine {
-    pub functions: HashMap<String, Func>,
+struct VirtualMachine<'a> {
+    pub functions: HashMap<String, Func<'a>>,
     pub stack: Vec<Value>,
-    pub classes: HashMap<String, MyClass>,
-    pub opCodes: Vec<OpCode>
+    pub classes: HashMap<String, MyClass<'a>>,
+    pub opCodes: Vec<OpCode<'a>>
 }
 
-impl VirtualMachine {
+impl <'a>VirtualMachine<'a> {
     fn new() -> Self {
         Self {
             functions: Default::default(),
@@ -525,8 +472,8 @@ impl VirtualMachine {
         }
     }
 
-    fn makeNative(&mut self, name: String, args: Vec<VariableMetadata>, fun: fn(&VirtualMachine, StackFrame) -> (), ret: Option<DataType>) {
-        let genName = genFunNameMeta(&name, &args);
+    fn makeNative(&mut self, name: String, args: &'a [VariableMetadata], fun: fn(&mut VirtualMachine, &mut StackFrame) -> (), ret: Option<DataType<'a>>) {
+        let genName = genFunNameMeta(&name, args);
         let l = args.len();
         self.functions.insert(genName, Func {
             name,
@@ -542,14 +489,14 @@ impl VirtualMachine {
 
 
 
-struct SeekableOpcodes {
+struct SeekableOpcodes<'a> {
     pub index: isize,
-    pub opCodes: Vec<OpCode>,
+    pub opCodes: &'a[OpCode<'a>],
     pub start: Option<usize>,
     pub end: Option<usize>
 }
 
-impl SeekableOpcodes {
+impl SeekableOpcodes<'_> {
     fn seek(&mut self, offset: isize) {
         // FIXME boundary check
         self.index += offset;
@@ -563,7 +510,7 @@ impl SeekableOpcodes {
     }
 }
 
-fn argsToString(args: &Box<[DataType]>) -> String {
+fn argsToString(args: &[DataType]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
@@ -575,7 +522,7 @@ fn argsToString(args: &Box<[DataType]>) -> String {
     buf
 }
 
-fn argsToStringMeta(args: &Vec<VariableMetadata>) -> String {
+fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
@@ -587,63 +534,63 @@ fn argsToStringMeta(args: &Vec<VariableMetadata>) -> String {
     buf
 }
 
-fn genFunName(name: &String, args: &Box<[DataType]>) -> String {
+fn genFunName(name: &str, args: &[DataType]) -> String {
     format!("{}({})", name, argsToString(args))
 }
 
-fn genFunNameMeta(name: &String, args: &Vec<VariableMetadata>) -> String {
+fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
     format!("{}({})", name, argsToStringMeta(args))
 }
 
-fn run(mut opCodes: Cell<SeekableOpcodes>, mut vm: VirtualMachine, mut stackFrame: Cell<StackFrame>) -> VirtualMachine {
+fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFrame: &mut StackFrame) {
     loop {
-        let op = match opCodes.get_mut().next() {
+        let op = match opCodes.next() {
             None => {
-                return vm;
+                return;
             }
             Some(v) => v
         };
         // println!("processing {:?}", op);
         match op {
-            OpCode::FunBegin => panic!(),
-            OpCode::FunName { .. } => panic!(),
-            OpCode::FunReturn { .. } => panic!(),
-            OpCode::LocalVarTable { .. } => panic!(),
-            OpCode::FunEnd => panic!(),
-            OpCode::F2I => {
+            FunBegin => panic!(),
+            FunName { .. } => panic!(),
+            FunReturn { .. } => panic!(),
+            LocalVarTable { .. } => panic!(),
+            FunEnd => panic!(),
+            F2I => {
                 let mut x = vm.stack.pop().unwrap();
                 vm.stack.push(x.f2i())
             }
-            OpCode::I2F => {
+            I2F => {
                 let mut x = vm.stack.pop().unwrap();
                 vm.stack.push(x.i2f())
             }
-            OpCode::PushInt(v) => {
-                vm.stack.push(Value::Num(*v))
+            PushInt(v) => {
+                vm.stack.push(Num(*v))
             }
-            OpCode::PushFloat(v) => {
-                vm.stack.push(Value::Flo(*v))
+            PushFloat(v) => {
+                vm.stack.push(Flo(*v))
             }
-            OpCode::PushBool(v) => {
-                vm.stack.push(Value::Bool(*v))
+            PushBool(v) => {
+                vm.stack.push(Bol(*v))
             }
-            OpCode::Pop => {
+            Pop => {
                 vm.stack.pop();
             }
-            OpCode::Dup => {
+            Dup => {
                 let x = vm.stack.pop().unwrap();
                 vm.stack.push(x.clone());
                 vm.stack.push(x);
             }
-            OpCode::PushLocal { index } => {
-                vm.stack.push(stackFrame.get_mut().localVariables.get(*index).unwrap().clone())
+            PushLocal { index } => {
+                vm.stack.push(stackFrame.localVariables.get(*index).unwrap().clone())
             }
-            OpCode::SetLocal { index, typ } => {
+            SetLocal { index, typ } => {
                 let x = vm.stack.pop().unwrap();
-                *(stackFrame.get_mut().localVariables.get_mut(*index).unwrap()) = x;
+                *(stackFrame.localVariables.get_mut(*index).unwrap()) = x;
                 // stackFrame.get_mut().localVariables.insert(*index, x);
             }
-            OpCode::Jmp { offset, jmpType, typ } => {
+            Jmp { offset, jmpType, typ } => {
                 match jmpType {
                     JmpType::One => {
                         let mut a = vm.stack.pop().unwrap();
@@ -652,14 +599,14 @@ fn run(mut opCodes: Cell<SeekableOpcodes>, mut vm: VirtualMachine, mut stackFram
                     JmpType::Zero => {}
                     JmpType::Jmp => {
                         let x = *offset;
-                        opCodes.get_mut().seek(x)
+                        opCodes.seek(x)
                     }
                     JmpType::Gt => {
                         let mut a = vm.stack.pop().unwrap();
                         let b = vm.stack.pop().unwrap();
                         if a.gt(b, typ) {
                             let x = *offset;
-                            opCodes.get_mut().seek(x)
+                            opCodes.seek(x)
                         }
                     }
                     JmpType::Less => {
@@ -669,7 +616,7 @@ fn run(mut opCodes: Cell<SeekableOpcodes>, mut vm: VirtualMachine, mut stackFram
                             unsafe {
                                 // opCodes.as_ptr().as_ref().unwrap().seek(offset);
                                 let x = *offset;
-                                opCodes.get_mut().seek(x)
+                                opCodes.seek(x)
                             }
                         }
                     }
@@ -677,23 +624,19 @@ fn run(mut opCodes: Cell<SeekableOpcodes>, mut vm: VirtualMachine, mut stackFram
                         let mut a = vm.stack.pop().unwrap();
                         if a.getBool() {
                             let x = *offset;
-                            opCodes.get_mut().seek(x)
+                            opCodes.seek(x)
                         }
                     }
                 }
             }
-            OpCode::Call { name, args } => {
-                let genName = genFunName(&name, args);
-                let mut f = vm.functions.get(&genName).unwrap();
+            Call { name, args, encoded } => {
+                // let genName = genFunName(name, args);
+                let mut f = vm.functions.get(*encoded).unwrap();
 
-                let mut localVars = vec![];
+                let mut localVars = Vec::with_capacity(f.varTable.len());
 
-                for i in 0..(f.argAmount) {
+                for _ in 0..(f.argAmount) {
                     let arg = vm.stack.pop().unwrap();
-                    let x = f.varTable.get(i).unwrap();
-                    if !arg.isType(&x.typ) {
-                        panic!()
-                    }
                     localVars.push(arg)
                 }
 
@@ -701,160 +644,198 @@ fn run(mut opCodes: Cell<SeekableOpcodes>, mut vm: VirtualMachine, mut stackFram
                     localVars.push(f.varTable[i].typ.toDefaultValue())
                 }
 
-                let stack = StackFrame {
-                    localVariables: localVars.into_boxed_slice(),
-                    name: Some(genName),
+                let mut stack = StackFrame {
+                    previous: Some(stackFrame),
+                    localVariables: &mut *localVars.into_boxed_slice(),
+                    name: Some(encoded),
                 };
 
                 match f.typ {
-                    FuncType::Runtime { rangeStart, rangeStop } => {
+                    Runtime { rangeStart, rangeStop } => {
                         panic!()
                     }
                     Native { callback } => {
-                        callback(&vm, stack)
+                        callback(vm, &mut stack)
                     }
                 }
             }
-            OpCode::Return => {
-                return vm
+            Return => {
+                return
             }
-            OpCode::Add(v) => {
+            Add(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.add(&b, v);
                 vm.stack.push(a)
             }
-            OpCode::Sub(v) => {
+            Sub(v) => {
                 let a = vm.stack.pop().unwrap();
                 let mut b = vm.stack.pop().unwrap();
 
                 b.sub(&a, v);
                 vm.stack.push(b)
             }
-            OpCode::Div(v) => {
+            Div(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.div(&b, v);
                 vm.stack.push(a)
             }
-            OpCode::Mul(v) => {
+            Mul(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.mul(&b, v);
                 vm.stack.push(a)
             }
-            OpCode::Equals(v) => {
+            Equals(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.eq(b, v);
                 vm.stack.push(a);
             }
-            OpCode::Greater(v) => {
+            Greater(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 let res = a.gt(b, v);
-                vm.stack.push(Bool(res));
+                vm.stack.push(Bol(res));
             }
-            OpCode::Less(v) => {
+            Less(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 let res = a.less(b, v);
-                vm.stack.push(Bool(res));
+                vm.stack.push(Bol(res));
             }
-            OpCode::Or => {
+            Or => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.or(b);
                 vm.stack.push(a);
             }
-            OpCode::And => {
+            And => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
                 a.and(b);
                 vm.stack.push(a);
             }
-            OpCode::Not => {
+            Not => {
                 let mut a = vm.stack.pop().unwrap();
                 a.not();
                 vm.stack.push(a);
             }
-            OpCode::ClassBegin => panic!(),
-            OpCode::ClassName { .. } => panic!(),
-            OpCode::ClassField { .. } => panic!(),
-            OpCode::ClassEnd => panic!(),
-            OpCode::New { .. } => panic!(),
-            OpCode::GetField { .. } => panic!(),
-            OpCode::SetField { .. } => panic!(),
-            OpCode::ArrayNew(_) => panic!(),
-            OpCode::ArrayStore(_) => panic!(),
-            OpCode::ArrayLoad(_) => panic!(),
-            OpCode::ArrayLength => panic!(),
+            ClassBegin => panic!(),
+            ClassName { .. } => panic!(),
+            ClassField { .. } => panic!(),
+            ClassEnd => panic!(),
+            New { .. } => panic!(),
+            GetField { .. } => panic!(),
+            SetField { .. } => panic!(),
+            ArrayNew(_) => panic!(),
+            ArrayStore(_) => panic!(),
+            ArrayLoad(_) => panic!(),
+            ArrayLength => panic!(),
+            Inc { typ, index } => {
+                stackFrame.localVariables.get_mut(*index).unwrap().inc(typ)
+            }
+            Dec { typ, index } => {
+                stackFrame.localVariables.get_mut(*index).unwrap().dec(typ)
+            }
         }
     }
-    return vm;
 }
 
 fn main() {
     let mut vm = VirtualMachine::new();
 
-    vm.makeNative(String::from("print"), vec![VariableMetadata { name: "value".to_string(), typ: DataType::Int }], |a, mut b|{
-        println!("{:?}", b.localVariables[0].getNum())
+    let a = [VariableMetadata { name: "value".to_string(), typ: Int }];
+    let b = [VariableMetadata { name: "value".to_string(), typ: Float }];
+    vm.makeNative(String::from("print"), &a, |a, mut b|{
+        println!("{}", b.localVariables[0].getNum())
     }, None);
 
-    vm.makeNative(String::from("print"), vec![VariableMetadata { name: "value".to_string(), typ: DataType::Float }], |a, mut b|{
-        println!("{:?}", b.localVariables[0].getFlo())
+    vm.makeNative(String::from("print"), &b, |a, mut b|{
+        println!("{}", b.localVariables[0].getFlo())
     }, None);
 
-    let ops = vec![
+    vm.makeNative(String::from("exec"), &[], |mut a, mut b| {
+        let stack = match b.previous {
+            None => &b,
+            Some(v) => v
+        };
+        let genOps = [
+            PushInt(1),
+            Pop,
+            PushInt(69),
+            Call { name: "print", args: &[Int], encoded: "print(int)" }
+        ];
+
+        let mut seek = SeekableOpcodes {
+            index: 0,
+            opCodes: &genOps,
+            start: None,
+            end: None,
+        };
+
+        run(&mut seek, &mut a, &mut b);
+    }, None);
+
+    let ops = [
         PushFloat(10000000.),
-        SetLocal { index: 0, typ: DataType::Float },
+        SetLocal { index: 0, typ: Float },
         PushLocal { index: 0 },
         PushFloat(0.),
-        OpCode::Less(DataType::Float),
+        Less(Float),
         Jmp {
             offset: 1,
             jmpType: JmpType::True,
-            typ: DataType::Int,
+            typ: Int,
         },
         Return,
         PushLocal { index: 0 },
-        Call { name: "print".to_string(), args: Box::new([DataType::Float]) },
-        PushLocal { index: 0},
-        PushFloat(1.),
-        Sub(DataType::Float),
-        SetLocal { index: 0, typ: DataType::Float },
+        // Pop,
+        Call { name: "print", args: &[Float], encoded: "print(float)" },
+        Dec { typ: Float, index: 0 },
         Jmp {
-            offset: -12,
+            offset: -9,
             jmpType: JmpType::Jmp,
-            typ: DataType::Int,
+            typ: Int,
+        }
+    ];
+
+    let cc = [
+        Call {
+            name: "exec",
+            args: &[],
+            encoded: "exec()"
         }
     ];
 
     let x = vec![
         vec![
-            OpCode::PushInt(69),
-            OpCode::PushInt(1),
-            OpCode::Add(DataType::Int),
-            OpCode::Call {
-                name: "print".to_string(),
-                args: Box::new([DataType::Int]),
+            PushInt(69),
+            PushInt(1),
+            Add(Int),
+            Call {
+                name: "print",
+                args: &[Int],
+                encoded: "print(int)"
             }
         ]
     ];
 
-    let seek = SeekableOpcodes {
+    let mut seek = SeekableOpcodes {
         index: 0,
-        opCodes: ops,
+        opCodes: &ops,
         start: None,
         end: None,
     };
 
-    let stack = StackFrame {
-        // previous: Box::new(None),
-        localVariables: Box::new([Value::Flo(0.)]),
+    let mut stack = StackFrame {
+        previous: None,
+        localVariables: &mut [Flo(0.)],
         name: None,
     };
 
-    let mut v = run(Cell::new(seek), vm, Cell::new(stack));
-    println!("{:?}", v.stack.pop());
+    run(&mut seek, &mut vm, &mut stack);
+    run(&mut seek, &mut vm, &mut stack);
+    println!("{:?}", vm.stack.pop());
 }
