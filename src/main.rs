@@ -1,6 +1,8 @@
+use std::arch::asm;
 use std::collections::HashMap;
 use std::io::Read;
 use std::mem::transmute;
+use std::ops::Add;
 use crate::DataType::*;
 use crate::FuncType::*;
 use crate::OpCode::*;
@@ -569,12 +571,18 @@ enum CachedOpCode {
     }
 }
 
+struct OpMeta {
+    pub callCount: usize,
+    pub ignored: bool,
+    pub opCache: Option<CachedOpCode>
+}
+
 struct VirtualMachine<'a> {
     pub functions: HashMap<String, Func<'a>>,
     pub stack: Vec<Value>,
     pub classes: HashMap<String, MyClass>,
     pub opCodes: Vec<OpCode>,
-    pub opCodeCache: Vec<Option<CachedOpCode>>
+    pub opCodeCache: Vec<OpMeta>
 }
 
 impl <'a>VirtualMachine<'a> {
@@ -664,6 +672,101 @@ fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
     format!("{}({})", name, argsToStringMeta(args))
 }
 
+/*
+fn jitCheck(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
+    let originalIndex = opCodes.index;
+    let mut buf = vec![];
+    let mut asmCache = String::new();
+    loop {
+        let (op, index) = match opCodes.next() {
+            (None, _) => {
+                return;
+            }
+            (Some(v), i) => (v, i)
+        };
+        let cache = vm.opCodeCache.get(index).unwrap();
+        unsafe {
+            match op {
+                FunBegin => {}
+                FunName { .. } => {}
+                FunReturn { .. } => {}
+                LocalVarTable { .. } => {}
+                FunEnd => {}
+                F2I => {
+                    asmCache.add("pop QWORD PTR eax\n");
+                    asmCache.add("mov xmm0, QWORD PTR eax\n");
+                    asmCache.add("cvttss2si QWORD PTR eax, xmm0\n");
+                    asmCache.add("push QWORD PTR eax\n");
+                }
+                I2F => {}
+                PushInt(_) => {}
+                PushFloat(_) => {}
+                PushBool(_) => {}
+                Pop => {}
+                Dup => {}
+                PushLocal { .. } => {}
+                SetLocal { .. } => {}
+                Jmp { .. } => {}
+                Call { .. } => {}
+                Return => {}
+                Add(t) => {
+                    match t {
+                        Int => {
+                            asmCache.add("pop QWORD PTR eax\n");
+                            asmCache.add("pop QWORD PTR edx\n");
+                            asmCache.add("add eax, edx\n");
+                            asmCache.add("pop eax\n");
+                        }
+                        Float => {}
+                        Bool => {}
+                        Array { .. } => {}
+                        Object { .. } => {}
+                    }
+                }
+                Sub(_) => {}
+                Div(_) => {}
+                Mul(_) => {}
+                Equals(_) => {}
+                Greater(_) => {}
+                Less(_) => {}
+                Or => {}
+                And => {}
+                Not => {}
+                ClassBegin => {}
+                ClassName { .. } => {}
+                ClassField { .. } => {}
+                ClassEnd => {}
+                New { .. } => {}
+                GetField { .. } => {}
+                SetField { .. } => {}
+                ArrayNew(_) => {}
+                ArrayStore(_) => {}
+                ArrayLoad(_) => {}
+                ArrayLength => {}
+                Inc { .. } => {}
+                Dec { .. } => {}
+            }
+        }
+        /*
+        if cache.callCount > 10 {
+            match op {
+                Jmp { offset, jmpType, typ } => {
+
+                }
+                Call { name, args, encoded } => {
+
+                }
+                _ => {}
+            }
+        }
+
+         */
+        buf.push(op.clone());
+    }
+}
+
+ */
+
 #[inline(always)]
 fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFrame: &mut StackFrame) {
     loop {
@@ -673,6 +776,17 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
             }
             (Some(v), i) => (v, i)
         };
+        vm.opCodeCache[index].callCount += 1;
+        /*
+        if vm.opCodeCache[index].callCount > 20 {
+            println!("{:?}", vm.opCodeCache.iter().map(  |x| {
+                x.callCount
+            }).collect::<Vec<usize>>());
+            println!("{:?}", opCodes.opCodes);
+            return;
+        }
+
+         */
         // println!("processing {:?}", op);
         match op {
             FunBegin => panic!(),
@@ -750,7 +864,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                 }
             }
             Call { name, args, encoded } => {
-                let cached = match &vm.opCodeCache[index as usize] {
+                let cached = match &vm.opCodeCache[index as usize].opCache {
                     Some(v) => {
                         match v {
                             CachedOpCode::CallCache { stack, typ, argCount } => (stack, typ, argCount)
@@ -765,12 +879,16 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                             localVars.push(i.typ.toDefaultValue())
                         }
 
-                        vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
-                            stack: localVars,
-                            typ: f.typ.clone(),
-                            argCount: f.argAmount,
-                        });
-                        match vm.opCodeCache[index].as_ref().unwrap() {
+                        vm.opCodeCache[index] = OpMeta {
+                            callCount: 0,
+                            ignored: false,
+                            opCache: Some(CachedOpCode::CallCache {
+                                stack: localVars,
+                                typ: f.typ.clone(),
+                                argCount: f.argAmount,
+                            }),
+                        };
+                        match vm.opCodeCache[index].opCache.as_ref().unwrap() {
                             CachedOpCode::CallCache { stack, typ, argCount } => (stack, typ, argCount)
                         }
                     }
@@ -984,8 +1102,6 @@ fn main() {
     let xd = deserialize(res);
 
     println!("{:?}", xd);
-    return;
-
     let mut seek = SeekableOpcodes {
         index: 0,
         opCodes: &ops,
@@ -999,7 +1115,11 @@ fn main() {
         name: None,
     };
 
-    vm.opCodeCache= std::iter::repeat_with(|| None).take(seek.opCodes.len()).collect();
+    vm.opCodeCache = std::iter::repeat_with(|| OpMeta {
+        callCount: 0,
+        ignored: false,
+        opCache: None,
+    }).take(seek.opCodes.len()).collect();
 
     run(&mut seek, &mut vm, &mut stack);
     println!("{:?}", vm.stack.pop());
