@@ -1,5 +1,10 @@
+extern crate core;
+
+mod lexer;
+mod parser;
+mod ast;
+
 use std::collections::HashMap;
-use std::io::Read;
 use std::mem::transmute;
 use crate::DataType::*;
 use crate::FuncType::*;
@@ -7,7 +12,7 @@ use crate::OpCode::*;
 use crate::Value::*;
 
 #[derive(Clone, Debug)]
-enum DataType {
+pub enum DataType {
     Int,
     Float,
     Bool,
@@ -16,6 +21,23 @@ enum DataType {
     },
     Object {
         name: String
+    }
+}
+
+impl DataType {
+    fn fromString(s: &str) -> Self {
+        if s.ends_with("[]") {
+            return DataType::Array {
+                inner: Box::new(DataType::fromString(s.strip_suffix("[]").unwrap())),
+            }
+        }
+
+        match s {
+            "int" => DataType::Int,
+            "float" => DataType::Float,
+            "bool" => DataType::Bool,
+            _ => DataType::Object { name: String::from(s) }
+        }
     }
 }
 
@@ -31,7 +53,7 @@ enum RawDataType {
 
 impl DataType {
     fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 32] = unsafe { std::mem::transmute((*self).clone()) };
+        let opId: [u8; 32] = unsafe { transmute((*self).clone()) };
         bytes.push(opId[0]);
         match self {
             Int => {}
@@ -91,7 +113,7 @@ impl JmpType {
 }
 
 #[derive(Clone, Debug)]
-struct VariableMetadata {
+pub struct VariableMetadata {
     pub name: String,
     pub typ: DataType
 }
@@ -980,11 +1002,7 @@ fn main() {
     ];
 
     let res = serialize(&ops);
-    println!("{:?}", &res);
     let xd = deserialize(res);
-
-    println!("{:?}", xd);
-    return;
 
     let mut seek = SeekableOpcodes {
         index: 0,
