@@ -3,6 +3,7 @@ extern crate core;
 mod lexer;
 mod parser;
 mod ast;
+mod codegen;
 
 use std::collections::HashMap;
 use std::mem::transmute;

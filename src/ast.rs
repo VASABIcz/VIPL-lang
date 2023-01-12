@@ -100,10 +100,11 @@ pub enum Statement {
     If(If)
 }
 
-struct If {
-    condition: Expression,
-    body: Vec<Statement>,
-    elseBody: Option<Vec<Statement>>
+#[derive(Debug)]
+pub struct If {
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+    pub elseBody: Option<Vec<Statement>>
 }
 
 #[derive(Debug)]

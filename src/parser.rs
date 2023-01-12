@@ -1,20 +1,11 @@
 
 use crate::{ast, DataType, OpCode, VariableMetadata};
-use crate::ast::{Expression, FunctionCall, Node, Op, Statement, While};
+use crate::ast::{Expression, FunctionCall, Node, Op, Statement, VariableCreate, While};
 use crate::ast::Expression::IntLiteral;
-use crate::ast::Statement::VariableCreate;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
 use crate::lexer::TokenType::{CCB, Colon, CRB, DoubleLiteral, FloatLiteral, Identifier, If, LongLiteral, OCB, ORB};
-use crate::parser::Operation::{FunctionDef, Statement};
+use crate::parser::Operation::{FunctionDef};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
-
-struct Parser {
-    parsingUnits: Vec<Box<dyn ParsingUnit>>
-}
-
-struct  ParsingU {
-
-}
 
 fn getParsingUnit<'a>(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &'a [Box<dyn ParsingUnit>]) -> Option<&'a Box<dyn ParsingUnit>> {
     parsingUnits.iter().find(|it| {
@@ -185,7 +176,13 @@ impl Operation {
     fn asStatement(self) -> Statement {
         match self {
             Operation::Statement(s) => s,
-            _ => panic!()
+            Operation::Expression(e) => {
+                match e {
+                    Expression::FunctionCall(f) => Statement::FunctionExpr(f),
+                    _ => panic!("{:?} is not statement", e)
+                }
+            }
+            _ => panic!("{:?} is not statement", self)
         }
     }
 }
@@ -236,32 +233,11 @@ impl ParsingUnit for FunctionParsingUnit {
         tokens.getAssert(CRB);
 
         if tokens.isPeekType(Colon) {
+            tokens.getAssert(Colon);
             returnType = Some(DataType::fromString(&tokens.getIdentifier()));
         }
 
-        tokens.getAssert(TokenType::OCB);
-
-        let mut statements = vec![];
-
-        while !tokens.isPeekType(TokenType::CCB) {
-            println!("parseeeeee {:?}", tokens.peekOne());
-            match parseOne(tokens, ParsingUnitSearchType::Ahead, parser, None).unwrap() {
-                Operation::Statement(s) => {
-                    statements.push(s)
-                }
-                Operation::Expression(e) => {
-                    match e {
-                        Expression::FunctionCall(c) => {
-                            statements.push(Statement::FunctionExpr(c))
-                        }
-                        e => panic!("not a statement {:?}", e),
-                    }
-                }
-                s => panic!("not a statement {:?}", s)
-            }
-        }
-
-        tokens.getAssert(TokenType::CCB);
+        let statements = parseBody(tokens, parser);
 
         Operation::FunctionDef(Node::FunctionDef(crate::ast::FunctionDef {
             name,
@@ -293,22 +269,17 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
 
         let op = match par {
             None => {
-                res.unwrap()
+                res.map(|it|{it.asExpr()})
             }
             Some(p) => {
-                p.parse(tokens, res, parser)
+                Some(p.parse(tokens, res, parser).asExpr())
             }
         };
 
-        match op {
-            Operation::Expression(e) => {
-                Operation::Statement(VariableCreate(crate::ast::VariableCreate {
-                    name,
-                    init: Some(e),
-                }))
-            }
-            _ => panic!("not a statement {:?}", op)
-        }
+        Operation::Statement(Statement::VariableCreate(VariableCreate {
+            name,
+            init: op,
+        }))
     }
 }
 
@@ -427,6 +398,27 @@ impl ParsingUnit for NumericParsingUnit {
     }
 }
 
+struct BoolParsingUnit;
+
+impl ParsingUnit for BoolParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::True) || tokenProvider.isPeekType(TokenType::False)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+        if tokenProvider.isPeekType(TokenType::False) {
+            tokenProvider.getAssert(TokenType::False);
+            return Operation::Expression(Expression::BoolLiteral(false))
+        }
+        tokenProvider.getAssert(TokenType::True);
+        Operation::Expression(Expression::BoolLiteral(true))
+    }
+}
+
 struct VariableParsingUnit;
 
 impl ParsingUnit for VariableParsingUnit {
@@ -456,39 +448,61 @@ impl ParsingUnit for WhileParsingUnit {
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
         tokenProvider.getAssert(TokenType::While);
-        tokenProvider.getAssert(TokenType::ORB);
 
-        let res = parseOne(tokenProvider, Ahead, parser, None);
-        let par = getParsingUnit(tokenProvider, Around, parser);
+        let op = parseExpr(tokenProvider, parser);
 
-        let mut statements = vec![];
+        let statements = parseBody(tokenProvider, parser);
 
-        let op = match par {
-            None => {
-                res.unwrap()
-            }
-            Some(p) => {
-                p.parse(tokenProvider, Some(res.unwrap()), parser)
-            }
-        };
-
-        tokenProvider.getAssert(TokenType::CRB);
-        tokenProvider.getAssert(TokenType::OCB);
-
-        while !tokenProvider.isPeekType(CCB) {
-            statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
-        }
-
-        tokenProvider.getAssert(TokenType::CCB);
-
-        return Operation::Statement(Statement::While(While {
-            exp: op.asExpr(),
+        Operation::Statement(Statement::While(While {
+            exp: op,
             body: statements,
         }))
     }
 }
 
 struct IfParsingUnit;
+
+fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>]) -> Vec<Statement> {
+    let mut statements = vec![];
+
+    tokenProvider.getAssert(TokenType::OCB);
+
+    while !tokenProvider.isPeekType(CCB) {
+        statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
+    }
+
+    tokenProvider.getAssert(TokenType::CCB);
+
+    statements
+}
+
+fn parseExpr(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>]) -> Expression {
+    let mut encounteredBrackets = false;
+
+    if tokenProvider.isPeekType(TokenType::ORB) {
+        tokenProvider.getAssert(TokenType::ORB);
+        encounteredBrackets = true;
+    }
+
+    let res = parseOne(tokenProvider, Ahead, parser, None);
+    let par = getParsingUnit(tokenProvider, Around, parser);
+
+    let op = match par {
+        None => {
+            res.unwrap()
+        }
+        Some(p) => {
+            p.parse(tokenProvider, Some(res.unwrap()), parser)
+        }
+    };
+
+    if encounteredBrackets {
+        tokenProvider.getAssert(TokenType::CRB);
+    }
+
+    op.asExpr()
+
+}
 
 impl ParsingUnit for IfParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -501,43 +515,35 @@ impl ParsingUnit for IfParsingUnit {
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
         tokenProvider.getAssert(TokenType::If);
-        tokenProvider.getAssert(TokenType::ORB);
 
-        let res = parseOne(tokenProvider, Ahead, parser, None);
-        let par = getParsingUnit(tokenProvider, Around, parser);
+        let cond = parseExpr(tokenProvider, parser);
 
-        let mut statements = vec![];
-
-        let op = match par {
-            None => {
-                res.unwrap()
-            }
-            Some(p) => {
-                p.parse(tokenProvider, Some(res.unwrap()), parser)
-            }
-        };
-
-        tokenProvider.getAssert(TokenType::CRB);
-        tokenProvider.getAssert(TokenType::OCB);
-
-        while !tokenProvider.isPeekType(CCB) {
-            statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
-        }
-
-        tokenProvider.getAssert(TokenType::CCB);
+        let statements = parseBody(tokenProvider, parser);
 
         if !tokenProvider.isPeekType(TokenType::Else) {
-            return Operation::Statement(ast::Statement::If(If {
-
+            return Operation::Statement(ast::Statement::If(ast::If {
+                condition: cond,
+                body: statements,
+                elseBody: None,
             }))
         }
+
+        tokenProvider.getAssert(TokenType::Else);
+
+        let elseBody = parseBody(tokenProvider, parser);
+
+        Operation::Statement(ast::Statement::If(ast::If {
+            condition: cond,
+            body: statements,
+            elseBody: Some(elseBody),
+        }))
     }
 }
 
 #[test]
 fn testParser() {
     let lexingUnits = lexingUnits();
-    let input = "fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if (true) { print(1) } }";
+    let input = "lol = 0 fn main() { x = -420.69 print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
 
     let src = SourceProvider {
         data: input,
@@ -558,10 +564,12 @@ fn testParser() {
         Box::new(ArithmeticParsingUnit { op: Op::Less, typ: TokenType::Less }),
         Box::new(ArithmeticParsingUnit { op: Op::Gt, typ: TokenType::Gt }),
         Box::new(VariableParsingUnit),
+        Box::new(IfParsingUnit),
+        Box::new(BoolParsingUnit)
     ];
 
     let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
-
+    println!("tokens {:?}", &tokens);
     let res = parse(&mut TokenProvider { tokens, index: 0 }, Ahead, &parsers.into_boxed_slice());
     println!("{:?}", res)
 }

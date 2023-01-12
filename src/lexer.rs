@@ -284,8 +284,8 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("while", TokenType::While),
         KeywordLexingUnit::new("if", TokenType::If),
         KeywordLexingUnit::new("else", TokenType::Else),
-        KeywordLexingUnit::new("False", TokenType::False),
-        KeywordLexingUnit::new("True", TokenType::True),
+        KeywordLexingUnit::new("false", TokenType::False),
+        KeywordLexingUnit::new("true", TokenType::True),
         KeywordLexingUnit::new("==", TokenType::Eq),
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),
@@ -315,7 +315,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
 #[test]
 fn testLexer() {
     let lexingUnits = lexingUnits();
-    let input = "fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
+    let input = "x = 69 fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
 
     let src = SourceProvider {
         data: input,
