@@ -75,6 +75,8 @@ pub enum TokenType {
     While,
     True,
     False,
+    If,
+    Else,
 
     ORB,
     CRB,
@@ -280,6 +282,8 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("fn", TokenType::Fn),
         KeywordLexingUnit::new("var", TokenType::Var),
         KeywordLexingUnit::new("while", TokenType::While),
+        KeywordLexingUnit::new("if", TokenType::If),
+        KeywordLexingUnit::new("else", TokenType::Else),
         KeywordLexingUnit::new("False", TokenType::False),
         KeywordLexingUnit::new("True", TokenType::True),
         KeywordLexingUnit::new("==", TokenType::Eq),
@@ -311,7 +315,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
 #[test]
 fn testLexer() {
     let lexingUnits = lexingUnits();
-    let input = "fn main() { x = -420.69 print(69*x) }";
+    let input = "fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
 
     let src = SourceProvider {
         data: input,

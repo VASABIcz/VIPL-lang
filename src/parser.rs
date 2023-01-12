@@ -1,11 +1,11 @@
 
-use crate::{DataType, OpCode, VariableMetadata};
-use crate::ast::{Expression, FunctionCall, Node, Op, Statement};
+use crate::{ast, DataType, OpCode, VariableMetadata};
+use crate::ast::{Expression, FunctionCall, Node, Op, Statement, While};
 use crate::ast::Expression::IntLiteral;
 use crate::ast::Statement::VariableCreate;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{Colon, CRB, DoubleLiteral, FloatLiteral, Identifier, LongLiteral, ORB};
-use crate::parser::Operation::FunctionDef;
+use crate::lexer::TokenType::{CCB, Colon, CRB, DoubleLiteral, FloatLiteral, Identifier, If, LongLiteral, OCB, ORB};
+use crate::parser::Operation::{FunctionDef, Statement};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
 
 struct Parser {
@@ -443,10 +443,101 @@ impl ParsingUnit for VariableParsingUnit {
     }
 }
 
+struct WhileParsingUnit;
+
+impl ParsingUnit for WhileParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::While)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+        tokenProvider.getAssert(TokenType::While);
+        tokenProvider.getAssert(TokenType::ORB);
+
+        let res = parseOne(tokenProvider, Ahead, parser, None);
+        let par = getParsingUnit(tokenProvider, Around, parser);
+
+        let mut statements = vec![];
+
+        let op = match par {
+            None => {
+                res.unwrap()
+            }
+            Some(p) => {
+                p.parse(tokenProvider, Some(res.unwrap()), parser)
+            }
+        };
+
+        tokenProvider.getAssert(TokenType::CRB);
+        tokenProvider.getAssert(TokenType::OCB);
+
+        while !tokenProvider.isPeekType(CCB) {
+            statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
+        }
+
+        tokenProvider.getAssert(TokenType::CCB);
+
+        return Operation::Statement(Statement::While(While {
+            exp: op.asExpr(),
+            body: statements,
+        }))
+    }
+}
+
+struct IfParsingUnit;
+
+impl ParsingUnit for IfParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::If)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+        tokenProvider.getAssert(TokenType::If);
+        tokenProvider.getAssert(TokenType::ORB);
+
+        let res = parseOne(tokenProvider, Ahead, parser, None);
+        let par = getParsingUnit(tokenProvider, Around, parser);
+
+        let mut statements = vec![];
+
+        let op = match par {
+            None => {
+                res.unwrap()
+            }
+            Some(p) => {
+                p.parse(tokenProvider, Some(res.unwrap()), parser)
+            }
+        };
+
+        tokenProvider.getAssert(TokenType::CRB);
+        tokenProvider.getAssert(TokenType::OCB);
+
+        while !tokenProvider.isPeekType(CCB) {
+            statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
+        }
+
+        tokenProvider.getAssert(TokenType::CCB);
+
+        if !tokenProvider.isPeekType(TokenType::Else) {
+            return Operation::Statement(ast::Statement::If(If {
+
+            }))
+        }
+    }
+}
+
 #[test]
 fn testParser() {
     let lexingUnits = lexingUnits();
-    let input = "fn main() { x = -420.69 print(69*x) }";
+    let input = "fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if (true) { print(1) } }";
 
     let src = SourceProvider {
         data: input,
@@ -454,6 +545,7 @@ fn testParser() {
     };
 
     let parsers: Vec<Box<dyn ParsingUnit>> = vec![
+        Box::new(WhileParsingUnit),
         Box::new(FunctionParsingUnit),
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),

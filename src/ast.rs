@@ -96,7 +96,14 @@ impl Expression {
 pub enum Statement {
     FunctionExpr(FunctionCall),
     While(While),
-    VariableCreate(VariableCreate)
+    VariableCreate(VariableCreate),
+    If(If)
+}
+
+struct If {
+    condition: Expression,
+    body: Vec<Statement>,
+    elseBody: Option<Vec<Statement>>
 }
 
 #[derive(Debug)]
