@@ -565,10 +565,10 @@ struct StackFrame<'a> {
 }
 
 #[derive(Clone)]
-struct Func<'a> {
+struct Func {
     name: String,
     returnType: Option<DataType>,
-    varTable: &'a [VariableMetadata],
+    varTable: Box<[VariableMetadata]>,
     argAmount: usize,
     typ: FuncType,
 }
@@ -592,15 +592,15 @@ enum CachedOpCode {
     }
 }
 
-struct VirtualMachine<'a> {
-    pub functions: HashMap<String, Func<'a>>,
+struct VirtualMachine {
+    pub functions: HashMap<String, Func>,
     pub stack: Vec<Value>,
     pub classes: HashMap<String, MyClass>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>
 }
 
-impl <'a>VirtualMachine<'a> {
+impl VirtualMachine {
     fn new() -> Self {
         Self {
             functions: Default::default(),
@@ -611,8 +611,8 @@ impl <'a>VirtualMachine<'a> {
         }
     }
 
-    fn makeNative(&mut self, name: String, args: &'a [VariableMetadata], fun: fn(&mut VirtualMachine, &mut StackFrame) -> (), ret: Option<DataType>) {
-        let genName = genFunNameMeta(&name, args);
+    fn makeNative(&mut self, name: String, args: Box<[VariableMetadata]>, fun: fn(&mut VirtualMachine, &mut StackFrame) -> (), ret: Option<DataType>) {
+        let genName = genFunNameMeta(&name, &args);
         let l = args.len();
         self.functions.insert(genName, Func {
             name,
@@ -688,7 +688,7 @@ fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
 }
 
 #[inline(always)]
-fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFrame: &mut StackFrame) {
+fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
     loop {
         let (op, index) = match opCodes.next() {
             (None, _) => {
@@ -773,7 +773,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
                 }
             }
             Call { encoded } => {
-                let cached = match &vm.opCodeCache[index as usize] {
+                let cached = match &vm.opCodeCache[index] {
                     Some(v) => {
                         match v {
                             CachedOpCode::CallCache { stack, typ, argCount } => (stack, typ, argCount)
@@ -784,7 +784,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
 
                         let mut localVars = Vec::with_capacity(f.varTable.len());
 
-                        for i in f.varTable {
+                        for i in &*f.varTable {
                             localVars.push(i.typ.toDefaultValue())
                         }
 
@@ -921,21 +921,57 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine<'a>, stackFram
     }
 }
 
+fn bootStrapVM() -> VirtualMachine {
+    let mut vm = VirtualMachine::new();
+
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Int }]), |a, b|{
+        println!("{}", b.localVariables[0].getNum())
+    }, None);
+
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Float }]), |a, b|{
+        println!("{}", b.localVariables[0].getFlo())
+    }, None);
+
+    vm.makeNative(String::from("exec"), Box::default(), |a, b| {
+        /*
+        let stack = match b.previous {
+            None => b,
+            Some(v) => v
+        };
+
+         */
+        let genOps = [
+            PushInt(1),
+            Pop,
+            PushInt(69),
+            Call { encoded: "print(int)".to_string() }
+        ];
+
+        let mut seek = SeekableOpcodes {
+            index: 0,
+            opCodes: &genOps,
+            start: None,
+            end: None,
+        };
+
+        run(&mut seek, a,  b);
+    }, None);
+    vm
+}
+
 fn main() {
     println!("{}", mem::size_of::<[OpCode; 1000]>());
     let mut vm = VirtualMachine::new();
 
-    let a = [VariableMetadata { name: "value".to_string(), typ: Int }];
-    let b = [VariableMetadata { name: "value".to_string(), typ: Float }];
-    vm.makeNative(String::from("print"), &a, |a, b|{
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Int }]), |a, b|{
         println!("{}", b.localVariables[0].getNum())
     }, None);
 
-    vm.makeNative(String::from("print"), &b, |a, b|{
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Float }]), |a, b|{
         println!("{}", b.localVariables[0].getFlo())
     }, None);
 
-    vm.makeNative(String::from("exec"), &[], |a, b| {
+    vm.makeNative(String::from("exec"), Box::default(), |a, b| {
         /*
         let stack = match b.previous {
             None => b,

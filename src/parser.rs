@@ -27,7 +27,7 @@ fn getParsingUnit<'a>(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, pa
     })
 }
 
-fn parseOne(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>], previous: Option<Operation>) -> Option<Operation> {
+pub fn parseOne(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>], previous: Option<Operation>) -> Option<Operation> {
     let u = getParsingUnit(tokens, typ, parsingUnits);
 
     if u.is_none() {
@@ -37,7 +37,7 @@ fn parseOne(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits
     u.map(|v| v.parse(tokens, previous, parsingUnits))
 }
 
-fn parse(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>]) -> Vec<Operation> {
+pub fn parse(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>]) -> Vec<Operation> {
     let mut buf = vec![];
 
     'main: while !tokens.isDone() {
@@ -102,8 +102,8 @@ fn parse(parsingUnits: &mut [Box<dyn ParsingUnit>], mut tokens: TokenProvider, t
  */
 
 pub struct TokenProvider {
-    tokens: Vec<Token>,
-    index: usize
+    pub tokens: Vec<Token>,
+    pub index: usize
 }
 
 impl TokenProvider {
@@ -158,7 +158,7 @@ impl TokenProvider {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operation {
     FunctionDef(Node),
     Statement(Statement),
@@ -188,14 +188,14 @@ impl Operation {
 }
 
 #[derive(Eq, PartialEq)]
-enum ParsingUnitSearchType {
+pub enum ParsingUnitSearchType {
     Around,
     Back,
     Ahead
 }
 
 
-trait ParsingUnit {
+pub trait ParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType;
 
     fn canParse(&self, tokenProvider: &TokenProvider) -> bool;
@@ -203,7 +203,7 @@ trait ParsingUnit {
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation;
 }
 
-struct FunctionParsingUnit;
+pub struct FunctionParsingUnit;
 
 impl ParsingUnit for FunctionParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -249,7 +249,7 @@ impl ParsingUnit for FunctionParsingUnit {
     }
 }
 
-struct StatementVarCreateParsingUnit;
+pub struct StatementVarCreateParsingUnit;
 
 impl ParsingUnit for StatementVarCreateParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -283,7 +283,7 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
     }
 }
 
-struct CallParsingUnit;
+pub struct CallParsingUnit;
 
 impl ParsingUnit for CallParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -337,9 +337,9 @@ impl ParsingUnit for CallParsingUnit {
     }
 }
 
-struct ArithmeticParsingUnit {
-    op: Op,
-    typ: TokenType
+pub struct ArithmeticParsingUnit {
+    pub op: Op,
+    pub typ: TokenType
 }
 
 impl ParsingUnit for ArithmeticParsingUnit {
@@ -371,7 +371,7 @@ impl ParsingUnit for ArithmeticParsingUnit {
     }
 }
 
-struct NumericParsingUnit;
+pub struct NumericParsingUnit;
 
 impl ParsingUnit for NumericParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -398,7 +398,7 @@ impl ParsingUnit for NumericParsingUnit {
     }
 }
 
-struct BoolParsingUnit;
+pub struct BoolParsingUnit;
 
 impl ParsingUnit for BoolParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -419,7 +419,7 @@ impl ParsingUnit for BoolParsingUnit {
     }
 }
 
-struct VariableParsingUnit;
+pub struct VariableParsingUnit;
 
 impl ParsingUnit for VariableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -435,7 +435,7 @@ impl ParsingUnit for VariableParsingUnit {
     }
 }
 
-struct WhileParsingUnit;
+pub struct WhileParsingUnit;
 
 impl ParsingUnit for WhileParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -460,7 +460,7 @@ impl ParsingUnit for WhileParsingUnit {
     }
 }
 
-struct IfParsingUnit;
+pub struct IfParsingUnit;
 
 fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>]) -> Vec<Statement> {
     let mut statements = vec![];

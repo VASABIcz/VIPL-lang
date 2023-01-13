@@ -13,7 +13,7 @@ pub enum Op {
     Eq
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     ArithmeticOp {
         left: Box<Expression>,
@@ -30,22 +30,22 @@ pub enum Expression {
     Variable(String)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
     pub name: String,
     pub arguments: Vec<Expression>
 }
 
 impl Expression {
-    fn toDataType(&self, typesMapping: &HashMap<String, DataType>, functionCache: &HashMap<String, Node>) -> Option<DataType> {
+    pub fn toDataType(&self, typesMapping: &HashMap<String, (DataType, usize)>, functionReturns: &HashMap<String, Option<DataType>>) -> Option<DataType> {
         match self {
             Expression::ArithmeticOp {
                 left,
                 right,
                 op
             } => {
-                let leftType = left.toDataType(typesMapping, functionCache);
-                let rightType = left.toDataType(typesMapping, functionCache);
+                let leftType = left.toDataType(typesMapping, functionReturns);
+                let rightType = left.toDataType(typesMapping, functionReturns);
 
                 match DataType::Int {
                     DataType::Int => {}
@@ -55,7 +55,7 @@ impl Expression {
                     DataType::Array { .. } => {}
                     DataType::Object { .. } => {}
                 }
-                Some(DataType::Float)
+                Some(DataType::Int)
             }
             Expression::IntLiteral(_) => {
                 Some(DataType::Int)
@@ -75,15 +75,10 @@ impl Expression {
                 Some(DataType::Object { name: String::from("String") })
             }
             Expression::FunctionCall(f) => {
-                match functionCache.get(&f.name).unwrap() {
-                    Node::FunctionDef(r) => {
-                        r.returnType.clone()
-                    }
-                    _ => panic!()
-                }
+                functionReturns.get(&f.name).unwrap().clone()
             }
             Expression::Variable(name) => {
-                Some(typesMapping[name].clone())
+                Some(typesMapping[name].0.clone())
             }
             Expression::BoolLiteral(_) => {
                 Some(DataType::Bool)
@@ -92,7 +87,7 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     FunctionExpr(FunctionCall),
     While(While),
@@ -100,19 +95,19 @@ pub enum Statement {
     If(If)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct If {
     pub condition: Expression,
     pub body: Vec<Statement>,
     pub elseBody: Option<Vec<Statement>>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     FunctionDef(FunctionDef),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionDef {
     pub name: String,
     pub args: Vec<VariableMetadata>,
@@ -121,13 +116,13 @@ pub struct FunctionDef {
     pub returnType: Option<DataType>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct While {
     pub exp: Expression,
     pub body: Vec<Statement>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableCreate {
     pub name: String,
     pub init: Option<Expression>
