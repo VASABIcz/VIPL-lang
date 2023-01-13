@@ -159,7 +159,7 @@ impl TokenProvider {
 }
 
 #[derive(Debug)]
-enum Operation {
+pub enum Operation {
     FunctionDef(Node),
     Statement(Statement),
     Expression(Expression)
