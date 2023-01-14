@@ -1,4 +1,4 @@
-use crate::DataType::Float;
+
 use crate::{DataType, VariableMetadata};
 use std::collections::HashMap;
 
@@ -43,9 +43,9 @@ impl Expression {
         functionReturns: &HashMap<String, Option<DataType>>,
     ) -> Option<DataType> {
         match self {
-            Expression::ArithmeticOp { left, right, op } => {
-                let leftType = left.toDataType(typesMapping, functionReturns);
-                let rightType = left.toDataType(typesMapping, functionReturns);
+            Expression::ArithmeticOp { left, right: _, op: _ } => {
+                let _leftType = left.toDataType(typesMapping, functionReturns);
+                let _rightType = left.toDataType(typesMapping, functionReturns);
 
                 match DataType::Int {
                     DataType::Int => {}

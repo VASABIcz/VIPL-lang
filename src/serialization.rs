@@ -194,7 +194,7 @@ pub fn getMeta(bytes: &[u8], index: usize) -> (VariableMetadata, usize) {
     )
 }
 
-pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
+pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
     let mut buf = vec![];
     let mut skip = 0;
 

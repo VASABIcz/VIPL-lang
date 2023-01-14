@@ -77,7 +77,7 @@ impl DataType {
             Int => "int",
             Float => "float",
             Bool => "bool",
-            Array { inner } => "",
+            Array { inner: _ } => "",
             Object { name } => &name,
         }
     }
@@ -261,12 +261,12 @@ enum RawOpCode {
     Dec,
 }
 
-struct MyObjectField {
+pub struct MyObjectField {
     pub typ: DataType,
     pub value: Value,
 }
 
-enum MyObject {
+pub enum MyObject {
     ArrayObj {
         values: Vec<Value>,
         typ: DataType,
@@ -279,19 +279,19 @@ enum MyObject {
 }
 
 #[derive(Clone)]
-struct MyClassField {
+pub struct MyClassField {
     pub name: String,
     pub typ: DataType,
 }
 
 #[derive(Clone)]
-struct MyClass {
+pub struct MyClass {
     pub name: String,
     pub fields: HashMap<String, MyClassField>,
 }
 
 #[derive(Clone, Debug)]
-enum Value {
+pub enum Value {
     Num(isize),
     Flo(f32),
     Bol(bool),
@@ -536,14 +536,14 @@ impl Value {
 }
 
 #[derive(Debug)]
-struct StackFrame<'a> {
+pub struct StackFrame<'a> {
     previous: Option<&'a StackFrame<'a>>,
     localVariables: &'a mut [Value],
     name: Option<&'a str>,
 }
 
 #[derive(Clone)]
-struct Func {
+pub struct Func {
     name: String,
     returnType: Option<DataType>,
     varTable: Box<[VariableMetadata]>,
@@ -552,7 +552,7 @@ struct Func {
 }
 
 #[derive(Clone)]
-enum FuncType {
+pub enum FuncType {
     Runtime {
         rangeStart: usize,
         rangeStop: usize,
@@ -562,7 +562,7 @@ enum FuncType {
     },
 }
 
-enum CachedOpCode {
+pub enum CachedOpCode {
     CallCache {
         stack: Vec<Value>,
         typ: FuncType,
@@ -570,7 +570,7 @@ enum CachedOpCode {
     },
 }
 
-struct VirtualMachine {
+pub struct VirtualMachine {
     pub functions: HashMap<String, Func>,
     pub stack: Vec<Value>,
     pub classes: HashMap<String, MyClass>,
@@ -579,7 +579,7 @@ struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             functions: Default::default(),
             stack: vec![],
@@ -589,7 +589,7 @@ impl VirtualMachine {
         }
     }
 
-    fn makeNative(
+    pub fn makeNative(
         &mut self,
         name: String,
         args: Box<[VariableMetadata]>,
@@ -611,7 +611,7 @@ impl VirtualMachine {
     }
 }
 
-struct SeekableOpcodes<'a> {
+pub struct SeekableOpcodes<'a> {
     pub index: isize,
     pub opCodes: &'a [OpCode],
     pub start: Option<usize>,
@@ -620,13 +620,13 @@ struct SeekableOpcodes<'a> {
 
 impl SeekableOpcodes<'_> {
     #[inline(always)]
-    fn seek(&mut self, offset: isize) {
+    pub fn seek(&mut self, offset: isize) {
         // FIXME boundary check
         self.index += offset;
     }
 
     #[inline(always)]
-    fn next(&mut self) -> (Option<&OpCode>, usize) {
+    pub fn next(&mut self) -> (Option<&OpCode>, usize) {
         let n = self.opCodes.get(self.index as usize);
         self.index += 1;
 
@@ -635,7 +635,7 @@ impl SeekableOpcodes<'_> {
 }
 
 #[inline(always)]
-fn argsToString(args: &[DataType]) -> String {
+pub fn argsToString(args: &[DataType]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
@@ -648,7 +648,7 @@ fn argsToString(args: &[DataType]) -> String {
 }
 
 #[inline(always)]
-fn argsToStringMeta(args: &[VariableMetadata]) -> String {
+pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
@@ -661,17 +661,17 @@ fn argsToStringMeta(args: &[VariableMetadata]) -> String {
 }
 
 #[inline(always)]
-fn genFunName(name: &str, args: &[DataType]) -> String {
+pub fn genFunName(name: &str, args: &[DataType]) -> String {
     format!("{}({})", name, argsToString(args))
 }
 
 #[inline(always)]
-fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
+pub fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
     format!("{}({})", name, argsToStringMeta(args))
 }
 
 #[inline(always)]
-fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
+pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
     loop {
         let (op, index) = match opCodes.next() {
             (None, _) => {
@@ -708,7 +708,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             PushLocal { index } => vm
                 .stack
                 .push(stackFrame.localVariables.get(*index).unwrap().clone()),
-            SetLocal { index, typ } => {
+            SetLocal { index, typ: _ } => {
                 let x = vm.stack.pop().unwrap();
                 *(stackFrame.localVariables.get_mut(*index).unwrap()) = x;
                 // stackFrame.get_mut().localVariables.insert(*index, x);
@@ -716,7 +716,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             Jmp { offset, jmpType } => match jmpType {
                 JmpType::One => {
                     vm.stack.pop().unwrap();
-                    let b = vm.stack.pop().unwrap();
+                    let _b = vm.stack.pop().unwrap();
                 }
                 JmpType::Zero => {}
                 JmpType::Jmp => {
@@ -811,8 +811,8 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 
                 match cached.1 {
                     Runtime {
-                        rangeStart,
-                        rangeStop,
+                        rangeStart: _,
+                        rangeStop: _,
                     } => {
                         panic!()
                     }
@@ -897,7 +897,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
     }
 }
 
-fn bootStrapVM() -> VirtualMachine {
+pub fn bootStrapVM() -> VirtualMachine {
     let mut vm = VirtualMachine::new();
 
     vm.makeNative(
@@ -906,7 +906,7 @@ fn bootStrapVM() -> VirtualMachine {
             name: "value".to_string(),
             typ: Int,
         }]),
-        |a, b| println!("{}", b.localVariables[0].getNum()),
+        |_a, b| println!("{}", b.localVariables[0].getNum()),
         None,
     );
 
@@ -916,7 +916,7 @@ fn bootStrapVM() -> VirtualMachine {
             name: "value".to_string(),
             typ: Float,
         }]),
-        |a, b| println!("{}", b.localVariables[0].getFlo()),
+        |_a, b| println!("{}", b.localVariables[0].getFlo()),
         None,
     );
 
@@ -964,7 +964,7 @@ fn main() {
             name: "value".to_string(),
             typ: Int,
         }]),
-        |a, b| println!("{}", b.localVariables[0].getNum()),
+        |_a, b| println!("{}", b.localVariables[0].getNum()),
         None,
     );
 
@@ -974,7 +974,7 @@ fn main() {
             name: "value".to_string(),
             typ: Float,
         }]),
-        |a, b| println!("{}", b.localVariables[0].getFlo()),
+        |_a, b| println!("{}", b.localVariables[0].getFlo()),
         None,
     );
 
@@ -1030,11 +1030,11 @@ fn main() {
         },
     ];
 
-    let cc = [Call {
+    let _cc = [Call {
         encoded: "exec()".to_string(),
     }];
 
-    let x = vec![vec![
+    let _x = vec![vec![
         PushInt(69),
         PushInt(1),
         Add(Int),

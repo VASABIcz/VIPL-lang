@@ -32,26 +32,26 @@ pub struct SourceProvider<'a> {
 }
 
 impl SourceProvider<'_> {
-    fn peekStr(&self, amount: usize) -> &str {
+    pub fn peekStr(&self, amount: usize) -> &str {
         if self.index + amount > self.data.len() {
             return self.data.index(self.index..(self.data.len() - 1));
         }
         self.data.index(self.index..self.index + amount)
     }
 
-    fn peekChar(&self) -> char {
+    pub fn peekChar(&self) -> char {
         self.data.chars().nth(self.index).unwrap()
     }
 
-    fn consumeMany(&mut self, amount: usize) {
+    pub fn consumeMany(&mut self, amount: usize) {
         self.index += amount
     }
 
-    fn consumeOne(&mut self) {
+    pub fn consumeOne(&mut self) {
         self.index += 1
     }
 
-    fn isDone(&self) -> bool {
+    pub fn isDone(&self) -> bool {
         self.index >= self.data.len()
     }
 }
@@ -117,7 +117,7 @@ pub struct KeywordLexingUnit {
 
 impl KeywordLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    fn new(keyword: &'static str, tokenType: TokenType) -> Box<dyn LexingUnit> {
+    pub fn new(keyword: &'static str, tokenType: TokenType) -> Box<dyn LexingUnit> {
         Box::new(Self { keyword, tokenType })
     }
 }
@@ -126,7 +126,7 @@ struct NumericLexingUnit {}
 
 impl NumericLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    fn new() -> Box<dyn LexingUnit> {
+    pub fn new() -> Box<dyn LexingUnit> {
         Box::new(Self {})
     }
 }
@@ -144,7 +144,7 @@ impl LexingUnit for NumericLexingUnit {
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
         let mut buf = String::new();
         let mut typ = TokenType::IntLiteral;
-        let mut encounteredDot = false;
+        let encounteredDot = false;
 
         if lexer.peekChar() == '-' {
             buf.push('-');
@@ -192,7 +192,7 @@ struct IdentifierLexingUnit {}
 
 impl IdentifierLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    fn new() -> Box<dyn LexingUnit> {
+    pub fn new() -> Box<dyn LexingUnit> {
         Box::new(Self {})
     }
 }
@@ -227,7 +227,7 @@ struct WhitespaceLexingUnit {}
 
 impl WhitespaceLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    fn new() -> Box<dyn LexingUnit> {
+    pub fn new() -> Box<dyn LexingUnit> {
         Box::new(Self {})
     }
 }
