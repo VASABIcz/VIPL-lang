@@ -1,7 +1,7 @@
-use std::mem::transmute;
+use crate::DataType::Object;
 use crate::OpCode::*;
 use crate::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
-use crate::DataType::Object;
+use std::mem::transmute;
 
 pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];
@@ -36,51 +36,29 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
             PushBool(i) => {
                 buf.push(*i as u8);
             }
-            Div(t)
-            | Mul(t)
-            | Sub(t)
-            | Add(t)
-            | Equals(t)
-            | Greater(t)
-            | Less(t)
-            | ArrayNew(t)
-            | ArrayStore(t)
-            | ArrayLoad(t)
-            => {
-                t.toBytes(&mut buf)
-            }
-            FunReturn { typ } => {
-                match typ {
-                    None => {
-                        buf.push(0);
-                    }
-                    Some(v) => {
-                        buf.push(1);
-                        v.toBytes(&mut buf)
-                    }
+            Div(t) | Mul(t) | Sub(t) | Add(t) | Equals(t) | Greater(t) | Less(t) | ArrayNew(t)
+            | ArrayStore(t) | ArrayLoad(t) => t.toBytes(&mut buf),
+            FunReturn { typ } => match typ {
+                None => {
+                    buf.push(0);
                 }
-            }
-            ClassName { name }
-            | New { name }
-            | FunName { name }
-            => {
+                Some(v) => {
+                    buf.push(1);
+                    v.toBytes(&mut buf)
+                }
+            },
+            ClassName { name } | New { name } | FunName { name } => {
                 let bs = name.escape_default().to_string();
                 buf.extend(bs.len().to_ne_bytes());
                 buf.extend(bs.as_bytes());
             }
-            ClassField { name, typ }
-            | GetField { name, typ }
-            | SetField { name, typ }
-            => {
+            ClassField { name, typ } | GetField { name, typ } | SetField { name, typ } => {
                 let bs = name.escape_default().to_string();
                 buf.extend(bs.len().to_ne_bytes());
                 buf.extend(bs.as_bytes());
                 typ.toBytes(&mut buf);
             }
-            Inc { typ, index }
-            | Dec { typ, index }
-            | SetLocal { index, typ }
-            => {
+            Inc { typ, index } | Dec { typ, index } | SetLocal { index, typ } => {
                 typ.toBytes(&mut buf);
                 buf.extend(index.to_ne_bytes());
             }
@@ -91,7 +69,7 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
                 buf.extend(offset.to_ne_bytes());
                 jmpType.toBytes(&mut buf);
             }
-            Call {encoded } => {
+            Call { encoded } => {
                 let be = encoded.escape_default().to_string();
                 buf.extend(be.len().to_ne_bytes());
                 buf.extend(be.as_bytes());
@@ -111,13 +89,13 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
 pub fn getStr(bytes: &[u8], index: usize) -> (String, usize) {
     let d = [
         bytes[index],
-        bytes[index+1],
-        bytes[index+2],
-        bytes[index+3],
-        bytes[index+4],
-        bytes[index+5],
-        bytes[index+6],
-        bytes[index+7]
+        bytes[index + 1],
+        bytes[index + 2],
+        bytes[index + 3],
+        bytes[index + 4],
+        bytes[index + 5],
+        bytes[index + 6],
+        bytes[index + 7],
     ];
 
     let mut consumed = d.len();
@@ -128,7 +106,7 @@ pub fn getStr(bytes: &[u8], index: usize) -> (String, usize) {
     let mut buf = vec![];
 
     for i in 0..n {
-        buf.push(bytes[index+d.len()+i])
+        buf.push(bytes[index + d.len() + i])
     }
     (String::from_utf8_lossy(&buf).to_string(), consumed)
 }
@@ -136,13 +114,13 @@ pub fn getStr(bytes: &[u8], index: usize) -> (String, usize) {
 pub fn getSize(bytes: &[u8], index: usize) -> (usize, usize) {
     let d = [
         bytes[index],
-        bytes[index+1],
-        bytes[index+2],
-        bytes[index+3],
-        bytes[index+4],
-        bytes[index+5],
-        bytes[index+6],
-        bytes[index+7]
+        bytes[index + 1],
+        bytes[index + 2],
+        bytes[index + 3],
+        bytes[index + 4],
+        bytes[index + 5],
+        bytes[index + 6],
+        bytes[index + 7],
     ];
 
     let consumed = d.len();
@@ -155,9 +133,9 @@ pub fn getSize(bytes: &[u8], index: usize) -> (usize, usize) {
 pub fn getFloat(bytes: &[u8], index: usize) -> (f32, usize) {
     let d = [
         bytes[index],
-        bytes[index+1],
-        bytes[index+2],
-        bytes[index+3]
+        bytes[index + 1],
+        bytes[index + 2],
+        bytes[index + 3],
     ];
 
     let consumed = d.len();
@@ -168,9 +146,7 @@ pub fn getFloat(bytes: &[u8], index: usize) -> (f32, usize) {
 }
 
 pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
-    let d = [
-        bytes[index]
-    ];
+    let d = [bytes[index]];
 
     let mut consumed = d.len();
 
@@ -179,19 +155,15 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
     println!("a {:?}", n);
 
     let t = match n {
-        RawDataType::Int => {
-            DataType::Int
-        }
-        RawDataType::Float => {
-            DataType::Float
-        }
-        RawDataType::Bool => {
-            DataType::Bool
-        }
+        RawDataType::Int => DataType::Int,
+        RawDataType::Float => DataType::Float,
+        RawDataType::Bool => DataType::Bool,
         RawDataType::Array => {
             let t = getType(bytes, index + consumed);
             consumed += t.1;
-            DataType::Array { inner: Box::new(t.0) }
+            DataType::Array {
+                inner: Box::new(t.0),
+            }
         }
         RawDataType::Object => {
             let n = getStr(bytes, index + consumed);
@@ -213,10 +185,13 @@ pub fn getMeta(bytes: &[u8], index: usize) -> (VariableMetadata, usize) {
     let t = getType(bytes, index + consumed);
     consumed += n.1;
 
-    (VariableMetadata {
-        name: n.0,
-        typ: t.0,
-    }, consumed)
+    (
+        VariableMetadata {
+            name: n.0,
+            typ: t.0,
+        },
+        consumed,
+    )
 }
 
 pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
@@ -224,26 +199,22 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
     let mut skip = 0;
 
     for (ind, o) in data.iter().enumerate() {
-        let i = ind+1;
+        let i = ind + 1;
         if skip > 0 {
             skip -= 1;
-            continue
+            continue;
         }
         let op: RawOpCode = unsafe { transmute(*o) };
         println!("{:?}", op);
 
         match op {
-            RawOpCode::FunBegin => {
-                buf.push(FunBegin)
-            }
+            RawOpCode::FunBegin => buf.push(FunBegin),
             RawOpCode::FunName => {
                 let s = getStr(&data, i);
                 skip += s.1;
                 buf.push(FunName { name: s.0 })
             }
-            RawOpCode::FunReturn => {
-                buf.push(FunReturn { typ: None })
-            }
+            RawOpCode::FunReturn => buf.push(FunReturn { typ: None }),
             RawOpCode::LocalVarTable => {
                 let mut offset = i;
                 let s = getSize(&data, offset);
@@ -258,17 +229,14 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
                 }
                 let siz = getSize(&data, offset);
                 skip += siz.1;
-                buf.push(LocalVarTable { typ: bu.into_boxed_slice(), argsCount: siz.0 })
+                buf.push(LocalVarTable {
+                    typ: bu.into_boxed_slice(),
+                    argsCount: siz.0,
+                })
             }
-            RawOpCode::FunEnd => {
-                buf.push(FunEnd)
-            }
-            RawOpCode::F2I => {
-                buf.push(F2I)
-            }
-            RawOpCode::I2F => {
-                buf.push(I2F)
-            }
+            RawOpCode::FunEnd => buf.push(FunEnd),
+            RawOpCode::F2I => buf.push(F2I),
+            RawOpCode::I2F => buf.push(I2F),
             RawOpCode::PushInt => {
                 let s = getSize(&data, i);
                 skip += s.1;
@@ -280,15 +248,9 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
                 skip += s.1;
                 buf.push(PushFloat(s.0))
             }
-            RawOpCode::PushBool => {
-                buf.push(PushBool(data[i] != 0))
-            }
-            RawOpCode::Pop => {
-                buf.push(Pop)
-            }
-            RawOpCode::Dup => {
-                buf.push(Dup)
-            }
+            RawOpCode::PushBool => buf.push(PushBool(data[i] != 0)),
+            RawOpCode::Pop => buf.push(Pop),
+            RawOpCode::Dup => buf.push(Dup),
             RawOpCode::PushLocal => {
                 let s = getSize(&data, i);
                 skip += s.1;
@@ -299,20 +261,23 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
                 let t = getType(&data, i);
                 skip += t.1;
                 println!("meow {:?}", &t.1);
-                let s = getSize(&data, i+t.1);
+                let s = getSize(&data, i + t.1);
                 skip += s.1;
-                buf.push(SetLocal { index: s.0, typ: t.0 })
+                buf.push(SetLocal {
+                    index: s.0,
+                    typ: t.0,
+                })
             }
             RawOpCode::Jmp => {
                 let s = getSize(&data, i);
                 skip += s.1;
 
-                let jmpType: JmpType = unsafe { transmute(data[i+s.1]) };
+                let jmpType: JmpType = unsafe { transmute(data[i + s.1]) };
                 skip += 1;
 
                 buf.push(Jmp {
                     offset: s.0 as isize,
-                    jmpType
+                    jmpType,
                 })
             }
             RawOpCode::Call => {
@@ -322,13 +287,9 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
                 skip += encName.1;
                 offset += encName.1;
 
-                buf.push(Call {
-                    encoded: encName.0,
-                })
+                buf.push(Call { encoded: encName.0 })
             }
-            RawOpCode::Return => {
-                buf.push(Return)
-            }
+            RawOpCode::Return => buf.push(Return),
             RawOpCode::Add => {
                 let d = getType(&data, i);
                 skip += d.1;
@@ -364,23 +325,13 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
                 skip += d.1;
                 buf.push(Less(d.0))
             }
-            RawOpCode::Or => {
-                buf.push(Or)
-            }
-            RawOpCode::And => {
-                buf.push(And)
-            }
-            RawOpCode::Not => {
-                buf.push(Not)
-            }
-            RawOpCode::ClassBegin => {
-                buf.push(ClassBegin)
-            }
+            RawOpCode::Or => buf.push(Or),
+            RawOpCode::And => buf.push(And),
+            RawOpCode::Not => buf.push(Not),
+            RawOpCode::ClassBegin => buf.push(ClassBegin),
             RawOpCode::ClassName => {}
             RawOpCode::ClassField => {}
-            RawOpCode::ClassEnd => {
-                buf.push(ClassEnd)
-            }
+            RawOpCode::ClassEnd => buf.push(ClassEnd),
             RawOpCode::New => {
                 let s = getStr(&data, i);
                 skip += s.1;
@@ -395,22 +346,26 @@ pub fn deserialize(mut data: Vec<u8>) -> Vec<OpCode> {
             }
             RawOpCode::ArrayStore => {}
             RawOpCode::ArrayLoad => {}
-            RawOpCode::ArrayLength => {
-                buf.push(ArrayLength)
-            }
+            RawOpCode::ArrayLength => buf.push(ArrayLength),
             RawOpCode::Inc => {
                 let t = getType(&data, i);
                 skip += t.1;
-                let s = getSize(&data, i+t.1);
+                let s = getSize(&data, i + t.1);
                 skip += s.1;
-                buf.push(Inc { index: s.0, typ: t.0 })
+                buf.push(Inc {
+                    index: s.0,
+                    typ: t.0,
+                })
             }
             RawOpCode::Dec => {
                 let t = getType(&data, i);
                 skip += t.1;
-                let s = getSize(&data, i+t.1);
+                let s = getSize(&data, i + t.1);
                 skip += s.1;
-                buf.push(Dec { index: s.0, typ: t.0 })
+                buf.push(Dec {
+                    index: s.0,
+                    typ: t.0,
+                })
             }
         }
     }

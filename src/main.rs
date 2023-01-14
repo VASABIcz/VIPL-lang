@@ -1,31 +1,27 @@
 extern crate core;
 
-mod lexer;
-mod parser;
 mod ast;
 mod codegen;
+mod lexer;
+mod parser;
 mod serialization;
 
-use std::collections::HashMap;
-use std::mem;
-use std::mem::transmute;
+use crate::serialization::{deserialize, serialize};
 use crate::DataType::*;
 use crate::FuncType::*;
 use crate::OpCode::*;
-use crate::serialization::{deserialize, serialize};
 use crate::Value::*;
+use std::collections::HashMap;
+use std::mem;
+use std::mem::transmute;
 
 #[derive(Clone, Debug)]
 pub enum DataType {
     Int,
     Float,
     Bool,
-    Array {
-        inner: Box<DataType>
-    },
-    Object {
-        name: String
-    }
+    Array { inner: Box<DataType> },
+    Object { name: String },
 }
 
 impl DataType {
@@ -33,14 +29,16 @@ impl DataType {
         if s.ends_with("[]") {
             return DataType::Array {
                 inner: Box::new(DataType::fromString(s.strip_suffix("[]").unwrap())),
-            }
+            };
         }
 
         match s {
             "int" => DataType::Int,
             "float" => DataType::Float,
             "bool" => DataType::Bool,
-            _ => DataType::Object { name: String::from(s) }
+            _ => DataType::Object {
+                name: String::from(s),
+            },
         }
     }
 }
@@ -52,7 +50,7 @@ enum RawDataType {
     Float,
     Bool,
     Array,
-    Object
+    Object,
 }
 
 impl DataType {
@@ -63,9 +61,7 @@ impl DataType {
             Int => {}
             Float => {}
             Bool => {}
-            Array { inner } => {
-                inner.toBytes(bytes)
-            }
+            Array { inner } => inner.toBytes(bytes),
             Object { name } => {
                 let bs = name.escape_default().to_string();
                 bytes.extend(bs.len().to_ne_bytes());
@@ -82,7 +78,7 @@ impl DataType {
             Float => "float",
             Bool => "bool",
             Array { inner } => "",
-            Object { name } => &name
+            Object { name } => &name,
         }
     }
 }
@@ -94,7 +90,7 @@ impl DataType {
             Float => Flo(0.),
             Bool => Bol(false),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 }
@@ -106,7 +102,7 @@ pub enum JmpType {
     Jmp,
     Gt,
     Less,
-    True
+    True,
 }
 
 impl JmpType {
@@ -119,7 +115,7 @@ impl JmpType {
 #[derive(Clone, Debug)]
 pub struct VariableMetadata {
     pub name: String,
-    pub typ: DataType
+    pub typ: DataType,
 }
 
 impl VariableMetadata {
@@ -135,14 +131,14 @@ impl VariableMetadata {
 pub enum OpCode {
     FunBegin,
     FunName {
-        name: String
+        name: String,
     },
     FunReturn {
-        typ: Option<DataType>
+        typ: Option<DataType>,
     },
     LocalVarTable {
         typ: Box<[VariableMetadata]>,
-        argsCount: usize
+        argsCount: usize,
     },
     FunEnd,
     F2I,
@@ -153,18 +149,18 @@ pub enum OpCode {
     Pop,
     Dup,
     PushLocal {
-        index: usize
+        index: usize,
     },
     SetLocal {
         index: usize,
-        typ: DataType
+        typ: DataType,
     },
     Jmp {
         offset: isize,
-        jmpType: JmpType
+        jmpType: JmpType,
     },
     Call {
-        encoded: String
+        encoded: String,
     },
     Return,
 
@@ -183,23 +179,23 @@ pub enum OpCode {
 
     ClassBegin,
     ClassName {
-        name: String
+        name: String,
     },
     ClassField {
         name: String,
-        typ: DataType
+        typ: DataType,
     },
     ClassEnd,
     New {
-        name: String
+        name: String,
     },
     GetField {
         name: String,
-        typ: DataType
+        typ: DataType,
     },
     SetField {
         name: String,
-        typ: DataType
+        typ: DataType,
     },
 
     ArrayNew(DataType),
@@ -208,17 +204,17 @@ pub enum OpCode {
     ArrayLength,
     Inc {
         typ: DataType,
-        index: usize
+        index: usize,
     },
     Dec {
         typ: DataType,
-        index: usize
-    }
+        index: usize,
+    },
 }
 
 #[repr(u8)]
 #[derive(Debug)]
-enum RawOpCode{
+enum RawOpCode {
     FunBegin,
     FunName,
     FunReturn,
@@ -262,24 +258,24 @@ enum RawOpCode{
     ArrayLoad,
     ArrayLength,
     Inc,
-    Dec
+    Dec,
 }
 
 struct MyObjectField {
     pub typ: DataType,
-    pub value: Value
+    pub value: Value,
 }
 
 enum MyObject {
     ArrayObj {
         values: Vec<Value>,
         typ: DataType,
-        size: usize
+        size: usize,
     },
     RuntimeObj {
         name: String,
-        fields: Option<HashMap<String, MyObjectField>>
-    }
+        fields: Option<HashMap<String, MyObjectField>>,
+    },
 }
 
 #[derive(Clone)]
@@ -291,7 +287,7 @@ struct MyClassField {
 #[derive(Clone)]
 struct MyClass {
     pub name: String,
-    pub fields: HashMap<String, MyClassField>
+    pub fields: HashMap<String, MyClassField>,
 }
 
 #[derive(Clone, Debug)]
@@ -299,7 +295,7 @@ enum Value {
     Num(isize),
     Flo(f32),
     Bol(bool),
-    Reference()
+    Reference(),
 }
 
 impl Value {
@@ -309,7 +305,7 @@ impl Value {
             Num(v) => *v,
             Flo(_) => panic!(),
             Bol(_) => panic!(),
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 
@@ -319,7 +315,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(v) => *v,
             Bol(_) => panic!(),
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 
@@ -329,7 +325,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(v) => v,
             Bol(_) => panic!(),
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 
@@ -339,7 +335,7 @@ impl Value {
             Num(v) => v,
             Flo(_) => panic!(),
             Bol(_) => panic!(),
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 
@@ -349,7 +345,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(_) => panic!(),
             Bol(v) => v,
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 
@@ -359,7 +355,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(_) => panic!(),
             Bol(v) => *v,
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 }
@@ -388,17 +384,11 @@ impl Value {
     #[inline(always)]
     fn gt(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            Int => {
-                self.getNum() > val.getNum()
-            }
-            Float => {
-                self.getFlo() > val.getFlo()
-            },
-            Bool => {
-                self.getBool() & !val.getBool()
-            },
+            Int => self.getNum() > val.getNum(),
+            Float => self.getFlo() > val.getFlo(),
+            Bool => self.getBool() & !val.getBool(),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 
@@ -406,14 +396,14 @@ impl Value {
     fn inc(&mut self, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum()+=1;
+                *self.getRefNum() += 1;
             }
             Float => {
-                *self.getRefFlo()+=1.;
+                *self.getRefFlo() += 1.;
             }
             Bool => panic!(),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 
@@ -421,48 +411,36 @@ impl Value {
     fn dec(&mut self, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum()-=1;
+                *self.getRefNum() -= 1;
             }
             Float => {
-                *self.getRefFlo()-=1.;
+                *self.getRefFlo() -= 1.;
             }
             Bool => panic!(),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 
     #[inline(always)]
     fn less(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            Int => {
-                self.getNum() < val.getNum()
-            }
-            Float => {
-                self.getFlo() < val.getFlo()
-            },
-            Bool => {
-                !self.getBool() & val.getBool()
-            },
+            Int => self.getNum() < val.getNum(),
+            Float => self.getFlo() < val.getFlo(),
+            Bool => !self.getBool() & val.getBool(),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 
     #[inline(always)]
     fn eq(&self, val: Value, typ: &DataType) -> bool {
         match typ {
-            Int => {
-                self.getNum() == val.getNum()
-            }
-            Float => {
-                self.getFlo() == val.getFlo()
-            },
-            Bool => {
-                self.getBool() == val.getBool()
-            },
+            Int => self.getNum() == val.getNum(),
+            Float => self.getFlo() == val.getFlo(),
+            Bool => self.getBool() == val.getBool(),
             Array { .. } => panic!(),
-            Object { .. } => panic!()
+            Object { .. } => panic!(),
         }
     }
 }
@@ -552,7 +530,7 @@ impl Value {
             Bol(_) => {
                 matches!(typ, Bool)
             }
-            Reference() => panic!()
+            Reference() => panic!(),
         }
     }
 }
@@ -561,7 +539,7 @@ impl Value {
 struct StackFrame<'a> {
     previous: Option<&'a StackFrame<'a>>,
     localVariables: &'a mut [Value],
-    name: Option<&'a str>
+    name: Option<&'a str>,
 }
 
 #[derive(Clone)]
@@ -581,15 +559,15 @@ enum FuncType {
     },
     Native {
         callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
-    }
+    },
 }
 
 enum CachedOpCode {
     CallCache {
         stack: Vec<Value>,
         typ: FuncType,
-        argCount: usize
-    }
+        argCount: usize,
+    },
 }
 
 struct VirtualMachine {
@@ -597,7 +575,7 @@ struct VirtualMachine {
     pub stack: Vec<Value>,
     pub classes: HashMap<String, MyClass>,
     pub opCodes: Vec<OpCode>,
-    pub opCodeCache: Vec<Option<CachedOpCode>>
+    pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
 
 impl VirtualMachine {
@@ -607,32 +585,37 @@ impl VirtualMachine {
             stack: vec![],
             classes: Default::default(),
             opCodes: vec![],
-            opCodeCache: vec![]
+            opCodeCache: vec![],
         }
     }
 
-    fn makeNative(&mut self, name: String, args: Box<[VariableMetadata]>, fun: fn(&mut VirtualMachine, &mut StackFrame) -> (), ret: Option<DataType>) {
+    fn makeNative(
+        &mut self,
+        name: String,
+        args: Box<[VariableMetadata]>,
+        fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        ret: Option<DataType>,
+    ) {
         let genName = genFunNameMeta(&name, &args);
         let l = args.len();
-        self.functions.insert(genName, Func {
-            name,
-            returnType: ret,
-            varTable: args,
-            argAmount: l,
-            typ: Native {
-                callback: fun,
+        self.functions.insert(
+            genName,
+            Func {
+                name,
+                returnType: ret,
+                varTable: args,
+                argAmount: l,
+                typ: Native { callback: fun },
             },
-        });
+        );
     }
 }
 
-
-
 struct SeekableOpcodes<'a> {
     pub index: isize,
-    pub opCodes: &'a[OpCode],
+    pub opCodes: &'a [OpCode],
     pub start: Option<usize>,
-    pub end: Option<usize>
+    pub end: Option<usize>,
 }
 
 impl SeekableOpcodes<'_> {
@@ -647,7 +630,7 @@ impl SeekableOpcodes<'_> {
         let n = self.opCodes.get(self.index as usize);
         self.index += 1;
 
-        (n, (self.index-1) as usize)
+        (n, (self.index - 1) as usize)
     }
 }
 
@@ -657,7 +640,7 @@ fn argsToString(args: &[DataType]) -> String {
 
     for (i, arg) in args.iter().enumerate() {
         buf.push_str(arg.toString());
-        if i != args.len()-1 {
+        if i != args.len() - 1 {
             buf.push_str(", ")
         }
     }
@@ -670,7 +653,7 @@ fn argsToStringMeta(args: &[VariableMetadata]) -> String {
 
     for (i, arg) in args.iter().enumerate() {
         buf.push_str(arg.typ.toString());
-        if i != args.len()-1 {
+        if i != args.len() - 1 {
             buf.push_str(", ")
         }
     }
@@ -694,7 +677,7 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             (None, _) => {
                 return;
             }
-            (Some(v), i) => (v, i)
+            (Some(v), i) => (v, i),
         };
         // println!("processing {:?}", op);
         match op {
@@ -711,15 +694,9 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 let mut x = vm.stack.pop().unwrap();
                 vm.stack.push(x.i2f())
             }
-            PushInt(v) => {
-                vm.stack.push(Num(*v))
-            }
-            PushFloat(v) => {
-                vm.stack.push(Flo(*v))
-            }
-            PushBool(v) => {
-                vm.stack.push(Bol(*v))
-            }
+            PushInt(v) => vm.stack.push(Num(*v)),
+            PushFloat(v) => vm.stack.push(Flo(*v)),
+            PushBool(v) => vm.stack.push(Bol(*v)),
             Pop => {
                 vm.stack.pop();
             }
@@ -728,56 +705,56 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 vm.stack.push(x.clone());
                 vm.stack.push(x);
             }
-            PushLocal { index } => {
-                vm.stack.push(stackFrame.localVariables.get(*index).unwrap().clone())
-            }
+            PushLocal { index } => vm
+                .stack
+                .push(stackFrame.localVariables.get(*index).unwrap().clone()),
             SetLocal { index, typ } => {
                 let x = vm.stack.pop().unwrap();
                 *(stackFrame.localVariables.get_mut(*index).unwrap()) = x;
                 // stackFrame.get_mut().localVariables.insert(*index, x);
             }
-            Jmp { offset, jmpType } => {
-                match jmpType {
-                    JmpType::One => {
-                        vm.stack.pop().unwrap();
-                        let b = vm.stack.pop().unwrap();
-                    }
-                    JmpType::Zero => {}
-                    JmpType::Jmp => {
+            Jmp { offset, jmpType } => match jmpType {
+                JmpType::One => {
+                    vm.stack.pop().unwrap();
+                    let b = vm.stack.pop().unwrap();
+                }
+                JmpType::Zero => {}
+                JmpType::Jmp => {
+                    let x = *offset;
+                    opCodes.seek(x)
+                }
+                JmpType::Gt => {
+                    let a = vm.stack.pop().unwrap();
+                    let b = vm.stack.pop().unwrap();
+                    if a.gt(b, &DataType::Float) {
                         let x = *offset;
                         opCodes.seek(x)
                     }
-                    JmpType::Gt => {
-                        let a = vm.stack.pop().unwrap();
-                        let b = vm.stack.pop().unwrap();
-                        if a.gt(b, &DataType::Float) {
-                            let x = *offset;
-                            opCodes.seek(x)
-                        }
-                    }
-                    JmpType::Less => {
-                        let a = vm.stack.pop().unwrap();
-                        let b = vm.stack.pop().unwrap();
-                        if a.less(b, &DataType::Float) {
-                            let x = *offset;
-                            opCodes.seek(x)
-                        }
-                    }
-                    JmpType::True => {
-                        let a = vm.stack.pop().unwrap();
-                        if a.getBool() {
-                            let x = *offset;
-                            opCodes.seek(x)
-                        }
+                }
+                JmpType::Less => {
+                    let a = vm.stack.pop().unwrap();
+                    let b = vm.stack.pop().unwrap();
+                    if a.less(b, &DataType::Float) {
+                        let x = *offset;
+                        opCodes.seek(x)
                     }
                 }
-            }
+                JmpType::True => {
+                    let a = vm.stack.pop().unwrap();
+                    if a.getBool() {
+                        let x = *offset;
+                        opCodes.seek(x)
+                    }
+                }
+            },
             Call { encoded } => {
                 let cached = match &vm.opCodeCache[index] {
-                    Some(v) => {
-                        match v {
-                            CachedOpCode::CallCache { stack, typ, argCount } => (stack, typ, argCount)
-                        }
+                    Some(v) => match v {
+                        CachedOpCode::CallCache {
+                            stack,
+                            typ,
+                            argCount,
+                        } => (stack, typ, argCount),
                     },
                     None => {
                         let f = vm.functions.get(encoded).unwrap();
@@ -794,7 +771,11 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                             argCount: f.argAmount,
                         });
                         match vm.opCodeCache[index].as_ref().unwrap() {
-                            CachedOpCode::CallCache { stack, typ, argCount } => (stack, typ, argCount)
+                            CachedOpCode::CallCache {
+                                stack,
+                                typ,
+                                argCount,
+                            } => (stack, typ, argCount),
                         }
                     }
                 };
@@ -829,17 +810,16 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 };
 
                 match cached.1 {
-                    Runtime { rangeStart, rangeStop } => {
+                    Runtime {
+                        rangeStart,
+                        rangeStop,
+                    } => {
                         panic!()
                     }
-                    Native { callback } => {
-                        callback(vm, &mut stack)
-                    }
+                    Native { callback } => callback(vm, &mut stack),
                 }
             }
-            Return => {
-                return
-            }
+            Return => return,
             Add(v) => {
                 let mut a = vm.stack.pop().unwrap();
                 let b = vm.stack.pop().unwrap();
@@ -911,12 +891,8 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             ArrayStore(_) => panic!(),
             ArrayLoad(_) => panic!(),
             ArrayLength => panic!(),
-            Inc { typ, index } => {
-                stackFrame.localVariables.get_mut(*index).unwrap().inc(typ)
-            }
-            Dec { typ, index } => {
-                stackFrame.localVariables.get_mut(*index).unwrap().dec(typ)
-            }
+            Inc { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().inc(typ),
+            Dec { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().dec(typ),
         }
     }
 }
@@ -924,38 +900,57 @@ fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 fn bootStrapVM() -> VirtualMachine {
     let mut vm = VirtualMachine::new();
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Int }]), |a, b|{
-        println!("{}", b.localVariables[0].getNum())
-    }, None);
+    vm.makeNative(
+        String::from("print"),
+        Box::new([VariableMetadata {
+            name: "value".to_string(),
+            typ: Int,
+        }]),
+        |a, b| println!("{}", b.localVariables[0].getNum()),
+        None,
+    );
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Float }]), |a, b|{
-        println!("{}", b.localVariables[0].getFlo())
-    }, None);
+    vm.makeNative(
+        String::from("print"),
+        Box::new([VariableMetadata {
+            name: "value".to_string(),
+            typ: Float,
+        }]),
+        |a, b| println!("{}", b.localVariables[0].getFlo()),
+        None,
+    );
 
-    vm.makeNative(String::from("exec"), Box::default(), |a, b| {
-        /*
-        let stack = match b.previous {
-            None => b,
-            Some(v) => v
-        };
+    vm.makeNative(
+        String::from("exec"),
+        Box::default(),
+        |a, b| {
+            /*
+            let stack = match b.previous {
+                None => b,
+                Some(v) => v
+            };
 
-         */
-        let genOps = [
-            PushInt(1),
-            Pop,
-            PushInt(69),
-            Call { encoded: "print(int)".to_string() }
-        ];
+             */
+            let genOps = [
+                PushInt(1),
+                Pop,
+                PushInt(69),
+                Call {
+                    encoded: "print(int)".to_string(),
+                },
+            ];
 
-        let mut seek = SeekableOpcodes {
-            index: 0,
-            opCodes: &genOps,
-            start: None,
-            end: None,
-        };
+            let mut seek = SeekableOpcodes {
+                index: 0,
+                opCodes: &genOps,
+                start: None,
+                end: None,
+            };
 
-        run(&mut seek, a,  b);
-    }, None);
+            run(&mut seek, a, b);
+        },
+        None,
+    );
     vm
 }
 
@@ -963,38 +958,57 @@ fn main() {
     println!("{}", mem::size_of::<[OpCode; 1000]>());
     let mut vm = VirtualMachine::new();
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Int }]), |a, b|{
-        println!("{}", b.localVariables[0].getNum())
-    }, None);
+    vm.makeNative(
+        String::from("print"),
+        Box::new([VariableMetadata {
+            name: "value".to_string(),
+            typ: Int,
+        }]),
+        |a, b| println!("{}", b.localVariables[0].getNum()),
+        None,
+    );
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "value".to_string(), typ: Float }]), |a, b|{
-        println!("{}", b.localVariables[0].getFlo())
-    }, None);
+    vm.makeNative(
+        String::from("print"),
+        Box::new([VariableMetadata {
+            name: "value".to_string(),
+            typ: Float,
+        }]),
+        |a, b| println!("{}", b.localVariables[0].getFlo()),
+        None,
+    );
 
-    vm.makeNative(String::from("exec"), Box::default(), |a, b| {
-        /*
-        let stack = match b.previous {
-            None => b,
-            Some(v) => v
-        };
+    vm.makeNative(
+        String::from("exec"),
+        Box::default(),
+        |a, b| {
+            /*
+            let stack = match b.previous {
+                None => b,
+                Some(v) => v
+            };
 
-         */
-        let genOps = [
-            PushInt(1),
-            Pop,
-            PushInt(69),
-            Call { encoded: "print(int)".to_string() }
-        ];
+             */
+            let genOps = [
+                PushInt(1),
+                Pop,
+                PushInt(69),
+                Call {
+                    encoded: "print(int)".to_string(),
+                },
+            ];
 
-        let mut seek = SeekableOpcodes {
-            index: 0,
-            opCodes: &genOps,
-            start: None,
-            end: None,
-        };
+            let mut seek = SeekableOpcodes {
+                index: 0,
+                opCodes: &genOps,
+                start: None,
+                end: None,
+            };
 
-        run(&mut seek, a,  b);
-    }, None);
+            run(&mut seek, a, b);
+        },
+        None,
+    );
     let ops = [
         PushInt(10000000),
         SetLocal { index: 0, typ: Int },
@@ -1003,7 +1017,7 @@ fn main() {
         Less(Int),
         Jmp {
             offset: 1,
-            jmpType: JmpType::True
+            jmpType: JmpType::True,
         },
         Return,
         PushLocal { index: 0 },
@@ -1012,26 +1026,22 @@ fn main() {
         Dec { typ: Int, index: 0 },
         Jmp {
             offset: -9,
-            jmpType: JmpType::Jmp
-        }
+            jmpType: JmpType::Jmp,
+        },
     ];
 
-    let cc = [
+    let cc = [Call {
+        encoded: "exec()".to_string(),
+    }];
+
+    let x = vec![vec![
+        PushInt(69),
+        PushInt(1),
+        Add(Int),
         Call {
-            encoded: "exec()".to_string()
-        }
-    ];
-
-    let x = vec![
-        vec![
-            PushInt(69),
-            PushInt(1),
-            Add(Int),
-            Call {
-                encoded: "print(int)".to_string()
-            }
-        ]
-    ];
+            encoded: "print(int)".to_string(),
+        },
+    ]];
 
     let res = serialize(&ops);
     let xd = deserialize(res);
@@ -1049,7 +1059,9 @@ fn main() {
         name: None,
     };
 
-    vm.opCodeCache= std::iter::repeat_with(|| None).take(seek.opCodes.len()).collect();
+    vm.opCodeCache = std::iter::repeat_with(|| None)
+        .take(seek.opCodes.len())
+        .collect();
 
     run(&mut seek, &mut vm, &mut stack);
     println!("{:?}", vm.stack.pop());

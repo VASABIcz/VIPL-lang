@@ -1,33 +1,37 @@
-
-use crate::{ast, DataType, OpCode, VariableMetadata};
-use crate::ast::{Expression, FunctionCall, Node, Op, Statement, VariableCreate, While};
 use crate::ast::Expression::IntLiteral;
-use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, Colon, CRB, DoubleLiteral, FloatLiteral, Identifier, If, LongLiteral, OCB, ORB};
-use crate::parser::Operation::{FunctionDef};
+use crate::ast::{Expression, FunctionCall, Node, Op, Statement, VariableCreate, While};
+use crate::lexer::TokenType::{
+    Colon, DoubleLiteral, FloatLiteral, Identifier, If, LongLiteral, CCB, CRB, OCB, ORB,
+};
+use crate::lexer::{lexingUnits, tokenize, SourceProvider, Token, TokenType};
+use crate::parser::Operation::FunctionDef;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
+use crate::{ast, DataType, OpCode, VariableMetadata};
 
-fn getParsingUnit<'a>(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &'a [Box<dyn ParsingUnit>]) -> Option<&'a Box<dyn ParsingUnit>> {
+fn getParsingUnit<'a>(
+    tokens: &mut TokenProvider,
+    typ: ParsingUnitSearchType,
+    parsingUnits: &'a [Box<dyn ParsingUnit>],
+) -> Option<&'a Box<dyn ParsingUnit>> {
     parsingUnits.iter().find(|it| {
         let parserType = it.getType();
 
         let canParse = match typ {
-            ParsingUnitSearchType::Around => {
-                parserType != ParsingUnitSearchType::Ahead
-            }
-            ParsingUnitSearchType::Back => {
-                parserType == ParsingUnitSearchType::Back
-            }
-            ParsingUnitSearchType::Ahead => {
-                parserType == ParsingUnitSearchType::Ahead
-            }
+            ParsingUnitSearchType::Around => parserType != ParsingUnitSearchType::Ahead,
+            ParsingUnitSearchType::Back => parserType == ParsingUnitSearchType::Back,
+            ParsingUnitSearchType::Ahead => parserType == ParsingUnitSearchType::Ahead,
         };
 
         canParse && it.canParse(tokens)
     })
 }
 
-pub fn parseOne(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>], previous: Option<Operation>) -> Option<Operation> {
+pub fn parseOne(
+    tokens: &mut TokenProvider,
+    typ: ParsingUnitSearchType,
+    parsingUnits: &[Box<dyn ParsingUnit>],
+    previous: Option<Operation>,
+) -> Option<Operation> {
     let u = getParsingUnit(tokens, typ, parsingUnits);
 
     if u.is_none() {
@@ -37,7 +41,11 @@ pub fn parseOne(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingU
     u.map(|v| v.parse(tokens, previous, parsingUnits))
 }
 
-pub fn parse(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnits: &[Box<dyn ParsingUnit>]) -> Vec<Operation> {
+pub fn parse(
+    tokens: &mut TokenProvider,
+    typ: ParsingUnitSearchType,
+    parsingUnits: &[Box<dyn ParsingUnit>],
+) -> Vec<Operation> {
     let mut buf = vec![];
 
     'main: while !tokens.isDone() {
@@ -45,28 +53,21 @@ pub fn parse(tokens: &mut TokenProvider, typ: ParsingUnitSearchType, parsingUnit
             let parserType = unit.getType();
 
             let canParse = match typ {
-                ParsingUnitSearchType::Around => {
-                    true
-                }
-                ParsingUnitSearchType::Back => {
-                    parserType == ParsingUnitSearchType::Back
-                }
-                ParsingUnitSearchType::Ahead => {
-                    parserType == ParsingUnitSearchType::Ahead
-                }
+                ParsingUnitSearchType::Around => true,
+                ParsingUnitSearchType::Back => parserType == ParsingUnitSearchType::Back,
+                ParsingUnitSearchType::Ahead => parserType == ParsingUnitSearchType::Ahead,
             };
 
             if canParse && unit.canParse(&tokens) {
                 let res = unit.parse(tokens, None, parsingUnits);
                 buf.push(res);
-                continue 'main
+                continue 'main;
             }
         }
         panic!("error {:?}", tokens.peekOne());
     }
     buf
 }
-
 
 /*
 fn parse(parsingUnits: &mut [Box<dyn ParsingUnit>], mut tokens: TokenProvider, typ: ParsingUnitSearchType) -> Vec<Operation> {
@@ -103,15 +104,12 @@ fn parse(parsingUnits: &mut [Box<dyn ParsingUnit>], mut tokens: TokenProvider, t
 
 pub struct TokenProvider {
     pub tokens: Vec<Token>,
-    pub index: usize
+    pub index: usize,
 }
 
 impl TokenProvider {
     fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            index: 0,
-        }
+        Self { tokens, index: 0 }
     }
 
     fn peekOne(&self) -> &Token {
@@ -162,27 +160,25 @@ impl TokenProvider {
 pub enum Operation {
     FunctionDef(Node),
     Statement(Statement),
-    Expression(Expression)
+    Expression(Expression),
 }
 
 impl Operation {
     fn asExpr(self) -> Expression {
         match self {
             Operation::Expression(e) => e,
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
     fn asStatement(self) -> Statement {
         match self {
             Operation::Statement(s) => s,
-            Operation::Expression(e) => {
-                match e {
-                    Expression::FunctionCall(f) => Statement::FunctionExpr(f),
-                    _ => panic!("{:?} is not statement", e)
-                }
-            }
-            _ => panic!("{:?} is not statement", self)
+            Operation::Expression(e) => match e {
+                Expression::FunctionCall(f) => Statement::FunctionExpr(f),
+                _ => panic!("{:?} is not statement", e),
+            },
+            _ => panic!("{:?} is not statement", self),
         }
     }
 }
@@ -191,16 +187,20 @@ impl Operation {
 pub enum ParsingUnitSearchType {
     Around,
     Back,
-    Ahead
+    Ahead,
 }
-
 
 pub trait ParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType;
 
     fn canParse(&self, tokenProvider: &TokenProvider) -> bool;
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation;
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation;
 }
 
 pub struct FunctionParsingUnit;
@@ -214,7 +214,12 @@ impl ParsingUnit for FunctionParsingUnit {
         tokenProvider.isPeekType(TokenType::Fn)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokens: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         tokens.getAssert(TokenType::Fn);
         let name = tokens.getIdentifier();
         let mut args = vec![];
@@ -227,7 +232,10 @@ impl ParsingUnit for FunctionParsingUnit {
             tokens.getAssert(TokenType::Colon);
             let argType = tokens.getIdentifier();
             let t = DataType::fromString(&argType);
-            args.push(VariableMetadata { name: argName, typ: t });
+            args.push(VariableMetadata {
+                name: argName,
+                typ: t,
+            });
             argCount += 1
         }
         tokens.getAssert(CRB);
@@ -260,7 +268,12 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
         tokens.isPeekType(TokenType::Identifier) && tokens.isPeekIndexType(TokenType::Equals, 1)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokens: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         let name = tokens.getIdentifier();
         tokens.getAssert(TokenType::Equals);
 
@@ -268,18 +281,11 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
         let par = getParsingUnit(tokens, Around, parser);
 
         let op = match par {
-            None => {
-                res.map(|it|{it.asExpr()})
-            }
-            Some(p) => {
-                Some(p.parse(tokens, res, parser).asExpr())
-            }
+            None => res.map(|it| it.asExpr()),
+            Some(p) => Some(p.parse(tokens, res, parser).asExpr()),
         };
 
-        Operation::Statement(Statement::VariableCreate(VariableCreate {
-            name,
-            init: op,
-        }))
+        Operation::Statement(Statement::VariableCreate(VariableCreate { name, init: op }))
     }
 }
 
@@ -294,7 +300,12 @@ impl ParsingUnit for CallParsingUnit {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(ORB, 1)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokens: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         if previous.is_some() {
             panic!("previous {:?} {:?}", previous, tokens.peekOne())
         }
@@ -308,12 +319,8 @@ impl ParsingUnit for CallParsingUnit {
             let par = getParsingUnit(tokens, Around, parser);
 
             let op = match par {
-                None => {
-                    res.unwrap()
-                }
-                Some(p) => {
-                    p.parse(tokens, Some(res.unwrap()), parser)
-                }
+                None => res.unwrap(),
+                Some(p) => p.parse(tokens, Some(res.unwrap()), parser),
             };
 
             match op {
@@ -323,12 +330,11 @@ impl ParsingUnit for CallParsingUnit {
                         tokens.getAssert(TokenType::Comma);
                     }
                 }
-                _ => panic!("not a expression")
+                _ => panic!("not a expression"),
             }
         }
 
         tokens.getAssert(TokenType::CRB);
-
 
         Operation::Expression(Expression::FunctionCall(FunctionCall {
             name,
@@ -339,7 +345,7 @@ impl ParsingUnit for CallParsingUnit {
 
 pub struct ArithmeticParsingUnit {
     pub op: Op,
-    pub typ: TokenType
+    pub typ: TokenType,
 }
 
 impl ParsingUnit for ArithmeticParsingUnit {
@@ -351,22 +357,23 @@ impl ParsingUnit for ArithmeticParsingUnit {
         tokenProvider.isPeekType(self.typ)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokens: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         tokens.consume();
         let res = parseOne(tokens, Ahead, parser, None);
         let par = getParsingUnit(tokens, Around, parser);
 
         match par {
-            None => {
-                Operation::Expression(Expression::ArithmeticOp {
-                    left: Box::new(previous.unwrap().asExpr()),
-                    right: Box::new(res.unwrap().asExpr()),
-                    op: self.op.clone(),
-                })
-            }
-            Some(p) => {
-                p.parse(tokens, res, parser)
-            }
+            None => Operation::Expression(Expression::ArithmeticOp {
+                left: Box::new(previous.unwrap().asExpr()),
+                right: Box::new(res.unwrap().asExpr()),
+                op: self.op.clone(),
+            }),
+            Some(p) => p.parse(tokens, res, parser),
         }
     }
 }
@@ -381,17 +388,31 @@ impl ParsingUnit for NumericParsingUnit {
     fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
         let peek = tokenProvider.peekOne().typ;
 
-        peek == TokenType::IntLiteral || peek == TokenType::LongLiteral || peek == TokenType::FloatLiteral || peek == TokenType::DoubleLiteral
+        peek == TokenType::IntLiteral
+            || peek == TokenType::LongLiteral
+            || peek == TokenType::FloatLiteral
+            || peek == TokenType::DoubleLiteral
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         let peek = tokenProvider.peekOne();
         let res = match peek.typ {
             TokenType::IntLiteral => Operation::Expression(IntLiteral(peek.str.clone())),
-            TokenType::LongLiteral => Operation::Expression(Expression::LongLiteral(peek.str.clone())),
-            TokenType::FloatLiteral => Operation::Expression(Expression::FloatLiteral(peek.str.clone())),
-            TokenType::DoubleLiteral => Operation::Expression(Expression::DoubleLiteral(peek.str.clone())),
-            _ => panic!()
+            TokenType::LongLiteral => {
+                Operation::Expression(Expression::LongLiteral(peek.str.clone()))
+            }
+            TokenType::FloatLiteral => {
+                Operation::Expression(Expression::FloatLiteral(peek.str.clone()))
+            }
+            TokenType::DoubleLiteral => {
+                Operation::Expression(Expression::DoubleLiteral(peek.str.clone()))
+            }
+            _ => panic!(),
         };
         tokenProvider.consume();
         res
@@ -409,10 +430,15 @@ impl ParsingUnit for BoolParsingUnit {
         tokenProvider.isPeekType(TokenType::True) || tokenProvider.isPeekType(TokenType::False)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         if tokenProvider.isPeekType(TokenType::False) {
             tokenProvider.getAssert(TokenType::False);
-            return Operation::Expression(Expression::BoolLiteral(false))
+            return Operation::Expression(Expression::BoolLiteral(false));
         }
         tokenProvider.getAssert(TokenType::True);
         Operation::Expression(Expression::BoolLiteral(true))
@@ -430,7 +456,12 @@ impl ParsingUnit for VariableParsingUnit {
         tokenProvider.isPeekType(Identifier)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         Operation::Expression(Expression::Variable(tokenProvider.getIdentifier()))
     }
 }
@@ -446,7 +477,12 @@ impl ParsingUnit for WhileParsingUnit {
         tokenProvider.isPeekType(TokenType::While)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         tokenProvider.getAssert(TokenType::While);
 
         let op = parseExpr(tokenProvider, parser);
@@ -468,7 +504,11 @@ fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
     tokenProvider.getAssert(TokenType::OCB);
 
     while !tokenProvider.isPeekType(CCB) {
-        statements.push(parseOne(tokenProvider, Ahead, parser, None).unwrap().asStatement());
+        statements.push(
+            parseOne(tokenProvider, Ahead, parser, None)
+                .unwrap()
+                .asStatement(),
+        );
     }
 
     tokenProvider.getAssert(TokenType::CCB);
@@ -488,12 +528,8 @@ fn parseExpr(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
     let par = getParsingUnit(tokenProvider, Around, parser);
 
     let op = match par {
-        None => {
-            res.unwrap()
-        }
-        Some(p) => {
-            p.parse(tokenProvider, Some(res.unwrap()), parser)
-        }
+        None => res.unwrap(),
+        Some(p) => p.parse(tokenProvider, Some(res.unwrap()), parser),
     };
 
     if encounteredBrackets {
@@ -501,7 +537,6 @@ fn parseExpr(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
     }
 
     op.asExpr()
-
 }
 
 impl ParsingUnit for IfParsingUnit {
@@ -513,7 +548,12 @@ impl ParsingUnit for IfParsingUnit {
         tokenProvider.isPeekType(TokenType::If)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Operation {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider,
+        previous: Option<Operation>,
+        parser: &[Box<dyn ParsingUnit>],
+    ) -> Operation {
         tokenProvider.getAssert(TokenType::If);
 
         let cond = parseExpr(tokenProvider, parser);
@@ -525,7 +565,7 @@ impl ParsingUnit for IfParsingUnit {
                 condition: cond,
                 body: statements,
                 elseBody: None,
-            }))
+            }));
         }
 
         tokenProvider.getAssert(TokenType::Else);
@@ -556,20 +596,45 @@ fn testParser() {
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CallParsingUnit),
-        Box::new(ArithmeticParsingUnit { op: Op::Mul, typ: TokenType::Mul }),
-        Box::new(ArithmeticParsingUnit { op: Op::Div, typ: TokenType::Div }),
-        Box::new(ArithmeticParsingUnit { op: Op::Add, typ: TokenType::Plus }),
-        Box::new(ArithmeticParsingUnit { op: Op::Sub, typ: TokenType::Minus }),
-        Box::new(ArithmeticParsingUnit { op: Op::Eq, typ: TokenType::Eq }),
-        Box::new(ArithmeticParsingUnit { op: Op::Less, typ: TokenType::Less }),
-        Box::new(ArithmeticParsingUnit { op: Op::Gt, typ: TokenType::Gt }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Mul,
+            typ: TokenType::Mul,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Div,
+            typ: TokenType::Div,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Add,
+            typ: TokenType::Plus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Sub,
+            typ: TokenType::Minus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Eq,
+            typ: TokenType::Eq,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Less,
+            typ: TokenType::Less,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Gt,
+            typ: TokenType::Gt,
+        }),
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),
-        Box::new(BoolParsingUnit)
+        Box::new(BoolParsingUnit),
     ];
 
     let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
     println!("tokens {:?}", &tokens);
-    let res = parse(&mut TokenProvider { tokens, index: 0 }, Ahead, &parsers.into_boxed_slice());
+    let res = parse(
+        &mut TokenProvider { tokens, index: 0 },
+        Ahead,
+        &parsers.into_boxed_slice(),
+    );
     println!("{:?}", res)
 }

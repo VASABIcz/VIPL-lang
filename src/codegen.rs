@@ -1,15 +1,25 @@
 use std::collections::{HashMap, HashSet};
-use std::env::args;
-use Statement::VariableCreate;
-use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
-use crate::{bootStrapVM, DataType, genFunName, genFunNameMeta, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata};
-use crate::lexer::{lexingUnits, SourceProvider, tokenize, TokenType};
-use crate::OpCode::{Call, FunName, LocalVarTable, PushInt};
-use crate::parser::{ArithmeticParsingUnit, BoolParsingUnit, CallParsingUnit, FunctionParsingUnit, IfParsingUnit, NumericParsingUnit, Operation, parse, ParsingUnit, StatementVarCreateParsingUnit, TokenProvider, VariableParsingUnit, WhileParsingUnit};
-use crate::parser::ParsingUnitSearchType::Ahead;
-use crate::RawOpCode::PushFloat;
 
-fn constructVarTable(fun: &FunctionDef, functionReturns: &HashMap<String, Option<DataType>>) -> (Vec<VariableMetadata>, HashMap<String, (DataType, usize)>) {
+use Statement::VariableCreate;
+
+use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
+use crate::lexer::{lexingUnits, tokenize, SourceProvider, TokenType};
+use crate::parser::ParsingUnitSearchType::Ahead;
+use crate::parser::{
+    parse, ArithmeticParsingUnit, BoolParsingUnit, CallParsingUnit, FunctionParsingUnit,
+    IfParsingUnit, NumericParsingUnit, Operation, ParsingUnit, StatementVarCreateParsingUnit,
+    TokenProvider, VariableParsingUnit, WhileParsingUnit,
+};
+use crate::OpCode::{Call, FunName, LocalVarTable, PushInt};
+use crate::{
+    bootStrapVM, genFunName, genFunNameMeta, run, DataType, OpCode, SeekableOpcodes, StackFrame,
+    Value, VariableMetadata,
+};
+
+fn constructVarTable(
+    fun: &FunctionDef,
+    functionReturns: &HashMap<String, Option<DataType>>,
+) -> (Vec<VariableMetadata>, HashMap<String, (DataType, usize)>) {
     let mut vTable = vec![];
     let mut counter = 0;
     let mut registeredVars = HashMap::new();
@@ -20,74 +30,56 @@ fn constructVarTable(fun: &FunctionDef, functionReturns: &HashMap<String, Option
         counter += 1
     }
 
-
     for statement in &fun.body {
         if let VariableCreate(v) = statement {
             if registeredVars.contains_key(&v.name) {
-                continue
+                continue;
             }
             match &v.init {
                 None => panic!("OnO"),
                 Some(e) => {
                     let returnType = e.toDataType(&registeredVars, functionReturns).unwrap();
-                    vTable.push(VariableMetadata { name: v.name.clone(), typ: returnType.clone() });
+                    vTable.push(VariableMetadata {
+                        name: v.name.clone(),
+                        typ: returnType.clone(),
+                    });
                     registeredVars.insert(v.name.clone(), (returnType.clone(), counter));
                     counter += 1;
                 }
             }
         }
-
     }
     (vTable, registeredVars)
 }
 
-fn genExpression(exp: Expression, ops: &mut Vec<OpCode>, functionReturns: &HashMap<String, Option<DataType>>, vTable: &HashMap<String, (DataType, usize)>) {
+fn genExpression(
+    exp: Expression,
+    ops: &mut Vec<OpCode>,
+    functionReturns: &HashMap<String, Option<DataType>>,
+    vTable: &HashMap<String, (DataType, usize)>,
+) {
     match exp {
         Expression::ArithmeticOp { left, right, op } => {
             let dataType = left.toDataType(vTable, functionReturns).unwrap();
             genExpression(*left, ops, functionReturns, vTable);
             genExpression(*right, ops, functionReturns, vTable);
             let t = match op {
-                Op::Add => {
-                    OpCode::Add(dataType)
-                }
-                Op::Sub => {
-                    OpCode::Sub(dataType)
-                }
-                Op::Mul => {
-                    OpCode::Mul(dataType)
-                }
-                Op::Div => {
-                    OpCode::Div(dataType)
-                }
-                Op::Gt => {
-                    OpCode::Greater(dataType)
-                }
-                Op::Less => {
-                    OpCode::Less(dataType)
-                }
-                Op::Eq => {
-                    OpCode::Equals(dataType)
-                }
+                Op::Add => OpCode::Add(dataType),
+                Op::Sub => OpCode::Sub(dataType),
+                Op::Mul => OpCode::Mul(dataType),
+                Op::Div => OpCode::Div(dataType),
+                Op::Gt => OpCode::Greater(dataType),
+                Op::Less => OpCode::Less(dataType),
+                Op::Eq => OpCode::Equals(dataType),
             };
             ops.push(t)
         }
-        Expression::IntLiteral(i) => {
-            ops.push(PushInt(i.parse::<isize>().unwrap()))
-        }
-        Expression::LongLiteral(i) => {
-            ops.push(PushInt(i.parse::<isize>().unwrap()))
-        }
-        Expression::FloatLiteral(i) => {
-            ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap()))
-        }
-        Expression::DoubleLiteral(i) => {
-            ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap()))
-        }
+        Expression::IntLiteral(i) => ops.push(PushInt(i.parse::<isize>().unwrap())),
+        Expression::LongLiteral(i) => ops.push(PushInt(i.parse::<isize>().unwrap())),
+        Expression::FloatLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
+        Expression::DoubleLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::StringLiteral(_) => {}
-        Expression::BoolLiteral(i) => {
-            ops.push(OpCode::PushBool(i))
-        }
+        Expression::BoolLiteral(i) => ops.push(OpCode::PushBool(i)),
         Expression::FunctionCall(e) => {
             let mut argTypes = vec![];
 
@@ -96,15 +88,22 @@ fn genExpression(exp: Expression, ops: &mut Vec<OpCode>, functionReturns: &HashM
                 genExpression(arg, ops, functionReturns, vTable);
             }
 
-            ops.push(Call { encoded: genFunName(&e.name, &argTypes.into_boxed_slice()) })
+            ops.push(Call {
+                encoded: genFunName(&e.name, &argTypes.into_boxed_slice()),
+            })
         }
-        Expression::Variable(v) => {
-            ops.push(OpCode::PushLocal { index: vTable.get(&v).unwrap().1 })
-        }
+        Expression::Variable(v) => ops.push(OpCode::PushLocal {
+            index: vTable.get(&v).unwrap().1,
+        }),
     }
 }
 
-fn genStatement(statement: Statement, ops: &mut Vec<OpCode>, functionReturns: &HashMap<String, Option<DataType>>, vTable: &HashMap<String, (DataType, usize)>) {
+fn genStatement(
+    statement: Statement,
+    ops: &mut Vec<OpCode>,
+    functionReturns: &HashMap<String, Option<DataType>>,
+    vTable: &HashMap<String, (DataType, usize)>,
+) {
     match statement {
         Statement::FunctionExpr(e) => {
             let mut argTypes = vec![];
@@ -114,28 +113,40 @@ fn genStatement(statement: Statement, ops: &mut Vec<OpCode>, functionReturns: &H
                 genExpression(arg, ops, functionReturns, vTable);
             }
 
-            ops.push(Call { encoded: genFunName(&e.name, &argTypes.into_boxed_slice()) })
+            ops.push(Call {
+                encoded: genFunName(&e.name, &argTypes.into_boxed_slice()),
+            })
         }
-        VariableCreate(v) => {
-            match v.init {
-                None => {}
-                Some(e) => {
-                    let t = &e.toDataType(vTable, functionReturns);
-                    genExpression(e, ops, functionReturns, vTable);
-                    ops.push(OpCode::SetLocal { index: vTable.get(&v.name).unwrap().1, typ: t.clone().unwrap() })
-                }
+        VariableCreate(v) => match v.init {
+            None => {}
+            Some(e) => {
+                let t = &e.toDataType(vTable, functionReturns);
+                genExpression(e, ops, functionReturns, vTable);
+                ops.push(OpCode::SetLocal {
+                    index: vTable.get(&v.name).unwrap().1,
+                    typ: t.clone().unwrap(),
+                })
             }
-        }
+        },
         Statement::While(_) => {}
         Statement::If(_) => {}
     }
 }
 
-fn genFunctionDef(fun: FunctionDef, ops: &mut Vec<OpCode>, functionReturns: &HashMap<String, Option<DataType>>) {
+fn genFunctionDef(
+    fun: FunctionDef,
+    ops: &mut Vec<OpCode>,
+    functionReturns: &HashMap<String, Option<DataType>>,
+) {
     ops.push(OpCode::FunBegin);
-    ops.push(FunName { name: fun.name.clone() });
+    ops.push(FunName {
+        name: fun.name.clone(),
+    });
     let vTable = constructVarTable(&fun, functionReturns);
-    ops.push(LocalVarTable { typ: vTable.0.clone().into_boxed_slice(), argsCount: fun.argCount });
+    ops.push(LocalVarTable {
+        typ: vTable.0.clone().into_boxed_slice(),
+        argsCount: fun.argCount,
+    });
 
     for statement in fun.body {
         genStatement(statement, ops, functionReturns, &vTable.1);
@@ -154,17 +165,22 @@ fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
 
     for op in &operations {
         match op {
-            Operation::FunctionDef(f) => {
-                match f {
-                    Node::FunctionDef(v) => {
-                        functionReturns.insert(genFunNameMeta(&v.name, &v.args.clone().into_boxed_slice()), v.returnType.clone());
-                    }
+            Operation::FunctionDef(f) => match f {
+                Node::FunctionDef(v) => {
+                    functionReturns.insert(
+                        genFunNameMeta(&v.name, &v.args.clone().into_boxed_slice()),
+                        v.returnType.clone(),
+                    );
                 }
-            }
+            },
             Operation::Statement(v) => {
                 match v {
                     VariableCreate(c) => {
-                        let t = c.init.clone().unwrap().toDataType(&inlineLocals, &functionReturns);
+                        let t = c
+                            .init
+                            .clone()
+                            .unwrap()
+                            .toDataType(&inlineLocals, &functionReturns);
                         inlineLocals.insert(c.name.clone(), (t.clone().unwrap(), counter));
                         localTypes.push(t.unwrap().clone());
                         counter += 1;
@@ -173,7 +189,7 @@ fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
                 }
                 inlineMain.push(op.clone())
             }
-            _ => inlineMain.push(op.clone())
+            _ => inlineMain.push(op.clone()),
         }
     }
 
@@ -219,21 +235,46 @@ fn testLexingUnits() {
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CallParsingUnit),
-        Box::new(ArithmeticParsingUnit { op: Op::Mul, typ: TokenType::Mul }),
-        Box::new(ArithmeticParsingUnit { op: Op::Div, typ: TokenType::Div }),
-        Box::new(ArithmeticParsingUnit { op: Op::Add, typ: TokenType::Plus }),
-        Box::new(ArithmeticParsingUnit { op: Op::Sub, typ: TokenType::Minus }),
-        Box::new(ArithmeticParsingUnit { op: Op::Eq, typ: TokenType::Eq }),
-        Box::new(ArithmeticParsingUnit { op: Op::Less, typ: TokenType::Less }),
-        Box::new(ArithmeticParsingUnit { op: Op::Gt, typ: TokenType::Gt }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Mul,
+            typ: TokenType::Mul,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Div,
+            typ: TokenType::Div,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Add,
+            typ: TokenType::Plus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Sub,
+            typ: TokenType::Minus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Eq,
+            typ: TokenType::Eq,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Less,
+            typ: TokenType::Less,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Gt,
+            typ: TokenType::Gt,
+        }),
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),
-        Box::new(BoolParsingUnit)
+        Box::new(BoolParsingUnit),
     ];
 
     let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
     println!("tokens {:?}", &tokens);
-    let res = parse(&mut TokenProvider { tokens, index: 0 }, Ahead, &parsers.into_boxed_slice());
+    let res = parse(
+        &mut TokenProvider { tokens, index: 0 },
+        Ahead,
+        &parsers.into_boxed_slice(),
+    );
     println!("{:?}", &res);
     let bs = bytecodeGen(res);
     let mut vals = vec![];
@@ -245,14 +286,18 @@ fn testLexingUnits() {
     for _ in &bs.0 {
         vm.opCodeCache.push(None);
     }
-    run(&mut SeekableOpcodes{
-        index: 0,
-        opCodes: &bs.0.into_boxed_slice(),
-        start: None,
-        end: None,
-    }, &mut vm, &mut StackFrame {
-        previous: None,
-        localVariables: &mut vals.into_boxed_slice(),
-        name: None,
-    } );
+    run(
+        &mut SeekableOpcodes {
+            index: 0,
+            opCodes: &bs.0.into_boxed_slice(),
+            start: None,
+            end: None,
+        },
+        &mut vm,
+        &mut StackFrame {
+            previous: None,
+            localVariables: &mut vals.into_boxed_slice(),
+            name: None,
+        },
+    );
 }
