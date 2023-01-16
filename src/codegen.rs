@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use Statement::VariableCreate;
 
@@ -6,10 +6,10 @@ use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
 
 
 use crate::parser::{*};
-use crate::OpCode::{*};
+use crate::vm::OpCode::{*};
 use crate::lexer::*;
 use crate::parser::ParsingUnitSearchType::*;
-use crate::{genFunName, genFunNameMeta, DataType, OpCode, VariableMetadata, bootStrapVM, run, SeekableOpcodes, StackFrame};
+use crate::vm::{bootStrapVM, DataType, genFunName, genFunNameMeta, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
 
 fn constructVarTable(
     fun: &FunctionDef,
@@ -218,7 +218,7 @@ fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
 pub fn testLexingUnits() {
     let lexingUnits = lexingUnits();
     // let input = "lol = 666 fn main() { x = -420.69 print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
-    let input = "lol = 666 print(69*lol)";
+    let input = "fn rec(x: int) {}  lol = 666 print(69*lol)";
     let src = SourceProvider {
         data: input,
         index: 0,

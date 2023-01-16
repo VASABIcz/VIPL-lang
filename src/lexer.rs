@@ -151,9 +151,7 @@ impl LexingUnit for NumericLexingUnit {
             lexer.consumeOne();
         }
 
-        while match lexer.peekChar() {
-            c => c == '.' || c == '_' || c.is_numeric(),
-        } {
+        while match lexer.peekChar() { c => c == '.' || c == '_' || c.is_numeric() } {
             let c = lexer.peekChar();
             if c == '.' && encounteredDot {
                 panic!("number cant have more than 1 dots")

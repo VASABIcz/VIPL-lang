@@ -1,6 +1,5 @@
-
-use crate::{DataType, VariableMetadata};
 use std::collections::HashMap;
+use crate::vm::{DataType, VariableMetadata};
 
 #[derive(Debug, Clone)]
 pub enum Op {

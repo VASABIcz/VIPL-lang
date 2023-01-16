@@ -1,7 +1,7 @@
-use crate::DataType::Object;
-use crate::OpCode::*;
-use crate::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
+use crate::vm::DataType::Object;
+use crate::vm::OpCode::*;
 use std::mem::transmute;
+use crate::vm::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
 
 pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];

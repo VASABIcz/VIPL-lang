@@ -1,12 +1,13 @@
 use crate::ast::Expression::IntLiteral;
 use crate::ast::{Expression, FunctionCall, Node, Op, Statement, VariableCreate, While};
 use crate::lexer::TokenType::{
-    Colon, Identifier, CCB, CRB, ORB,
+    CCB, Colon, CRB, Identifier, ORB,
 };
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
 
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
-use crate::{ast, DataType, VariableMetadata};
+use crate::ast;
+use crate::vm::{DataType, VariableMetadata};
 
 fn getParsingUnit<'a>(
     tokens: &mut TokenProvider,
@@ -636,5 +637,5 @@ fn testParser() {
         Ahead,
         &parsers.into_boxed_slice(),
     );
-    println!("{:?}", res)
+    println!("{:?}", &res)
 }
