@@ -546,6 +546,16 @@ pub struct StackFrame<'a> {
     pub name: Option<&'a str>,
 }
 
+impl StackFrame<'_> {
+    pub fn new(localVariables: &mut [Value]) -> StackFrame {
+        StackFrame {
+            previous: None,
+            localVariables,
+            name: Option::from("root"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Func {
     name: String,
@@ -614,8 +624,18 @@ impl VirtualMachine {
         );
     }
 
-    pub fn makeRuntime() {
+    pub fn makeRuntime(&mut self, name: String, args: Box<[VariableMetadata]>, begin: usize, argsCount: usize, ret: Option<DataType>, end: usize) {
+        let genName = genFunNameMeta(&name, &args);
 
+        let fun = Func {
+            name,
+            returnType: ret,
+            varTable: args,
+            argAmount: argsCount,
+            typ: Runtime { rangeStart: begin, rangeStop: end }
+        };
+
+        self.functions.insert(genName, fun);
     }
 }
 
@@ -639,6 +659,11 @@ impl SeekableOpcodes<'_> {
         self.index += 1;
 
         (n, (self.index - 1) as usize)
+    }
+
+    #[inline(always)]
+    pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
+        self.opCodes.get(index)
     }
 }
 
@@ -689,7 +714,42 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
         };
         // println!("processing {:?}", op);
         match op {
-            FunBegin => {},
+            FunBegin => {
+                let mut index = opCodes.index as usize;
+                let name = match opCodes.getOpcode(index).unwrap() {
+                    FunName { name } => name,
+                    v => panic!("{:?}", v)
+                };
+                index += 1;
+                let (vars, argCount) = match opCodes.getOpcode(index).unwrap() {
+                    LocalVarTable { typ, argsCount } => (typ, argsCount),
+                    v => panic!("{:?}", v)
+                };
+                index += 1;
+                let ret = match opCodes.getOpcode(index).unwrap() {
+                    FunReturn { typ } => typ,
+                    v => panic!("{:?}", v)
+                };
+                index += 1;
+                let startIndex = index;
+
+                'a: loop {
+                    let peek = opCodes.getOpcode(index).unwrap();
+                    // println!("eee {:?}", peek);
+                    match peek {
+                        FunEnd => {
+                            index += 1;
+                            break 'a;
+                        },
+                        _ => {
+                            index += 1;
+                        }
+                    }
+                }
+
+                vm.makeRuntime(name.clone(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
+                opCodes.index = index as isize;
+            },
             FunName { .. } => panic!(),
             FunReturn { .. } => panic!(),
             LocalVarTable { .. } => panic!(),
@@ -714,13 +774,13 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 vm.stack.push(x);
             }
             PushLocal { index } => {
-                println!("{:?}", stackFrame.localVariables.get(*index));
+                // println!("{:?}", stackFrame.localVariables.get(*index));
                 vm.stack.push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
             },
             SetLocal { index, typ: _ } => {
                 let x = vm.stack.pop().unwrap();
                 *unsafe{ (stackFrame.localVariables.get_unchecked_mut(*index)) } = x;
-                println!("{:?}", stackFrame.localVariables.get(*index));
+                // println!("{:?}", stackFrame.localVariables.get(*index));
                 // stackFrame.get_mut().localVariables.insert(*index, x);
             }
             Jmp { offset, jmpType } => match jmpType {
@@ -802,18 +862,24 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     e[i] = arg;
                 }
 
+                // FIXME
+                // let enc = &String::from(encoded);
+
                 let mut stack = StackFrame {
                     previous: Some(stackFrame),
-                    localVariables: e,
-                    name: Some(encoded),
+                    localVariables: &mut e.clone(),
+                    name: None// FIXME Some(enc),
                 };
 
                 match cached.1 {
                     Runtime {
-                        rangeStart: _,
-                        rangeStop: _,
+                        rangeStart: s,
+                        rangeStop: e,
                     } => {
-                        panic!()
+                        let old = index+1;
+                        opCodes.index = *s as isize;
+                        run(opCodes, vm, &mut stack);
+                        opCodes.index = old as isize;
                     }
                     Native { callback } => callback(vm, &mut stack),
                 }
@@ -838,7 +904,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let a = vm.stack.pop().unwrap();
                 let l = vm.stack.len()-1;
                 vm.stack.get_unchecked_mut(l).mul(&a, v);
-                println!("{:?}", vm.stack.get(l));
+                // println!("{:?}", vm.stack.get(l));
             }
             Equals(v) => {
                 let a = vm.stack.pop().unwrap();
@@ -946,4 +1012,26 @@ pub fn bootStrapVM() -> VirtualMachine {
         None,
     );
     vm
+}
+
+pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) {
+    let mut vals = vec![];
+    for b in &locals {
+        vals.push(b.toDefaultValue())
+    }
+    println!("{:?} {:?}", &bytecode, &locals);
+    let mut vm = bootStrapVM();
+    for _ in &bytecode {
+        vm.opCodeCache.push(None);
+    }
+    run(
+        &mut SeekableOpcodes {
+            index: 0,
+            opCodes: &bytecode.into_boxed_slice(),
+            start: None,
+            end: None,
+        },
+        &mut vm,
+        &mut StackFrame::new(&mut vals.into_boxed_slice()),
+    );
 }

@@ -9,7 +9,7 @@ use crate::parser::{*};
 use crate::vm::OpCode::{*};
 use crate::lexer::*;
 use crate::parser::ParsingUnitSearchType::*;
-use crate::vm::{bootStrapVM, DataType, genFunName, genFunNameMeta, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
+use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
 
 fn constructVarTable(
     fun: &FunctionDef,
@@ -142,15 +142,16 @@ fn genFunctionDef(
         typ: vTable.0.clone().into_boxed_slice(),
         argsCount: fun.argCount,
     });
+    ops.push(FunReturn { typ: fun.returnType });
 
     for statement in fun.body {
         genStatement(statement, ops, functionReturns, &vTable.1);
     }
-
+    ops.push(OpCode::Return);
     ops.push(OpCode::FunEnd);
 }
 
-fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
+pub fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
     let mut inlineMain = vec![];
     let mut inlineLocals = HashMap::new();
     let mut ops = vec![];
@@ -198,7 +199,6 @@ fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
         }
     }
 
-    println!("{:?}", &inlineMain);
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
@@ -218,81 +218,25 @@ fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
 pub fn testLexingUnits() {
     let lexingUnits = lexingUnits();
     // let input = "lol = 666 fn main() { x = -420.69 print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
-    let input = "fn rec(x: int) {}  lol = 666 print(69*lol)";
+    let input = "fn test(x: int): int { print(x) } test(25)";
     let src = SourceProvider {
         data: input,
         index: 0,
     };
 
-    let parsers: Vec<Box<dyn ParsingUnit>> = vec![
-        Box::new(WhileParsingUnit),
-        Box::new(FunctionParsingUnit),
-        Box::new(StatementVarCreateParsingUnit),
-        Box::new(NumericParsingUnit),
-        Box::new(CallParsingUnit),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Mul,
-            typ: TokenType::Mul,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Div,
-            typ: TokenType::Div,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Add,
-            typ: TokenType::Plus,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Sub,
-            typ: TokenType::Minus,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Eq,
-            typ: TokenType::Eq,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Less,
-            typ: TokenType::Less,
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: Op::Gt,
-            typ: TokenType::Gt,
-        }),
-        Box::new(VariableParsingUnit),
-        Box::new(IfParsingUnit),
-        Box::new(BoolParsingUnit),
-    ];
+    let parsers = parsingUnits();
 
     let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
+
+
     println!("tokens {:?}", &tokens);
     let res = parse(
-        &mut TokenProvider { tokens, index: 0 },
+        &mut TokenProvider::new(tokens),
         Ahead,
         &parsers.into_boxed_slice(),
     );
     println!("{:?}", &res);
     let bs = bytecodeGen(res);
-    let mut vals = vec![];
-    for b in &bs.1 {
-        vals.push(b.toDefaultValue())
-    }
-    println!("{:?}", &bs);
-    let mut vm = bootStrapVM();
-    for _ in &bs.0 {
-        vm.opCodeCache.push(None);
-    }
-    run(
-        &mut SeekableOpcodes {
-            index: 0,
-            opCodes: &bs.0.into_boxed_slice(),
-            start: None,
-            end: None,
-        },
-        &mut vm,
-        &mut StackFrame {
-            previous: None,
-            localVariables: &mut vals.into_boxed_slice(),
-            name: None,
-        },
-    );
+
+    evaluateBytecode(bs.0, bs.1);
 }

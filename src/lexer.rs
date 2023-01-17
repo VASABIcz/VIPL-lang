@@ -25,6 +25,33 @@ pub fn tokenize(lexingUnits: &mut [Box<dyn LexingUnit>], mut source: SourceProvi
     buf
 }
 
+pub fn tokenizeSource(src: &str) -> Vec<Token> {
+    let mut lexingUnits = lexingUnits();
+    let mut source: SourceProvider = SourceProvider{ data: src, index: 0 };
+
+    let mut buf = vec![];
+
+    'main: while !source.isDone() {
+        for unit in lexingUnits.iter_mut() {
+            let reqSize = unit.getRequestSize();
+            let peek = source.peekStr(reqSize);
+            if peek.len() < reqSize {
+                continue;
+            }
+            if unit.canParse(source.peekStr(reqSize)) {
+                match unit.parse(&mut source) {
+                    None => {}
+                    Some(v) => buf.push(v),
+                }
+
+                continue 'main;
+            }
+        }
+        panic!("error {:?}", source.peekStr(4));
+    }
+    buf
+}
+
 #[derive(Debug)]
 pub struct SourceProvider<'a> {
     pub data: &'a str,
@@ -288,7 +315,8 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         //
         KeywordLexingUnit::new(";", TokenType::Semicolon),
         KeywordLexingUnit::new("=", TokenType::Equals),
-        KeywordLexingUnit::new(":", TokenType::Colon),
+        KeywordLexingUnit::new(":", TokenType::Comma),
+        KeywordLexingUnit::new(",", TokenType::Comma),
         // ops
         KeywordLexingUnit::new("+", TokenType::Plus),
         KeywordLexingUnit::new("-", TokenType::Minus),

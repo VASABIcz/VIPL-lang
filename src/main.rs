@@ -2,6 +2,10 @@ extern crate core;
 
 use std::mem::size_of;
 use std::mem;
+use crate::ast::Op;
+use crate::lexer::{lexingUnits, SourceProvider, tokenize, TokenType};
+use crate::parser::{ArithmeticParsingUnit, BoolParsingUnit, CallParsingUnit, FunctionParsingUnit, IfParsingUnit, NumericParsingUnit, parse, ParsingUnit, StatementVarCreateParsingUnit, TokenProvider, VariableParsingUnit, WhileParsingUnit};
+use crate::parser::ParsingUnitSearchType::Ahead;
 use crate::serialization::{deserialize, serialize};
 use crate::vm::DataType::*;
 use crate::vm::{DataType, JmpType, OpCode, SeekableOpcodes, StackFrame, Value};
@@ -14,7 +18,9 @@ mod lexer;
 mod parser;
 mod serialization;
 mod vm;
+mod tests;
 
+/*
 fn main() {
     println!("{}", mem::size_of::<[OpCode; 1000]>());
     let mut vm = vm::bootStrapVM();
@@ -80,4 +86,62 @@ fn main() {
         .collect();
     vm::run(&mut seek, &mut vm, &mut stack);
     println!("{:?}", vm.stack.pop());
+}
+*/
+
+fn main() {
+    let lexingUnits = lexingUnits();
+    let input = "0 = lol fn main() { -420.69 = x print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
+
+    let src = SourceProvider {
+        data: input,
+        index: 0,
+    };
+
+    let parsers: Vec<Box<dyn ParsingUnit>> = vec![
+        Box::new(WhileParsingUnit),
+        Box::new(FunctionParsingUnit),
+        Box::new(StatementVarCreateParsingUnit),
+        Box::new(NumericParsingUnit),
+        Box::new(CallParsingUnit),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Mul,
+            typ: TokenType::Mul,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Div,
+            typ: TokenType::Div,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Add,
+            typ: TokenType::Plus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Sub,
+            typ: TokenType::Minus,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Eq,
+            typ: TokenType::Eq,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Less,
+            typ: TokenType::Less,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Gt,
+            typ: TokenType::Gt,
+        }),
+        Box::new(VariableParsingUnit),
+        Box::new(IfParsingUnit),
+        Box::new(BoolParsingUnit),
+    ];
+    let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
+    println!("tokens {:?}", &tokens);
+    let res = parse(
+        &mut TokenProvider { tokens, index: 0 },
+        Ahead,
+        &parsers.into_boxed_slice(),
+    );
+    println!("{:?}", &res)
 }

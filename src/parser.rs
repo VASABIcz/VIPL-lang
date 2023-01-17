@@ -38,8 +38,27 @@ pub fn parseOne(
     if u.is_none() {
         println!("next {:?}", tokens.peekOne());
     }
-
     u.map(|v| v.parse(tokens, previous, parsingUnits))
+}
+
+pub fn parseBytecode(bytecode: Vec<Token>) -> Vec<Operation> {
+    let mut tokens = TokenProvider { tokens: bytecode , index: 0 };
+    let mut buf = vec![];
+    let parsingUnits = parsingUnits();
+
+    'main: while !tokens.isDone() {
+        for unit in parsingUnits.iter() {
+            let parserType = unit.getType();
+
+            if parserType == Ahead && unit.canParse(&tokens) {
+                let res = unit.parse(&mut tokens, None, &parsingUnits);
+                buf.push(res);
+                continue 'main;
+            }
+        }
+        panic!("error parsing {:?}", tokens.peekOne());
+    }
+    buf
 }
 
 pub fn parse(
@@ -60,6 +79,7 @@ pub fn parse(
             };
 
             if canParse && unit.canParse(&tokens) {
+                println!("parsing");
                 let res = unit.parse(tokens, None, parsingUnits);
                 buf.push(res);
                 continue 'main;
@@ -109,7 +129,7 @@ pub struct TokenProvider {
 }
 
 impl TokenProvider {
-    fn new(tokens: Vec<Token>) -> Self {
+    pub(crate) fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, index: 0 }
     }
 
@@ -230,7 +250,7 @@ impl ParsingUnit for FunctionParsingUnit {
         tokens.getAssert(TokenType::ORB);
         while !tokens.isPeekType(TokenType::CRB) {
             let argName = tokens.getIdentifier();
-            tokens.getAssert(TokenType::Colon);
+            tokens.getAssert(TokenType::Comma);
             let argType = tokens.getIdentifier();
             let t = DataType::fromString(&argType);
             args.push(VariableMetadata {
@@ -266,7 +286,8 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
     }
 
     fn canParse(&self, tokens: &TokenProvider) -> bool {
-        tokens.isPeekType(TokenType::Identifier) && tokens.isPeekIndexType(TokenType::Equals, 1)
+        tokens.isPeekType(TokenType::Semicolon)
+        // tokens.isPeekType(TokenType::Identifier) && tokens.isPeekIndexType(TokenType::Equals, 1)
     }
 
     fn parse(
@@ -275,9 +296,7 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Operation {
-        let name = tokens.getIdentifier();
-        tokens.getAssert(TokenType::Equals);
-
+        tokens.getAssert(TokenType::Semicolon);
         let res = parseOne(tokens, ParsingUnitSearchType::Ahead, parser, None);
         let par = getParsingUnit(tokens, Around, parser);
 
@@ -285,6 +304,10 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
             None => res.map(|it| it.asExpr()),
             Some(p) => Some(p.parse(tokens, res, parser).asExpr()),
         };
+
+        tokens.getAssert(TokenType::Equals);
+
+        let name = tokens.getIdentifier();
 
         Operation::Statement(Statement::VariableCreate(VariableCreate { name, init: op }))
     }
@@ -581,17 +604,8 @@ impl ParsingUnit for IfParsingUnit {
     }
 }
 
-#[test]
-fn testParser() {
-    let lexingUnits = lexingUnits();
-    let input = "lol = 0 fn main() { x = -420.69 print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
-
-    let src = SourceProvider {
-        data: input,
-        index: 0,
-    };
-
-    let parsers: Vec<Box<dyn ParsingUnit>> = vec![
+pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
+    vec![
         Box::new(WhileParsingUnit),
         Box::new(FunctionParsingUnit),
         Box::new(StatementVarCreateParsingUnit),
@@ -628,14 +642,5 @@ fn testParser() {
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),
         Box::new(BoolParsingUnit),
-    ];
-
-    let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
-    println!("tokens {:?}", &tokens);
-    let res = parse(
-        &mut TokenProvider { tokens, index: 0 },
-        Ahead,
-        &parsers.into_boxed_slice(),
-    );
-    println!("{:?}", &res)
+    ]
 }
