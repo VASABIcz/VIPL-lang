@@ -125,6 +125,10 @@ fn genStatement(
         },
         Statement::While(_) => {}
         Statement::If(_) => {}
+        Statement::Return(ret) => {
+            genExpression(ret.exp, ops, functionReturns, vTable);
+            ops.push(OpCode::Return)
+        }
     }
 }
 
@@ -170,18 +174,15 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
                 }
             },
             Operation::Statement(v) => {
-                match v {
-                    VariableCreate(c) => {
-                        let t = c
-                            .init
-                            .clone()
-                            .unwrap()
-                            .toDataType(&inlineLocals, &functionReturns);
-                        inlineLocals.insert(c.name.clone(), (t.clone().unwrap(), counter));
-                        localTypes.push(t.unwrap().clone());
-                        counter += 1;
-                    }
-                    _ => {}
+                if let VariableCreate(c) = v {
+                    let t = c
+                        .init
+                        .clone()
+                        .unwrap()
+                        .toDataType(&inlineLocals, &functionReturns);
+                    inlineLocals.insert(c.name.clone(), (t.clone().unwrap(), counter));
+                    localTypes.push(t.unwrap().clone());
+                    counter += 1;
                 }
                 inlineMain.push(op.clone())
             }
@@ -216,26 +217,14 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> (Vec<OpCode>, Vec<DataType>) {
 
 #[test]
 pub fn testLexingUnits() {
-    let lexingUnits = lexingUnits();
-    // let input = "lol = 666 fn main() { x = -420.69 print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
     let input = "fn test(x: int): int { print(x) } test(25)";
-    let src = SourceProvider {
-        data: input,
-        index: 0,
-    };
 
-    let parsers = parsingUnits();
-
-    let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
-
-
+    let tokens = tokenizeSource(input);
     println!("tokens {:?}", &tokens);
-    let res = parse(
-        &mut TokenProvider::new(tokens),
-        Ahead,
-        &parsers.into_boxed_slice(),
-    );
+
+    let res = parseTokens(tokens);
     println!("{:?}", &res);
+
     let bs = bytecodeGen(res);
 
     evaluateBytecode(bs.0, bs.1);

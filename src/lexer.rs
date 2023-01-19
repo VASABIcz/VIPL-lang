@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 use std::ops::Index;
+use crate::lexer::TokenType::Break;
 
 pub fn tokenize(lexingUnits: &mut [Box<dyn LexingUnit>], mut source: SourceProvider) -> Vec<Token> {
     let mut buf = vec![];
@@ -7,11 +8,11 @@ pub fn tokenize(lexingUnits: &mut [Box<dyn LexingUnit>], mut source: SourceProvi
     'main: while !source.isDone() {
         for unit in lexingUnits.iter_mut() {
             let reqSize = unit.getRequestSize();
-            let peek = source.peekStr(reqSize);
+            let peek = source.peekStr(reqSize).unwrap();
             if peek.len() < reqSize {
                 continue;
             }
-            if unit.canParse(source.peekStr(reqSize)) {
+            if unit.canParse(source.peekStr(reqSize).unwrap()) {
                 match unit.parse(&mut source) {
                     None => {}
                     Some(v) => buf.push(v),
@@ -34,11 +35,11 @@ pub fn tokenizeSource(src: &str) -> Vec<Token> {
     'main: while !source.isDone() {
         for unit in lexingUnits.iter_mut() {
             let reqSize = unit.getRequestSize();
-            let peek = source.peekStr(reqSize);
+            let peek = source.peekStr(reqSize).unwrap();
             if peek.len() < reqSize {
                 continue;
             }
-            if unit.canParse(source.peekStr(reqSize)) {
+            if unit.canParse(source.peekStr(reqSize).unwrap()) {
                 match unit.parse(&mut source) {
                     None => {}
                     Some(v) => buf.push(v),
@@ -59,15 +60,22 @@ pub struct SourceProvider<'a> {
 }
 
 impl SourceProvider<'_> {
-    pub fn peekStr(&self, amount: usize) -> &str {
-        if self.index + amount > self.data.len() {
-            return self.data.index(self.index..(self.data.len() - 1));
+    pub fn peekStr(&self, amount: usize) -> Option<&str> {
+        if self.index >= self.data.len() {
+            return None
         }
-        self.data.index(self.index..self.index + amount)
+
+        let res =if self.index + amount > self.data.len() {
+            self.data.index(self.index..(self.data.len() - 1))
+        }
+        else {
+            self.data.index(self.index..self.index + amount)
+        };
+        Some(res)
     }
 
-    pub fn peekChar(&self) -> char {
-        self.data.chars().nth(self.index).unwrap()
+    pub fn peekChar(&self) -> Option<char> {
+        self.data.chars().nth(self.index)
     }
 
     pub fn consumeMany(&mut self, amount: usize) {
@@ -90,6 +98,8 @@ pub enum TokenType {
     FloatLiteral,
     DoubleLiteral,
     StringLiteral,
+    CharLiteral,
+
     Identifier,
 
     Plus,
@@ -100,10 +110,15 @@ pub enum TokenType {
     Fn,
     Var,
     While,
+    Loop,
+    For,
     True,
     False,
     If,
     Else,
+    Continue,
+    Break,
+    Return,
 
     ORB,
     CRB,
@@ -120,7 +135,7 @@ pub enum TokenType {
     Eq,
     Gt,
     Less,
-    Not,
+    Not
 }
 
 #[derive(Clone, Debug)]
@@ -140,6 +155,49 @@ pub trait LexingUnit {
 pub struct KeywordLexingUnit {
     pub keyword: &'static str,
     pub tokenType: TokenType,
+}
+
+pub struct RangeLexingUnit {
+    pub start: &'static str,
+    pub end: &'static str,
+    pub tokenType: Option<TokenType>,
+}
+
+impl LexingUnit for RangeLexingUnit {
+    fn getRequestSize(&self) -> usize {
+        self.start.len()
+    }
+
+    fn canParse(&self, data: &str) -> bool {
+        data == self.start
+    }
+
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
+        println!("parsing {:?}", self.tokenType);
+        lexer.consumeMany(self.start.len());
+
+        let mut buf = String::new();
+
+        'lop: while lexer.peekStr(self.end.len()).map_or(false, |v	|{v != self.end}) {
+            match lexer.peekChar() {
+                Some(v) => {
+                    buf.push(v);
+                    lexer.consumeOne();
+                },
+                None => break 'lop
+            }
+        }
+        lexer.consumeMany(self.end.len());
+
+        self.tokenType.map(	|v	| { Token { typ: v, str: buf } })
+    }
+}
+
+impl RangeLexingUnit {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(start: &'static str, end: &'static str, tokenType: Option<TokenType>) -> Box<dyn LexingUnit> {
+        Box::new(Self { start, end, tokenType })
+    }
 }
 
 impl KeywordLexingUnit {
@@ -173,13 +231,13 @@ impl LexingUnit for NumericLexingUnit {
         let mut typ = TokenType::IntLiteral;
         let encounteredDot = false;
 
-        if lexer.peekChar() == '-' {
+        if lexer.peekChar().unwrap() == '-' {
             buf.push('-');
             lexer.consumeOne();
         }
 
-        while match lexer.peekChar() { c => c == '.' || c == '_' || c.is_numeric() } {
-            let c = lexer.peekChar();
+        while lexer.peekChar().map_or(false, |c| { c == '.' || c == '_' || c.is_numeric()}) {
+            let c = lexer.peekChar().unwrap();
             if c == '.' && encounteredDot {
                 panic!("number cant have more than 1 dots")
             }
@@ -192,21 +250,25 @@ impl LexingUnit for NumericLexingUnit {
             lexer.consumeOne();
         }
 
-        let peek = lexer.peekChar();
-        match peek {
-            'f' => {
-                typ = TokenType::FloatLiteral;
-                lexer.consumeOne()
+        match lexer.peekChar() {
+            None => {}
+            Some(v) => {
+                match v {
+                    'f' => {
+                        typ = TokenType::FloatLiteral;
+                        lexer.consumeOne()
+                    }
+                    'L' => {
+                        typ = TokenType::LongLiteral;
+                        lexer.consumeOne()
+                    }
+                    'D' => {
+                        typ = TokenType::DoubleLiteral;
+                        lexer.consumeOne()
+                    }
+                    _ => {}
+                }
             }
-            'L' => {
-                typ = TokenType::LongLiteral;
-                lexer.consumeOne()
-            }
-            'D' => {
-                typ = TokenType::DoubleLiteral;
-                lexer.consumeOne()
-            }
-            _ => {}
         }
 
         Some(Token { typ, str: buf })
@@ -234,10 +296,8 @@ impl LexingUnit for IdentifierLexingUnit {
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
         let mut buf = String::new();
-        while match lexer.peekChar() {
-            c => c == '_' || c.is_alphabetic() || c.is_numeric(),
-        } {
-            buf.push(lexer.peekChar());
+        while lexer.peekChar().map_or(false, |v|{ match v { c => c == '_' || c.is_alphabetic() || c.is_numeric() }}) {
+            buf.push(lexer.peekChar().unwrap());
             lexer.consumeOne();
         }
 
@@ -269,7 +329,7 @@ impl LexingUnit for WhitespaceLexingUnit {
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
-        while lexer.peekChar().is_whitespace() {
+        while lexer.peekChar().map_or(false,  |v| { v.is_whitespace() }) {
             lexer.consumeOne()
         }
 
@@ -287,7 +347,7 @@ impl LexingUnit for KeywordLexingUnit {
     }
 
     fn parse(&mut self, source: &mut SourceProvider) -> Option<Token> {
-        let str = source.peekStr(self.keyword.len()).to_string();
+        let str = source.peekStr(self.keyword.len())?.to_string();
         source.consumeMany(self.keyword.len());
 
         Some(Token {
@@ -306,8 +366,15 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("while", TokenType::While),
         KeywordLexingUnit::new("if", TokenType::If),
         KeywordLexingUnit::new("else", TokenType::Else),
+        KeywordLexingUnit::new("for", TokenType::For),
+        KeywordLexingUnit::new("loop", TokenType::Loop),
+        KeywordLexingUnit::new("return", TokenType::Return),
+        KeywordLexingUnit::new("break", TokenType::Break),
+        KeywordLexingUnit::new("continue", TokenType::Continue),
+
         KeywordLexingUnit::new("false", TokenType::False),
         KeywordLexingUnit::new("true", TokenType::True),
+
         KeywordLexingUnit::new("==", TokenType::Eq),
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),
@@ -315,7 +382,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         //
         KeywordLexingUnit::new(";", TokenType::Semicolon),
         KeywordLexingUnit::new("=", TokenType::Equals),
-        KeywordLexingUnit::new(":", TokenType::Comma),
+        KeywordLexingUnit::new(":", TokenType::Colon),
         KeywordLexingUnit::new(",", TokenType::Comma),
         // ops
         KeywordLexingUnit::new("+", TokenType::Plus),
@@ -330,6 +397,8 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("{", TokenType::OCB),
         KeywordLexingUnit::new("}", TokenType::CCB),
         IdentifierLexingUnit::new(),
+        RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
+        RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
     ];
 
     buf

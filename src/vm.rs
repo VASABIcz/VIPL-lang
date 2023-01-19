@@ -110,6 +110,22 @@ pub struct VariableMetadata {
 }
 
 impl VariableMetadata {
+    pub fn f(name: String) -> Self {
+        Self {
+            name,
+            typ: Float,
+        }
+    }
+
+    pub fn i(name: String) -> Self {
+        Self {
+            name,
+            typ: Int,
+        }
+    }
+}
+
+impl VariableMetadata {
     pub(crate) fn toBytes(&self, bytes: &mut Vec<u8>) {
         let bs = self.name.escape_default().to_string();
         bytes.extend(bs.len().to_ne_bytes());
@@ -291,7 +307,7 @@ pub enum Value {
 
 impl Value {
     #[inline(always)]
-    fn getNum(&self) -> isize {
+    pub fn getNum(&self) -> isize {
         match self {
             Num(v) => *v,
             Flo(_) => panic!(),
@@ -301,7 +317,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn getFlo(&self) -> f32 {
+    pub fn getFlo(&self) -> f32 {
         match self {
             Num(_) => panic!(),
             Flo(v) => *v,
@@ -311,7 +327,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn getRefFlo(&mut self) -> &mut f32 {
+    pub fn getRefFlo(&mut self) -> &mut f32 {
         match self {
             Num(_) => panic!(),
             Flo(v) => v,
@@ -321,7 +337,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn getRefNum(&mut self) -> &mut isize {
+    pub fn getRefNum(&mut self) -> &mut isize {
         match self {
             Num(v) => v,
             Flo(_) => panic!(),
@@ -331,7 +347,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn getRefBol(&mut self) -> &mut bool {
+    pub fn getRefBol(&mut self) -> &mut bool {
         match self {
             Num(_) => panic!(),
             Flo(_) => panic!(),
@@ -341,7 +357,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn getBool(&self) -> bool {
+    pub fn getBool(&self) -> bool {
         match self {
             Num(_) => panic!(),
             Flo(_) => panic!(),
@@ -353,19 +369,19 @@ impl Value {
 
 impl Value {
     #[inline(always)]
-    fn or(&mut self, val: &Value) {
+    pub fn or(&mut self, val: &Value) {
         let r = self.getRefBol();
         *r = *r || val.getBool();
     }
 
     #[inline(always)]
-    fn and(&mut self, val: &Value) {
+    pub fn and(&mut self, val: &Value) {
         let r = self.getRefBol();
         *r = *r && val.getBool();
     }
 
     #[inline(always)]
-    fn not(&mut self) {
+    pub fn not(&mut self) {
         let r = self.getRefBol();
         *r = !*r;
     }
@@ -373,7 +389,7 @@ impl Value {
 
 impl Value {
     #[inline(always)]
-    fn gt(&self, val: &Value, typ: &DataType) -> bool {
+    pub fn gt(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() > val.getNum(),
             Float => self.getFlo() > val.getFlo(),
@@ -384,7 +400,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn inc(&mut self, typ: &DataType) {
+    pub fn inc(&mut self, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() += 1;
@@ -399,7 +415,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn dec(&mut self, typ: &DataType) {
+    pub fn dec(&mut self, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() -= 1;
@@ -414,7 +430,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn less(&self, val: &Value, typ: &DataType) -> bool {
+    pub fn less(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() < val.getNum(),
             Float => self.getFlo() < val.getFlo(),
@@ -425,7 +441,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn refLess(&mut self, val: &Value, typ: &DataType) {
+    pub fn refLess(&mut self, val: &Value, typ: &DataType) {
         let l = match typ {
             Int => self.getNum() > val.getNum(),
             Float => self.getFlo() > val.getFlo(),
@@ -438,7 +454,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn eq(&self, val: &Value, typ: &DataType) -> bool {
+    pub fn eq(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
@@ -451,7 +467,7 @@ impl Value {
 
 impl Value {
     #[inline(always)]
-    fn add(&mut self, value: &Value, typ: &DataType) {
+    pub fn add(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() += value.getNum();
@@ -466,7 +482,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn sub(&mut self, value: &Value, typ: &DataType) {
+    pub fn sub(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() -= value.getNum();
@@ -481,7 +497,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn mul(&mut self, value: &Value, typ: &DataType) {
+    pub fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() *= value.getNum();
@@ -496,7 +512,7 @@ impl Value {
     }
 
     #[inline(always)]
-    fn div(&mut self, value: &Value, typ: &DataType) {
+    pub fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() /= value.getNum();
@@ -511,19 +527,19 @@ impl Value {
     }
 
     #[inline(always)]
-    fn f2i(&mut self) -> Value {
+    pub fn f2i(&mut self) -> Value {
         Num(self.getFlo() as isize)
     }
 
     #[inline(always)]
-    fn i2f(&mut self) -> Value {
+    pub fn i2f(&mut self) -> Value {
         Flo(self.getNum() as f32)
     }
 }
 
 impl Value {
     #[inline(always)]
-    fn isType(&self, typ: &DataType) -> bool {
+    pub fn isType(&self, typ: &DataType) -> bool {
         match self {
             Num(_) => {
                 matches!(typ, Int)
@@ -888,7 +904,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             Add(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
                 let l = vm.stack.len()-1;
-                vm.stack.get_unchecked_mut(l).div(&a, v);
+                vm.stack.get_unchecked_mut(l).add(&a, v);
             }
             Sub(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
@@ -981,6 +997,19 @@ pub fn bootStrapVM() -> VirtualMachine {
     );
 
     vm.makeNative(
+        String::from("assert"),
+        Box::new([VariableMetadata::i(String::from("left")), VariableMetadata::i(String::from("right"))]),
+        |_a, b| {
+            let left = b.localVariables[1].getNum();
+            let right = b.localVariables[0].getNum();
+            if left != right {
+                panic!("assert {} != {}", left, right)
+            }
+        },
+        None,
+    );
+
+    vm.makeNative(
         String::from("exec"),
         Box::default(),
         |a, b| {
@@ -1014,12 +1043,11 @@ pub fn bootStrapVM() -> VirtualMachine {
     vm
 }
 
-pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) {
+pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine {
     let mut vals = vec![];
     for b in &locals {
         vals.push(b.toDefaultValue())
     }
-    println!("{:?} {:?}", &bytecode, &locals);
     let mut vm = bootStrapVM();
     for _ in &bytecode {
         vm.opCodeCache.push(None);
@@ -1034,4 +1062,6 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) {
         &mut vm,
         &mut StackFrame::new(&mut vals.into_boxed_slice()),
     );
+
+    (vm)
 }

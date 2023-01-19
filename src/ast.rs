@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::vm::{DataType, VariableMetadata};
+use crate::vm::{DataType, genFunName, VariableMetadata};
 
 #[derive(Debug, Clone)]
 pub enum Op {
@@ -68,7 +68,11 @@ impl Expression {
             Expression::StringLiteral(_) => Some(DataType::Object {
                 name: String::from("String"),
             }),
-            Expression::FunctionCall(f) => functionReturns.get(&f.name).unwrap().clone(),
+            Expression::FunctionCall(f) => {
+                let types = f.arguments.iter().filter_map(|x| {x.toDataType(typesMapping, functionReturns)}).collect::<Vec<DataType>>();
+                let enc = genFunName(&f.name, &types.into_boxed_slice());
+                functionReturns.get(&enc).unwrap().clone()
+            },
             Expression::Variable(name) => Some(typesMapping[name].0.clone()),
             Expression::BoolLiteral(_) => Some(DataType::Bool),
         }
@@ -81,6 +85,12 @@ pub enum Statement {
     While(While),
     VariableCreate(VariableCreate),
     If(If),
+    Return(Return)
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub exp: Expression
 }
 
 #[derive(Debug, Clone)]

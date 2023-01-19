@@ -90,6 +90,7 @@ fn main() {
 */
 
 fn main() {
+    /*
     let lexingUnits = lexingUnits();
     let input = "0 = lol fn main() { -420.69 = x print(69*x) while x == 1 { print(69) } if true { test(1) } else { kys(1) }}";
 
@@ -100,7 +101,7 @@ fn main() {
 
     let parsers: Vec<Box<dyn ParsingUnit>> = vec![
         Box::new(WhileParsingUnit),
-        Box::new(FunctionParsingUnit),
+        Box::new(FunctionParsingUnit::default()),
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CallParsingUnit),
@@ -144,4 +145,6 @@ fn main() {
         &parsers.into_boxed_slice(),
     );
     println!("{:?}", &res)
+
+     */
 }
