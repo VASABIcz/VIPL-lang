@@ -6,7 +6,7 @@ use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DataType {
     Int,
     Float,
@@ -574,11 +574,11 @@ impl StackFrame<'_> {
 
 #[derive(Clone)]
 pub struct Func {
-    name: String,
-    returnType: Option<DataType>,
-    varTable: Box<[VariableMetadata]>,
-    argAmount: usize,
-    typ: FuncType,
+    pub name: String,
+    pub returnType: Option<DataType>,
+    pub varTable: Box<[VariableMetadata]>,
+    pub argAmount: usize,
+    pub typ: FuncType,
 }
 
 #[derive(Clone)]
@@ -877,7 +877,12 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let ee = &mut cached.0.clone();
 
                 for i in 0..(*cached.2) {
-                    let arg = vm.stack.pop().unwrap();
+                    let arg = match vm.stack.pop() {
+                        None => {
+                            return;
+                        }
+                        Some(v) => v
+                    };
                     ee[i] = arg;
                 }
 

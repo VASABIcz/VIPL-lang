@@ -7,6 +7,7 @@ use std::io::{BufRead, Write};
 use std::process::exit;
 
 use rust_vm::ast;
+use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::{bytecodeGen, complexBytecodeGen};
 use rust_vm::lexer::{Token, tokenizeSource};
 use rust_vm::parser::{Operation, parse, parseOne, parseTokens, parsingUnits, TokenProvider};
@@ -112,6 +113,16 @@ fn main() {
 
         for _ in 0..bs.len() {
             vm.opCodeCache.push(None)
+        }
+
+        if !checkBytecode(&mut SeekableOpcodes {
+            index: 0,
+            opCodes: &bs,
+            start: None,
+            end: None,
+        }, &mut localTypes, &mut AbstractStack { stack: vec![] }, &mut vm) {
+            eprintln!("bytecode check failed");
+            continue
         }
 
         opcodes.extend(bs);
