@@ -1,5 +1,21 @@
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
 use crate::vm::{DataType, genFunName, VariableMetadata};
+
+#[derive(Debug)]
+pub(crate) struct TypeNotFound {
+    typ: String,
+}
+
+impl Display for TypeNotFound {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.typ)
+    }
+}
+
+impl Error for TypeNotFound {}
 
 #[derive(Debug, Clone)]
 pub enum Op {
@@ -40,7 +56,7 @@ impl Expression {
         &self,
         typesMapping: &HashMap<String, (DataType, usize)>,
         functionReturns: &HashMap<String, Option<DataType>>,
-    ) -> Option<DataType> {
+    ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
             Expression::ArithmeticOp { left, right: _, op: _ } => {
                 let _leftType = left.toDataType(typesMapping, functionReturns);
@@ -53,28 +69,38 @@ impl Expression {
                     DataType::Array { .. } => {}
                     DataType::Object { .. } => {}
                 }
-                Some(DataType::Int)
+                Ok(Some(DataType::Int))
             }
-            Expression::IntLiteral(_) => Some(DataType::Int),
+            Expression::IntLiteral(_) => Ok(Some(DataType::Int)),
             Expression::LongLiteral(_) => {
                 // FIXME
-                Some(DataType::Int)
+                Ok(Some(DataType::Int))
             }
-            Expression::FloatLiteral(_) => Some(DataType::Float),
+            Expression::FloatLiteral(_) => Ok(Some(DataType::Float)),
             Expression::DoubleLiteral(_) => {
                 // FIXME
-                Some(DataType::Float)
+                Ok(Some(DataType::Float))
             }
-            Expression::StringLiteral(_) => Some(DataType::Object {
+            Expression::StringLiteral(_) => Ok(Some(DataType::Object {
                 name: String::from("String"),
-            }),
+            })),
             Expression::FunctionCall(f) => {
-                let types = f.arguments.iter().filter_map(|x| {x.toDataType(typesMapping, functionReturns)}).collect::<Vec<DataType>>();
+                let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types.into_boxed_slice());
-                functionReturns.get(&enc).unwrap().clone()
-            },
-            Expression::Variable(name) => Some(typesMapping[name].0.clone()),
-            Expression::BoolLiteral(_) => Some(DataType::Bool),
+                match functionReturns.get(&enc) {
+                    None => Err(Box::new(TypeNotFound { typ: enc.clone() })),
+                    Some(v) => Ok(v.clone())
+                }
+            }
+            Expression::Variable(name) => {
+                match typesMapping.get(name) {
+                    None => Err(Box::new(TypeNotFound { typ: format!("variable {} not found", name) })),
+                    Some(v) => {
+                        Ok(Some(v.0.clone()))
+                    }
+                }
+            }
+            Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
         }
     }
 }
@@ -85,12 +111,12 @@ pub enum Statement {
     While(While),
     VariableCreate(VariableCreate),
     If(If),
-    Return(Return)
+    Return(Return),
 }
 
 #[derive(Debug, Clone)]
 pub struct Return {
-    pub exp: Expression
+    pub exp: Expression,
 }
 
 #[derive(Debug, Clone)]

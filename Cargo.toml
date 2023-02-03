@@ -1,5 +1,5 @@
 [package]
-name = "untitled"
+name = "rust-vm"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,6 +10,18 @@ rustflags = ["-C target-cpu=native"]
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[[bin]]
+name = "repl"
+path = "src/repl/main.rs"
+
+[[bin]]
+name = "compiler"
+path = "src/compiler/main.rs"
+
+[lib]
+mame = "common"
+path = "src/common/lib.rs"
 
 
 [dependencies]

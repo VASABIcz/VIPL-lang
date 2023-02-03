@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::intrinsics::transmute;
+
 use crate::OpCode::{And, ArrayLength, ClassBegin, ClassEnd, Dup, F2I, FunBegin, FunEnd, I2F, Not, Or, Pop, Return};
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -75,7 +76,7 @@ impl DataType {
 }
 
 impl DataType {
-    pub(crate) fn toDefaultValue(&self) -> Value {
+    pub fn toDefaultValue(&self) -> Value {
         match self {
             Int => Num(0),
             Float => Flo(0.),
@@ -728,7 +729,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             }
             (Some(v), i) => (v, i),
         };
-        // println!("processing {:?}", op);
+        println!("evaluating {:?}", op);
         match op {
             FunBegin => {
                 let mut index = opCodes.index as usize;
@@ -791,6 +792,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             }
             PushLocal { index } => {
                 // println!("{:?}", stackFrame.localVariables.get(*index));
+                println!("loclas size {}", stackFrame.localVariables.len());
                 vm.stack.push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
             },
             SetLocal { index, typ: _ } => {
@@ -834,6 +836,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 }
             },
             Call { encoded } => {
+                println!("function call {}", encoded);
+                println!("stack size {}", vm.stack.len());
                 let cached = match &vm.opCodeCache[index] {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
@@ -1063,5 +1067,5 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Virtual
         &mut StackFrame::new(&mut vals.into_boxed_slice()),
     );
 
-    (vm)
+    vm
 }

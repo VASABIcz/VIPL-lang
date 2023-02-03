@@ -1,34 +1,51 @@
 #![allow(non_snake_case)]
+
+use std::error::Error;
+use std::fmt::{Formatter, write};
 use std::ops::Index;
+
 use crate::lexer::TokenType::Break;
 
-pub fn tokenize(lexingUnits: &mut [Box<dyn LexingUnit>], mut source: SourceProvider) -> Vec<Token> {
-    let mut buf = vec![];
-
-    'main: while !source.isDone() {
-        for unit in lexingUnits.iter_mut() {
-            let reqSize = unit.getRequestSize();
-            let peek = source.peekStr(reqSize).unwrap();
-            if peek.len() < reqSize {
-                continue;
-            }
-            if unit.canParse(source.peekStr(reqSize).unwrap()) {
-                match unit.parse(&mut source) {
-                    None => {}
-                    Some(v) => buf.push(v),
-                }
-
-                continue 'main;
-            }
-        }
-        panic!("error {:?}", source.peekStr(4));
-    }
-    buf
+#[derive(Debug)]
+struct UnknownToken {
+    source: String,
 }
 
-pub fn tokenizeSource(src: &str) -> Vec<Token> {
+impl std::fmt::Display for UnknownToken {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "failed to parse remaining source: {}", self.source)
+    }
+}
+
+impl Error for UnknownToken {}
+
+pub fn tokenize(lexingUnits: &mut [Box<dyn LexingUnit>], mut source: SourceProvider) -> Result<Vec<Token>, Box<dyn Error>> {
+    let mut buf = vec![];
+
+    'main: while !source.isDone() {
+        for unit in lexingUnits.iter_mut() {
+            let reqSize = unit.getRequestSize();
+            let peek = source.peekStr(reqSize).unwrap();
+            if peek.len() < reqSize {
+                continue;
+            }
+            if unit.canParse(source.peekStr(reqSize).unwrap()) {
+                match unit.parse(&mut source) {
+                    None => {}
+                    Some(v) => buf.push(v),
+                }
+
+                continue 'main;
+            }
+        }
+        return Err(Box::try_from(UnknownToken { source: source.peekStr(source.data.len() - source.index).unwrap().to_string() }).unwrap())
+    }
+    Ok(buf)
+}
+
+pub fn tokenizeSource(src: &str) -> Result<Vec<Token>, Box<dyn Error>> {
     let mut lexingUnits = lexingUnits();
-    let mut source: SourceProvider = SourceProvider{ data: src, index: 0 };
+    let mut source: SourceProvider = SourceProvider { data: src, index: 0 };
 
     let mut buf = vec![];
 
@@ -48,9 +65,10 @@ pub fn tokenizeSource(src: &str) -> Vec<Token> {
                 continue 'main;
             }
         }
-        panic!("error {:?}", source.peekStr(4));
+        return Err(Box::try_from(UnknownToken { source: source.peekStr(source.data.len() - source.index).unwrap().to_string() }).unwrap())
+        //panic!("error {:?}", source.peekStr(4));
     }
-    buf
+    Ok(buf)
 }
 
 #[derive(Debug)]
@@ -223,7 +241,7 @@ impl LexingUnit for NumericLexingUnit {
 
     fn canParse(&self, data: &str) -> bool {
         let c = data.chars().next().unwrap();
-        c == '-' || data.chars().next().unwrap().is_ascii_digit()
+        c == '-' || c.is_ascii_digit()
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
@@ -239,7 +257,9 @@ impl LexingUnit for NumericLexingUnit {
         while lexer.peekChar().map_or(false, |c| { c == '.' || c == '_' || c.is_numeric()}) {
             let c = lexer.peekChar().unwrap();
             if c == '.' && encounteredDot {
-                panic!("number cant have more than 1 dots")
+                // fixme return result from lexer
+                // panic!("number cant have more than 1 dots")
+                return None
             }
             if c == '.' {
                 typ = TokenType::FloatLiteral
