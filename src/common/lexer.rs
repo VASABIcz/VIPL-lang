@@ -153,7 +153,12 @@ pub enum TokenType {
     Eq,
     Gt,
     Less,
-    Not
+    Not,
+
+    AddAs,
+    SubAs,
+    DivAs,
+    MulAs
 }
 
 #[derive(Clone, Debug)]
@@ -391,10 +396,14 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("return", TokenType::Return),
         KeywordLexingUnit::new("break", TokenType::Break),
         KeywordLexingUnit::new("continue", TokenType::Continue),
-
         KeywordLexingUnit::new("false", TokenType::False),
         KeywordLexingUnit::new("true", TokenType::True),
 
+        //
+        KeywordLexingUnit::new("+=", TokenType::AddAs),
+        KeywordLexingUnit::new("-=", TokenType::SubAs),
+        KeywordLexingUnit::new("*=", TokenType::MulAs),
+        KeywordLexingUnit::new("/=", TokenType::DivAs),
         KeywordLexingUnit::new("==", TokenType::Eq),
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),

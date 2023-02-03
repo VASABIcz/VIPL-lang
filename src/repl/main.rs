@@ -1,6 +1,6 @@
 extern crate rust_vm;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::io;
 use std::io::{BufRead, Write};
@@ -115,12 +115,14 @@ fn main() {
             vm.opCodeCache.push(None)
         }
 
+        // println!("{:?}", &bs);
+
         if !checkBytecode(&mut SeekableOpcodes {
             index: 0,
             opCodes: &bs,
             start: None,
             end: None,
-        }, &mut localTypes, &mut AbstractStack { stack: vec![] }, &mut vm) {
+        }, &mut localTypes, &mut AbstractStack { stack: vec![] }, &mut vm, &mut HashSet::new()) {
             eprintln!("bytecode check failed");
             continue
         }

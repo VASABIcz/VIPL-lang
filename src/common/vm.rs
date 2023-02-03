@@ -454,6 +454,19 @@ impl Value {
     }
 
     #[inline(always)]
+    pub fn refGt(&mut self, val: &Value, typ: &DataType) {
+        let l = match typ {
+            Int => self.getNum() < val.getNum(),
+            Float => self.getFlo() < val.getFlo(),
+            Bool => self.getBool() < val.getBool(),
+            Array { .. } => panic!(),
+            Object { .. } => panic!(),
+        };
+
+        *self = Bol(l)
+    }
+
+    #[inline(always)]
     pub fn eq(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() == val.getNum(),
@@ -462,6 +475,18 @@ impl Value {
             Array { .. } => panic!(),
             Object { .. } => panic!(),
         }
+    }
+
+    #[inline(always)]
+    pub fn refEq(&mut self, val: &Value, typ: &DataType) {
+        let x = match typ {
+            Int => self.getNum() == val.getNum(),
+            Float => self.getFlo() == val.getFlo(),
+            Bool => self.getBool() == val.getBool(),
+            Array { .. } => panic!(),
+            Object { .. } => panic!(),
+        };
+        *self = Bol(x)
     }
 }
 
@@ -936,43 +961,38 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             }
             Mul(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
-                let l = vm.stack.len()-1;
+                let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).mul(&a, v);
                 // println!("{:?}", vm.stack.get(l));
             }
-            Equals(v) => {
+            Equals(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
-                let b = vm.stack.pop().unwrap();
-                a.eq(&b, v);
-                vm.stack.push(a);
+                let l = vm.stack.len() - 1;
+                vm.stack.get_unchecked_mut(l).refEq(&a, v);
             }
-            Greater(v) => {
+            Greater(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
-                let b = vm.stack.pop().unwrap();
-                let res = a.gt(&b, v);
-                vm.stack.push(Bol(res));
+                let l = vm.stack.len() - 1;
+                vm.stack.get_unchecked_mut(l).refGt(&a, v);
             }
             Less(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
-                let l = vm.stack.len()-1;
+                let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).refLess(&a, v);
             }
-            Or => {
-                let mut a = vm.stack.pop().unwrap();
-                let b = vm.stack.pop().unwrap();
-                a.or(&b);
-                vm.stack.push(a);
+            Or => unsafe {
+                let a = vm.stack.pop().unwrap();
+                let l = vm.stack.len() - 1;
+                vm.stack.get_unchecked_mut(l).or(&a);
             }
-            And => {
-                let mut a = vm.stack.pop().unwrap();
-                let b = vm.stack.pop().unwrap();
-                a.and(&b);
-                vm.stack.push(a);
+            And => unsafe {
+                let a = vm.stack.pop().unwrap();
+                let l = vm.stack.len() - 1;
+                vm.stack.get_unchecked_mut(l).and(&a);
             }
-            Not => {
-                let mut a = vm.stack.pop().unwrap();
-                a.not();
-                vm.stack.push(a);
+            Not => unsafe {
+                let l = vm.stack.len() - 1;
+                vm.stack.get_unchecked_mut(l).not();
             }
             ClassBegin => panic!(),
             ClassName { .. } => panic!(),

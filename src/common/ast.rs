@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::vm::{DataType, genFunName, VariableMetadata};
+use crate::vm::DataType::Bool;
 
 #[derive(Debug)]
 pub(crate) struct TypeNotFound {
@@ -58,7 +59,20 @@ impl Expression {
         functionReturns: &HashMap<String, Option<DataType>>,
     ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
-            Expression::ArithmeticOp { left, right: _, op: _ } => {
+            Expression::ArithmeticOp { left, right: _, op: o } => {
+                match o {
+                    Op::Gt => {
+                        return Ok(Some(Bool))
+                    }
+                    Op::Less => {
+                        return Ok(Some(Bool))
+                    }
+                    Op::Eq => {
+                        return Ok(Some(Bool))
+                    }
+                    _ => {}
+                }
+
                 let _leftType = left.toDataType(typesMapping, functionReturns);
                 let _rightType = left.toDataType(typesMapping, functionReturns);
 
@@ -110,8 +124,24 @@ pub enum Statement {
     FunctionExpr(FunctionCall),
     While(While),
     VariableCreate(VariableCreate),
+    VariableMod(VariableMod),
     If(If),
     Return(Return),
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableMod {
+    pub(crate) varName: String,
+    pub(crate) modType: ModType,
+    pub(crate) expr: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub enum ModType {
+    Add,
+    Sub,
+    Div,
+    Mul,
 }
 
 #[derive(Debug, Clone)]

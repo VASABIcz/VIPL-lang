@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter, write};
 use std::fs::read;
 
-use crate::ast::{Expression, FunctionCall, Node, Op, Statement, VariableCreate, While};
+use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
@@ -241,6 +241,17 @@ impl TokenProvider {
         let t = self.getAssert(TokenType::Identifier)?;
 
         Ok(t.str.clone())
+    }
+
+    fn getToken(&mut self) -> Result<Token, Box<dyn Error>> {
+        let i = self.index;
+        self.consume();
+        match self.tokens.get(i) {
+            None => {
+                return Err(Box::new(InvalidToken { msg: format!("invalid token got None") }))
+            }
+            Some(v) => Ok(v.clone())
+        }
     }
 
     pub fn isDone(&self) -> bool {
@@ -762,7 +773,7 @@ impl ParsingUnit for IfParsingUnit {
             })));
         }
 
-        tokenProvider.getAssert(TokenType::Else);
+        tokenProvider.getAssert(TokenType::Else)?;
 
         let elseBody = parseBody(tokenProvider, parser)?;
 
@@ -802,8 +813,49 @@ impl ParsingUnit for BracketsParsingUnit {
     fn setPriority(&mut self, priority: usize) {}
 }
 
+struct VarModParsingUnit;
+
+impl ParsingUnit for VarModParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Identifier)
+            &&
+            tokenProvider.isPeekIndexType(TokenType::AddAs, 1)
+            || tokenProvider.isPeekIndexType(TokenType::SubAs, 1)
+            || tokenProvider.isPeekIndexType(TokenType::MulAs, 1)
+            || tokenProvider.isPeekIndexType(TokenType::DivAs, 1)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        let varName = tokenProvider.getIdentifier()?;
+        let modType = match tokenProvider.getToken()?.typ {
+            TokenType::AddAs => ModType::Add,
+            TokenType::SubAs => ModType::Sub,
+            TokenType::DivAs => ModType::Div,
+            TokenType::MulAs => ModType::Mul,
+            _ => panic!()
+        };
+
+        let expr = parseExpr(tokenProvider, parser)?;
+
+        Ok(Operation::Statement(Statement::VariableMod(VariableMod {
+            varName,
+            modType,
+            expr,
+        })))
+    }
+
+    fn getPriority(&self) -> usize { usize::MAX }
+
+    fn setPriority(&mut self, priority: usize) {}
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
+        Box::new(VarModParsingUnit),
         Box::new(WhileParsingUnit),
         Box::new(FunctionParsingUnit),
         Box::new(StatementVarCreateParsingUnit),
@@ -812,7 +864,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,
             typ: TokenType::Mul,
-            priority: 0
+            priority: 0,
         }),
         Box::new(ArithmeticParsingUnit {
             op: Op::Div,
@@ -842,12 +894,12 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArithmeticParsingUnit {
             op: Op::Gt,
             typ: TokenType::Gt,
-            priority: 6
+            priority: 6,
         }),
         Box::new(BracketsParsingUnit),
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),
         Box::new(BoolParsingUnit),
-        Box::new(ReturnParsingUnit)
+        Box::new(ReturnParsingUnit),
     ]
 }

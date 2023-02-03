@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use crate::vm::*;
 use crate::vm::DataType::{Bool, Float, Int};
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut AbstractStack, vm: &VirtualMachine) -> bool {
+pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<String>) -> bool {
     let mut index = opCodes.index as usize;
     let name = match opCodes.getOpcode(index).unwrap() {
         FunName { name } => name,
@@ -26,7 +28,7 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
             return false;
         }
     };
-    let clone = ret.clone();
+    let retClone = ret.clone();
     index += 1;
 
     let size = abstractStack.len();
@@ -37,19 +39,27 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
         abstractLocals.push(var.typ.clone())
     }
 
-    if !checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm) {
+    let genName = genFunNameMeta(&name, vars);
+    checkedFunctions.insert(genName);
+    opCodes.index += index as isize;
+
+    if !checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm, checkedFunctions) {
         return false;
     }
 
     let last = match abstractStack.stack.last() {
         None => {
-            return false;
+            if retClone.is_some() {
+                return false;
+            } else if size != abstractStack.len() {
+                return false
+            }
+            return true;
         }
         Some(v) => v
     };
-    println!("lol");
 
-    match clone {
+    match retClone {
         None => size == abstractStack.len(),
         Some(v) => {
             size == abstractStack.len() + 1 && *last == v
@@ -74,7 +84,7 @@ impl AbstractStack {
     }
 
     fn len(&self) -> usize {
-        self.len()
+        self.stack.len()
     }
 
     fn pop(&mut self) -> Option<DataType> {
@@ -83,7 +93,7 @@ impl AbstractStack {
 }
 
 #[inline(always)]
-pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec<DataType>, abstractStack: &mut AbstractStack, vm: &VirtualMachine) -> bool {
+pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec<DataType>, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<String>) -> bool {
     loop {
         let (op, index) = match opCodes.nextOpcode() {
             (None, _) => {
@@ -91,12 +101,13 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             }
             (Some(v), i) => (v, i),
         };
-        // println!("evaluating {:?}", op);
+        // println!("checking {:?}", op);
         match op {
             FunBegin => {
-                if !checkFunction(opCodes, abstractStack, vm) {
+                if !checkFunction(opCodes, abstractStack, vm, checkedFunctions) {
                     return false;
                 }
+                opCodes.index += 1;
             }
             FunName { .. } => panic!(),
             FunReturn { .. } => panic!(),
@@ -165,12 +176,14 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                         }
                     }
                 }
-                println!("looooool")
             }
             Jmp { offset, jmpType } => {
-                panic!()
             }
             Call { encoded } => {
+                if checkedFunctions.contains(encoded) {
+                    continue
+                }
+
                 match vm.functions.get(encoded) {
                     None => {
                         return false;
@@ -282,6 +295,5 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 }
             }
         }
-        println!("ahhh")
     }
 }

@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io;
+use std::io::Write;
 
 use Statement::VariableCreate;
 
-use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
+use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
 use crate::parser::{*};
 use crate::parser::ParsingUnitSearchType::*;
-use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
+use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
+use crate::vm::DataType::Bool;
 use crate::vm::OpCode::{*};
 
 #[derive(Debug)]
@@ -194,11 +197,53 @@ fn genStatement(
                 }
             }
         },
-        Statement::While(_) => {}
+        Statement::While(w) => {
+            let ret = w.exp.toDataType(vTable, functionReturns)?;
+            match ret {
+                None => {
+                    return Err(Box::new(NoValue { msg: format!("expression {:?} must return bool", w.exp) }));
+                }
+                Some(ve) => {
+                    if ve != Bool {
+                        return Err(Box::new(NoValue { msg: format!("expected bool got {:?} {:?}", ve, w.exp) }));
+                    }
+                    let size = ops.len();
+                    genExpression(w.exp, ops, functionReturns, vTable)?;
+                    let mut bodyBuf = vec![];
+                    for s in w.body {
+                        genStatement(s, &mut bodyBuf, functionReturns, vTable)?;
+                    }
+                    let len = bodyBuf.len();
+                    ops.push(Not);
+                    ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::True });
+                    ops.extend(bodyBuf);
+                    ops.push(OpCode::Jmp { offset: (ops.len() as isize - size as isize + 1) * -1, jmpType: JmpType::Jmp })
+                }
+            }
+        }
         Statement::If(_) => {}
         Statement::Return(ret) => {
             genExpression(ret.exp, ops, functionReturns, vTable)?;
             ops.push(OpCode::Return)
+        }
+        Statement::VariableMod(m) => {
+            match vTable.get(&m.varName) {
+                None => {
+                    return Err(Box::new(VariableNotFound { name: m.varName }));
+                }
+                Some(v) => {
+                    ops.push(OpCode::PushLocal { index: v.1 });
+                    let op = match m.modType {
+                        ModType::Add => OpCode::Add(v.0.clone()),
+                        ModType::Sub => OpCode::Sub(v.0.clone()),
+                        ModType::Div => OpCode::Div(v.0.clone()),
+                        ModType::Mul => OpCode::Mul(v.0.clone())
+                    };
+                    genExpression(m.expr, ops, functionReturns, vTable)?;
+                    ops.push(op);
+                    ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });
+                }
+            }
         }
     }
     Ok(())
@@ -320,6 +365,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
                             localTypes.push(t.unwrap().clone());
                             counter += 1;
                         }
+                        https://cdn.discordapp.com/attachments/944335388892336178/1071131197255712819/114243516_fox05095-nc.png
                     }
                 }
                 inlineMain.push(op.clone())
@@ -355,7 +401,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
 
 #[test]
 pub fn testLexingUnits() {
-    let input = "fn test(x: int): int { print(x) } test(25)";
+    let input = "fn test(x: int): int { print( x ) } test ( 25 ) ";
 
     let tokens = tokenizeSource(input).unwrap();
     println!("tokens {:?}", &tokens);
