@@ -64,7 +64,6 @@ pub fn parseOne(
     previous: Option<Operation>,
 ) -> Result<Operation, Box<dyn Error>> {
     let u = getParsingUnit(tokens, typ.clone(), parsingUnits).ok_or(Box::new(NoSuchParsingUnit { typ, token: tokens.peekOne().map(|it| { it.clone() }) }))?;
-
     /*
     if u.is_none() {
         println!("next {:?}", tokens.peekOne());
@@ -78,10 +77,15 @@ pub fn parse(
     tokens: &mut TokenProvider,
     typ: ParsingUnitSearchType,
     parsingUnits: &[Box<dyn ParsingUnit>],
+    previous: Option<Operation>,
+    isPrevUser: &mut bool,
 ) -> Result<Vec<Operation>, Box<dyn Error>> {
     let mut buf = vec![];
+    let mut counter = 0;
+
 
     'main: while !tokens.isDone() {
+        counter += 1;
         for unit in parsingUnits.iter() {
             let parserType = unit.getType();
 
@@ -92,7 +96,13 @@ pub fn parse(
             };
 
             if canParse && unit.canParse(&tokens) {
-                let res = unit.parse(tokens, None, parsingUnits)?;
+                let res = if !*isPrevUser && (parserType == Around || parserType == Around) && counter == 1 {
+                    *isPrevUser = true;
+                    println!("fuuuck");
+                    unit.parse(tokens, previous.clone(), parsingUnits)?
+                } else {
+                    unit.parse(tokens, None, parsingUnits)?
+                };
                 buf.push(res);
                 continue 'main;
             }
@@ -121,6 +131,7 @@ pub fn parseTokens(
                 continue 'main;
             }
         }
+        println!("c");
         return Err(Box::new(NoSuchParsingUnit { typ: Ahead, token: tokens.peekOne().map(|it| { it.clone() }) }))
     }
     Ok(buf)
@@ -178,7 +189,7 @@ impl fmt::Display for InvalidToken {
 impl Error for InvalidToken {}
 
 impl TokenProvider {
-    pub(crate) fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, index: 0 }
     }
 
@@ -232,7 +243,7 @@ impl TokenProvider {
         Ok(t.str.clone())
     }
 
-    fn isDone(&self) -> bool {
+    pub fn isDone(&self) -> bool {
         self.index >= self.tokens.len()
     }
 }
@@ -473,7 +484,6 @@ impl ParsingUnit for ArithmeticParsingUnit {
         previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        println!("{:?}", &self.typ);
         tokens.consume();
         let res = parseOne(tokens, Ahead, parser, None)?;
         let par = getParsingUnit(tokens, Around, parser);

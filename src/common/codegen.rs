@@ -120,7 +120,7 @@ fn genExpression(
             }
 
             ops.push(Call {
-                encoded: genFunName(&e.name, &argTypes.into_boxed_slice()),
+                encoded: genFunName(&e.name, &argTypes),
             })
         }
         Expression::Variable(v) => {
@@ -173,7 +173,7 @@ fn genStatement(
             }
 
             ops.push(Call {
-                encoded: genFunName(&e.name, &argTypes.into_boxed_slice()),
+                encoded: genFunName(&e.name, &argTypes),
             });
         }
         VariableCreate(v) => match v.init {
@@ -238,7 +238,7 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone().into_boxed_slice()),
+                        genFunNameMeta(&v.name, &v.args.clone()),
                         v.returnType.clone(),
                     );
                 }
@@ -303,7 +303,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone().into_boxed_slice()),
+                        genFunNameMeta(&v.name, &v.args.clone()),
                         v.returnType.clone(),
                     );
                 }

@@ -426,7 +426,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
 
 #[test]
 fn testLexer() {
-    let lexingUnits = lexingUnits();
+    let mut lexingUnits = lexingUnits();
     let input = "x = 69 fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
 
     let src = SourceProvider {
@@ -434,6 +434,6 @@ fn testLexer() {
         index: 0,
     };
 
-    let tokens = tokenize(&mut lexingUnits.into_boxed_slice(), src);
+    let tokens = tokenize(&mut lexingUnits, src);
     println!("{:?}", tokens);
 }

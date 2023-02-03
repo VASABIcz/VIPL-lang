@@ -10,6 +10,7 @@ rustflags = ["-C target-cpu=native"]
 lto = true
 codegen-units = 1
 panic = "abort"
+# opt-level = "z"
 
 [[bin]]
 name = "repl"

@@ -86,7 +86,7 @@ impl Expression {
             })),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
-                let enc = genFunName(&f.name, &types.into_boxed_slice());
+                let enc = genFunName(&f.name, &types);
                 match functionReturns.get(&enc) {
                     None => Err(Box::new(TypeNotFound { typ: enc.clone() })),
                     Some(v) => Ok(v.clone())

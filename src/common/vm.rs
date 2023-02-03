@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::intrinsics::transmute;
 
-use crate::OpCode::{And, ArrayLength, ClassBegin, ClassEnd, Dup, F2I, FunBegin, FunEnd, I2F, Not, Or, Pop, Return};
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
@@ -729,7 +728,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             }
             (Some(v), i) => (v, i),
         };
-        println!("evaluating {:?}", op);
+        // println!("evaluating {:?}", op);
         match op {
             FunBegin => {
                 let mut index = opCodes.index as usize;
@@ -792,7 +791,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             }
             PushLocal { index } => {
                 // println!("{:?}", stackFrame.localVariables.get(*index));
-                println!("loclas size {}", stackFrame.localVariables.len());
+                // println!("loclas size {}", stackFrame.localVariables.len());
                 vm.stack.push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
             },
             SetLocal { index, typ: _ } => {
@@ -836,8 +835,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 }
             },
             Call { encoded } => {
-                println!("function call {}", encoded);
-                println!("stack size {}", vm.stack.len());
+                // println!("function call {}", encoded);
+                // println!("stack size {}", vm.stack.len());
                 let cached = match &vm.opCodeCache[index] {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
@@ -875,33 +874,43 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 };
 
-                let e = &mut cached.0.clone().into_boxed_slice();
+                let ee = &mut cached.0.clone();
 
                 for i in 0..(*cached.2) {
                     let arg = vm.stack.pop().unwrap();
-                    e[i] = arg;
+                    ee[i] = arg;
                 }
 
                 // FIXME
                 // let enc = &String::from(encoded);
 
-                let mut stack = StackFrame {
-                    previous: Some(stackFrame),
-                    localVariables: &mut e.clone(),
-                    name: None// FIXME Some(enc),
-                };
 
                 match cached.1 {
                     Runtime {
                         rangeStart: s,
                         rangeStop: e,
                     } => {
-                        let old = index+1;
+                        let old = index + 1;
+
+                        let mut stack = StackFrame {
+                            previous: Some(stackFrame),
+                            localVariables: ee,
+                            name: None,
+                        };
+
                         opCodes.index = *s as isize;
+
                         run(opCodes, vm, &mut stack);
                         opCodes.index = old as isize;
                     }
-                    Native { callback } => callback(vm, &mut stack),
+                    Native { callback } => {
+                        let mut stack = StackFrame {
+                            previous: Some(stackFrame),
+                            localVariables: ee,
+                            name: None,
+                        };
+                        callback(vm, &mut stack)
+                    },
                 }
             }
             Return => return,
@@ -1059,12 +1068,12 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Virtual
     run(
         &mut SeekableOpcodes {
             index: 0,
-            opCodes: &bytecode.into_boxed_slice(),
+            opCodes: &bytecode,
             start: None,
             end: None,
         },
         &mut vm,
-        &mut StackFrame::new(&mut vals.into_boxed_slice()),
+        &mut StackFrame::new(&mut vals),
     );
 
     vm
