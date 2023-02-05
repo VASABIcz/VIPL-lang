@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::vm::{DataType, genFunName, ObjectMeta, VariableMetadata};
-use crate::vm::DataType::Bool;
+use crate::vm::DataType::{Bool, Char};
 
 #[derive(Debug)]
 pub(crate) struct TypeNotFound {
@@ -44,6 +44,7 @@ pub enum Expression {
     BoolLiteral(bool),
     FunctionCall(FunctionCall),
     Variable(String),
+    CharLiteral(char)
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +83,7 @@ impl Expression {
                     DataType::Bool => {}
                     DataType::Array { .. } => {}
                     DataType::Object { .. } => {}
+                    DataType::Char => {}
                 }
                 Ok(Some(DataType::Int))
             }
@@ -113,6 +115,7 @@ impl Expression {
                 }
             }
             Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
+            Expression::CharLiteral(_) => Ok(Some(Char))
         }
     }
 }

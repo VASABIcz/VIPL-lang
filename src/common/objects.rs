@@ -20,7 +20,7 @@ pub struct ObjectDefinition {
 
 #[derive(Debug)]
 pub struct Str {
-    string: String,
+    pub(crate) string: String,
 }
 
 impl Object for Str {

@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::io;
 use std::io::{BufRead, Write};
+use std::ops::Deref;
 use std::process::exit;
 
 use rust_vm::ast;
@@ -152,7 +153,8 @@ fn main() {
                 Value::Num(v) => println!("{}", v),
                 Value::Flo(v) => println!("{}", v),
                 Value::Bol(v) => println!("{}", v),
-                Value::Reference() => println!("object")
+                Value::Reference { instance } => println!("object {:?}", instance.as_ref().map(|it| { it.getName() })),
+                Value::Chr(v) => println!("{}", v)
             }
         }
         vm.stack.clear();

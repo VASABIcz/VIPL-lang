@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::intrinsics::transmute;
 use std::rc::Rc;
 
-use crate::objects::ObjectDefinition;
+use crate::objects::{ObjectDefinition, Str};
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
@@ -13,6 +13,7 @@ pub enum DataType {
     Int,
     Float,
     Bool,
+    Char,
     Array { inner: Box<DataType> },
     Object(Box<ObjectMeta>),
 }
@@ -64,6 +65,7 @@ impl DataType {
                 bytes.extend(bs.len().to_ne_bytes());
                 bytes.extend(bs.as_bytes())
             }
+            Char => {}
         }
     }
 }
@@ -76,6 +78,7 @@ impl DataType {
             Bool => "bool",
             Array { inner: _ } => "",
             Object(x) => &x.name,
+            Char => "char"
         }
     }
 }
@@ -88,6 +91,7 @@ impl DataType {
             Bool => Bol(false),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => Chr('a')
         }
     }
 }
@@ -159,6 +163,7 @@ pub enum OpCode {
     PushInt(isize),
     PushFloat(f32),
     PushBool(bool),
+    PushChar(char),
     Pop,
     Dup,
     PushLocal {
@@ -210,7 +215,6 @@ pub enum OpCode {
         name: String,
         typ: DataType,
     },
-
     ArrayNew(DataType),
     ArrayStore(DataType),
     ArrayLoad(DataType),
@@ -308,8 +312,8 @@ pub enum Value {
     Num(isize),
     Flo(f32),
     Bol(bool),
+    Chr(char),
     Reference {
-        definition: ObjectDefinition,
         instance: Option<Rc<dyn crate::objects::Object>>,
     },
 }
@@ -322,6 +326,7 @@ impl Value {
             Flo(_) => panic!(),
             Bol(_) => panic!(),
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 
@@ -332,6 +337,7 @@ impl Value {
             Flo(v) => *v,
             Bol(_) => panic!(),
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 
@@ -342,6 +348,7 @@ impl Value {
             Flo(v) => v,
             Bol(_) => panic!(),
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 
@@ -352,6 +359,7 @@ impl Value {
             Flo(_) => panic!(),
             Bol(_) => panic!(),
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 
@@ -362,6 +370,7 @@ impl Value {
             Flo(_) => panic!(),
             Bol(v) => v,
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 
@@ -372,6 +381,7 @@ impl Value {
             Flo(_) => panic!(),
             Bol(v) => *v,
             Reference { .. } => panic!(),
+            Chr(_) => panic!()
         }
     }
 }
@@ -405,6 +415,7 @@ impl Value {
             Bool => self.getBool() & !val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         }
     }
 
@@ -420,6 +431,7 @@ impl Value {
             Bool => panic!(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         }
     }
 
@@ -435,6 +447,7 @@ impl Value {
             Bool => panic!(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         }
     }
 
@@ -446,6 +459,7 @@ impl Value {
             Bool => !self.getBool() & val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         }
     }
 
@@ -457,6 +471,7 @@ impl Value {
             Bool => self.getBool() & !val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         };
 
         *self = Bol(l)
@@ -470,6 +485,7 @@ impl Value {
             Bool => self.getBool() < val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         };
 
         *self = Bol(l)
@@ -483,6 +499,7 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         }
     }
 
@@ -494,6 +511,7 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
+            Char => panic!()
         };
         *self = Bol(x)
     }
@@ -512,6 +530,7 @@ impl Value {
             Bool => {}
             Array { .. } => {}
             Object { .. } => {}
+            Char => panic!()
         }
     }
 
@@ -527,6 +546,7 @@ impl Value {
             Bool => {}
             Array { .. } => {}
             Object { .. } => {}
+            Char => panic!()
         }
     }
 
@@ -542,6 +562,7 @@ impl Value {
             Bool => {}
             Array { .. } => {}
             Object { .. } => {}
+            Char => panic!()
         }
     }
 
@@ -557,6 +578,7 @@ impl Value {
             Bool => {}
             Array { .. } => {}
             Object { .. } => {}
+            Char => panic!()
         }
     }
 
@@ -585,6 +607,7 @@ impl Value {
                 matches!(typ, Bool)
             }
             Reference { .. } => panic!(),
+            Chr(_) => matches!(typ, Char)
         }
     }
 }
@@ -637,7 +660,7 @@ pub enum CachedOpCode {
 pub struct VirtualMachine {
     pub functions: HashMap<String, Func>,
     pub stack: Vec<Value>,
-    pub classes: HashMap<String, MyClass>,
+    pub classes: HashMap<String, ObjectDefinition>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
@@ -1015,6 +1038,9 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             ArrayLength => panic!(),
             Inc { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().inc(typ),
             Dec { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().dec(typ),
+            PushChar(c) => {
+                vm.stack.push(Value::Chr(*c))
+            }
         }
     }
 }
@@ -1085,6 +1111,11 @@ pub fn bootStrapVM() -> VirtualMachine {
         },
         None,
     );
+
+    vm.makeNative(String::from("makeString"), Box::new([]), |a, b| {
+        a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
+    }, Some(Object(Box::new(ObjectMeta { name: String::from("String"), generics: Box::new([]) }))));
+
     vm
 }
 

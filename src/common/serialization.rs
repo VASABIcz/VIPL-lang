@@ -82,6 +82,7 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
                 }
                 buf.extend(argsCount.to_ne_bytes());
             }
+            PushChar(_) => panic!()
         }
     }
     buf

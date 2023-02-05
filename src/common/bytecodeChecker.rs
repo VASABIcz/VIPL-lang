@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::vm::*;
-use crate::vm::DataType::{Bool, Float, Int};
+use crate::vm::DataType::{Bool, Char, Float, Int};
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
@@ -293,6 +293,9 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                         }
                     }
                 }
+            }
+            PushChar(_) => {
+                abstractStack.push(Char)
             }
         }
     }

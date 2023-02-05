@@ -7,7 +7,7 @@ use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, Variabl
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, Colon, Comma, CRB, Identifier, Minus, ORB, Return};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Identifier, Minus, ORB, Return};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
 use crate::vm::{DataType, VariableMetadata};
 
@@ -880,6 +880,38 @@ impl ParsingUnit for VarModParsingUnit {
     fn setPriority(&mut self, priority: usize) {}
 }
 
+struct CharParsingUnit;
+
+impl ParsingUnit for CharParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(CharLiteral)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        let c = tokenProvider.getAssert(CharLiteral)?;
+        match c.str.chars().next() {
+            None => {
+                Err(Box::new(InvalidToken { msg: format!("char literal cannot be empty") }))
+            }
+            Some(c) => {
+                Ok(Operation::Expression(Expression::CharLiteral(c)))
+            }
+        }
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
@@ -887,6 +919,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(FunctionParsingUnit),
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
+        Box::new(CharParsingUnit),
         Box::new(CallParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,

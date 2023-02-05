@@ -137,6 +137,9 @@ fn genExpression(
                 index: vTable.get(&v).unwrap().1,
             })
         }
+        Expression::CharLiteral(c) => {
+            ops.push(PushChar(c))
+        }
     }
     Ok(())
 }
