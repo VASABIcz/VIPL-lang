@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::vm::{DataType, genFunName, VariableMetadata};
+use crate::vm::{DataType, genFunName, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::Bool;
 
 #[derive(Debug)]
@@ -95,9 +95,7 @@ impl Expression {
                 // FIXME
                 Ok(Some(DataType::Float))
             }
-            Expression::StringLiteral(_) => Ok(Some(DataType::Object {
-                name: String::from("String"),
-            })),
+            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) })))),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types);

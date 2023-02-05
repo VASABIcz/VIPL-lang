@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::intrinsics::transmute;
+use std::rc::Rc;
 
+use crate::objects::ObjectDefinition;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
@@ -12,11 +14,17 @@ pub enum DataType {
     Float,
     Bool,
     Array { inner: Box<DataType> },
-    Object { name: String },
+    Object(Box<ObjectMeta>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ObjectMeta {
+    pub name: String,
+    pub generics: Box<[DataType]>,
 }
 
 impl DataType {
-    pub(crate) fn fromString(s: &str) -> Self {
+    pub fn fromString(s: &str) -> Self {
         if s.ends_with("[]") {
             return DataType::Array {
                 inner: Box::new(DataType::fromString(s.strip_suffix("[]").unwrap())),
@@ -27,9 +35,7 @@ impl DataType {
             "int" => DataType::Int,
             "float" => DataType::Float,
             "bool" => DataType::Bool,
-            _ => DataType::Object {
-                name: String::from(s),
-            },
+            _ => DataType::Object(Box::new(ObjectMeta { name: s.to_string(), generics: Box::new([]) })),
         }
     }
 }
@@ -45,16 +51,16 @@ pub enum RawDataType {
 }
 
 impl DataType {
-    pub(crate) fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 32] = unsafe { transmute((*self).clone()) };
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
+        let opId: [u8; 16] = unsafe { transmute((*self).clone()) };
         bytes.push(opId[0]);
         match self {
             Int => {}
             Float => {}
             Bool => {}
             Array { inner } => inner.toBytes(bytes),
-            Object { name } => {
-                let bs = name.escape_default().to_string();
+            Object(x) => {
+                let bs = x.name.escape_default().to_string();
                 bytes.extend(bs.len().to_ne_bytes());
                 bytes.extend(bs.as_bytes())
             }
@@ -69,7 +75,7 @@ impl DataType {
             Float => "float",
             Bool => "bool",
             Array { inner: _ } => "",
-            Object { name } => &name,
+            Object(x) => &x.name,
         }
     }
 }
@@ -97,7 +103,7 @@ pub enum JmpType {
 }
 
 impl JmpType {
-    pub(crate) fn toBytes(&self, bytes: &mut Vec<u8>) {
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
         let opId: [u8; 1] = unsafe { std::mem::transmute((*self).clone()) };
         bytes.push(opId[0]);
     }
@@ -126,7 +132,7 @@ impl VariableMetadata {
 }
 
 impl VariableMetadata {
-    pub(crate) fn toBytes(&self, bytes: &mut Vec<u8>) {
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
         let bs = self.name.escape_default().to_string();
         bytes.extend(bs.len().to_ne_bytes());
         bytes.extend(bs.as_bytes());
@@ -302,7 +308,10 @@ pub enum Value {
     Num(isize),
     Flo(f32),
     Bol(bool),
-    Reference(),
+    Reference {
+        definition: ObjectDefinition,
+        instance: Option<Rc<dyn crate::objects::Object>>,
+    },
 }
 
 impl Value {
@@ -312,7 +321,7 @@ impl Value {
             Num(v) => *v,
             Flo(_) => panic!(),
             Bol(_) => panic!(),
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 
@@ -322,7 +331,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(v) => *v,
             Bol(_) => panic!(),
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 
@@ -332,7 +341,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(v) => v,
             Bol(_) => panic!(),
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 
@@ -342,7 +351,7 @@ impl Value {
             Num(v) => v,
             Flo(_) => panic!(),
             Bol(_) => panic!(),
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 
@@ -352,7 +361,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(_) => panic!(),
             Bol(v) => v,
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 
@@ -362,7 +371,7 @@ impl Value {
             Num(_) => panic!(),
             Flo(_) => panic!(),
             Bol(v) => *v,
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 }
@@ -575,7 +584,7 @@ impl Value {
             Bol(_) => {
                 matches!(typ, Bool)
             }
-            Reference() => panic!(),
+            Reference { .. } => panic!(),
         }
     }
 }
@@ -914,7 +923,6 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 // FIXME
                 // let enc = &String::from(encoded);
 
-
                 match cached.1 {
                     Runtime {
                         rangeStart: s,
@@ -1001,7 +1009,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             New { .. } => panic!(),
             GetField { .. } => panic!(),
             SetField { .. } => panic!(),
-            ArrayNew(_) => panic!(),
+            ArrayNew(d) => panic!(),
             ArrayStore(_) => panic!(),
             ArrayLoad(_) => panic!(),
             ArrayLength => panic!(),
@@ -1056,7 +1064,6 @@ pub fn bootStrapVM() -> VirtualMachine {
                 None => b,
                 Some(v) => v
             };
-
              */
             let genOps = [
                 PushInt(1),

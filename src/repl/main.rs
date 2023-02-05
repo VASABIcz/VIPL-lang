@@ -63,6 +63,8 @@ fn main() {
             continue
         }
 
+        // println!("tokens {:?}", &tokens);
+
         let mut tokenProvider = TokenProvider { tokens, index: 0 };
         let mut first = match parseOne(&mut tokenProvider, Ahead, &parsingUnits, None) {
             Ok(v) => v,
@@ -80,7 +82,7 @@ fn main() {
             match parse(&mut tokenProvider, Around, &parsingUnits, Some(first.clone()), &mut isPrevUsed) {
                 Ok(mut v) => {
                     if !isPrevUsed {
-                        v.push(first);
+                        v.insert(0, first);
                     }
                     v
                 },

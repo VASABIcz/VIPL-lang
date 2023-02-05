@@ -246,18 +246,13 @@ impl LexingUnit for NumericLexingUnit {
 
     fn canParse(&self, data: &str) -> bool {
         let c = data.chars().next().unwrap();
-        c == '-' || c.is_ascii_digit()
+        c.is_ascii_digit()
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
         let mut buf = String::new();
         let mut typ = TokenType::IntLiteral;
         let encounteredDot = false;
-
-        if lexer.peekChar().unwrap() == '-' {
-            buf.push('-');
-            lexer.consumeOne();
-        }
 
         while lexer.peekChar().map_or(false, |c| { c == '.' || c == '_' || c.is_numeric()}) {
             let c = lexer.peekChar().unwrap();

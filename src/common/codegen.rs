@@ -365,7 +365,6 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
                             localTypes.push(t.unwrap().clone());
                             counter += 1;
                         }
-                        https://cdn.discordapp.com/attachments/944335388892336178/1071131197255712819/114243516_fox05095-nc.png
                     }
                 }
                 inlineMain.push(op.clone())

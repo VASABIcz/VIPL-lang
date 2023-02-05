@@ -7,7 +7,7 @@ use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, Variabl
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, Colon, Comma, CRB, Identifier, ORB, Return};
+use crate::lexer::TokenType::{CCB, Colon, Comma, CRB, Identifier, Minus, ORB, Return};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
 use crate::vm::{DataType, VariableMetadata};
 
@@ -545,10 +545,22 @@ impl ParsingUnit for NumericParsingUnit {
             Some(v) => v
         }.typ;
 
-        peek == TokenType::IntLiteral
+        if peek == TokenType::IntLiteral
             || peek == TokenType::LongLiteral
             || peek == TokenType::FloatLiteral
-            || peek == TokenType::DoubleLiteral
+            || peek == TokenType::DoubleLiteral {
+            return true
+        }
+
+        let peek1 = match tokenProvider.peekIndex(1) {
+            None => return false,
+            Some(v) => v
+        }.typ;
+
+        if peek == TokenType::Minus && (peek1 == TokenType::DoubleLiteral || peek1 == TokenType::LongLiteral || peek1 == TokenType::FloatLiteral || peek1 == TokenType::IntLiteral) {
+            return true
+        }
+        return false
     }
 
     fn parse(
@@ -557,17 +569,32 @@ impl ParsingUnit for NumericParsingUnit {
         _previous: Option<Operation>,
         _parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        let peek = tokenProvider.peekOne().unwrap();
+        let mut peek = tokenProvider.peekOne().unwrap();
+
+        let mut buf = String::new();
+
+        if peek.typ == Minus {
+            buf.push('-');
+            tokenProvider.consume();
+            peek = tokenProvider.peekOne().unwrap()
+        }
+
         let res = match peek.typ {
-            TokenType::IntLiteral => Operation::Expression(IntLiteral(peek.str.clone())),
+            TokenType::IntLiteral => {
+                buf.push_str(&peek.str);
+                Operation::Expression(IntLiteral(buf))
+            },
             TokenType::LongLiteral => {
-                Operation::Expression(Expression::LongLiteral(peek.str.clone()))
+                buf.push_str(&peek.str);
+                Operation::Expression(Expression::LongLiteral(buf))
             }
             TokenType::FloatLiteral => {
-                Operation::Expression(Expression::FloatLiteral(peek.str.clone()))
+                buf.push_str(&peek.str);
+                Operation::Expression(Expression::FloatLiteral(buf))
             }
             TokenType::DoubleLiteral => {
-                Operation::Expression(Expression::DoubleLiteral(peek.str.clone()))
+                buf.push_str(&peek.str);
+                Operation::Expression(Expression::DoubleLiteral(buf))
             }
             _ => {
                 return Err(Box::new(InvalidToken { msg: format!("expected numeric token got {:?}", peek) }))

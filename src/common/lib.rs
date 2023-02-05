@@ -4,5 +4,6 @@ pub mod lexer;
 pub mod parser;
 pub mod serialization;
 pub mod vm;
-mod tests;
+pub mod objects;
 pub mod bytecodeChecker;
+mod tests;

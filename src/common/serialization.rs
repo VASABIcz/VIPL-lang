@@ -1,6 +1,6 @@
 use std::mem::transmute;
 
-use crate::vm::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
+use crate::vm::{DataType, JmpType, ObjectMeta, OpCode, RawDataType, RawOpCode, VariableMetadata};
 use crate::vm::DataType::Object;
 use crate::vm::OpCode::*;
 
@@ -8,7 +8,7 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];
 
     for op in ops {
-        let opId: [u8; 64] = unsafe { std::mem::transmute((*op).clone()) };
+        let opId: [u8; 48] = unsafe { std::mem::transmute((*op).clone()) };
         buf.push(opId[0]);
 
         match op {
@@ -169,7 +169,11 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
         RawDataType::Object => {
             let n = getStr(bytes, index + consumed);
             consumed += n.1;
-            Object { name: n.0 }
+            let n2 = getSize(bytes, index + consumed);
+            consumed += n2.1;
+            todo!();
+
+            Object { 0: Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) }) }
         }
     };
 
