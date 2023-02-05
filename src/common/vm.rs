@@ -6,8 +6,8 @@ use std::fmt::Debug;
 use std::intrinsics::transmute;
 use std::ops::Deref;
 use std::rc::Rc;
-use crate::lexer::TokenType::Var;
 
+use crate::lexer::TokenType::Var;
 use crate::objects::{ObjectDefinition, Str};
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -607,6 +607,8 @@ impl Value {
             Array { .. } => {}
             Object(it) => {
                 if it.name == "String" {
+                    let mut newStr = Rc::new(RefCell::new(Str { string: "".to_string() }));
+
                     match self {
                         Reference { instance } => {
                             match instance {
@@ -616,7 +618,7 @@ impl Value {
                                 Some(v) => {
                                     match v.borrow_mut().downcast_mut::<Str>() {
                                         None => panic!(),
-                                        Some(v) => {
+                                        Some(ev) => {
                                             match value {
                                                 Reference { instance } => {
                                                     match instance {
@@ -627,7 +629,8 @@ impl Value {
                                                             match va.borrow_mut().downcast_mut::<Str>() {
                                                                 None => panic!(),
                                                                 Some(ve) => {
-                                                                    v.string.push_str(&ve.string)
+                                                                    newStr.borrow_mut().string.push_str(&ev.string);
+                                                                    newStr.borrow_mut().string.push_str(&ve.string);
                                                                 }
                                                             }
                                                         }
@@ -637,6 +640,7 @@ impl Value {
                                             }
                                         }
                                     }
+                                    *v = newStr;
                                 }
                             }
                         }
