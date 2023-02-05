@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -321,6 +322,33 @@ pub enum Value {
     Reference {
         instance: Option<Rc<RefCell<dyn Any>>>,
     },
+}
+
+impl Value {
+    pub fn valueStr(&self) -> String {
+        match self {
+            Num(it) => format!("{}", it),
+            Flo(it) => format!("{}", it),
+            Bol(it) => format!("{}", it),
+            Chr(it) => format!("{}", it),
+            Reference { instance } => {
+                match instance {
+                    None => String::from("null"),
+                    Some(v) => {
+                        let c = v.borrow_mut();
+                        match c.downcast_ref::<Str>() {
+                            None => {
+                                format!("{:?}", self)
+                            }
+                            Some(s) => {
+                                format!("{}", s.string)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Value {
@@ -1128,7 +1156,7 @@ pub fn bootStrapVM() -> VirtualMachine {
                 match instance {
                     None => {}
                     Some(ee) => {
-                        match ee.borrow().downcast_ref::<Str>() {
+                        match ee.borrow_mut().downcast_ref::<Str>() {
                             None => {}
                             Some(ff) => {
                                 println!("{}", ff.string);

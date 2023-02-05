@@ -120,20 +120,24 @@ fn main() {
 
         // println!("{:?}", &bs);
 
-        for _ in 0..bs.len() {
-            vm.opCodeCache.push(None)
-        }
-
         // println!("{:?}", &bs);
 
-        if !checkBytecode(&mut SeekableOpcodes {
+        match checkBytecode(&mut SeekableOpcodes {
             index: 0,
             opCodes: &bs,
             start: None,
             end: None,
         }, &mut localTypes, &mut AbstractStack { stack: vec![] }, &mut vm, &mut HashSet::new()) {
-            eprintln!("bytecode check failed");
-            continue
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("bytecode check");
+                handleError(e);
+                continue
+            }
+        }
+
+        for _ in 0..bs.len() {
+            vm.opCodeCache.push(None)
         }
 
         opcodes.extend(bs);
@@ -155,13 +159,7 @@ fn main() {
         opcodeIndex = opCodes.index as usize - 1;
 
         for val in &vm.stack {
-            match val {
-                Value::Num(v) => println!("{}", v),
-                Value::Flo(v) => println!("{}", v),
-                Value::Bol(v) => println!("{}", v),
-                Value::Reference { instance } => println!("object {:?}", instance.as_ref().map(|it| { it.borrow().downcast_ref::<Str>().unwrap().getName() })),
-                Value::Chr(v) => println!("{}", v)
-            }
+            println!("{}", val.valueStr())
         }
         vm.stack.clear();
     }
