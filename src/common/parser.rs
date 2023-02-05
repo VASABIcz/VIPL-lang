@@ -7,7 +7,7 @@ use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, Variabl
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Identifier, Minus, ORB, Return};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Identifier, Minus, ORB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
 use crate::vm::{DataType, VariableMetadata};
 
@@ -98,7 +98,7 @@ pub fn parse(
             if canParse && unit.canParse(&tokens) {
                 let res = if !*isPrevUser && (parserType == Around || parserType == Around) && counter == 1 {
                     *isPrevUser = true;
-                    println!("fuuuck");
+                    // println!("fuuuck");
                     unit.parse(tokens, previous.clone(), parsingUnits)?
                 } else {
                     unit.parse(tokens, None, parsingUnits)?
@@ -912,6 +912,31 @@ impl ParsingUnit for CharParsingUnit {
     }
 }
 
+struct StringParsingUnit;
+
+impl ParsingUnit for StringParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::StringLiteral)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        let str = tokenProvider.getAssert(StringLiteral)?;
+        Ok(Operation::Expression(Expression::StringLiteral(str.str.clone())))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
@@ -920,6 +945,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
+        Box::new(StringParsingUnit),
         Box::new(CallParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,

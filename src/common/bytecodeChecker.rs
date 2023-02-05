@@ -151,7 +151,8 @@ impl AbstractStack {
         match self.stack.pop() {
             None => Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: None })),
             Some(v) => {
-                if v == *typ {
+                if v != *typ {
+                    panic!();
                     Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: Some(v) }))
                 }
                 else {
@@ -272,7 +273,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                     }
                     Some(fun) => {
                         for x in 0..fun.argAmount {
-                            abstractStack.assertPop(&fun.varTable[x].typ)?;
+                            abstractStack.assertPop(&fun.varTable[fun.argAmount-x-1].typ)?;
                         }
                         match &fun.returnType {
                             None => {}

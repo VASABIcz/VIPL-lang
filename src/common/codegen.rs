@@ -8,6 +8,7 @@ use Statement::VariableCreate;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
+use crate::objects::Str;
 use crate::parser::{*};
 use crate::parser::ParsingUnitSearchType::*;
 use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
@@ -104,7 +105,14 @@ fn genExpression(
         Expression::LongLiteral(i) => ops.push(PushInt(i.parse::<isize>().unwrap())),
         Expression::FloatLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::DoubleLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
-        Expression::StringLiteral(_) => {}
+        Expression::StringLiteral(i) => {
+            ops.push(Call{ encoded: String::from("makeString()") });
+            for c in i.chars() {
+                ops.push(Dup);
+                ops.push(PushChar(c));
+                ops.push(Call { encoded: String::from("appendChar(String, char)") })
+            }
+        }
         Expression::BoolLiteral(i) => ops.push(OpCode::PushBool(i)),
         Expression::FunctionCall(e) => {
             let mut argTypes = vec![];

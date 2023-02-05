@@ -11,10 +11,11 @@ use crate::lexer::TokenType::Var;
 use crate::objects::{ObjectDefinition, Str};
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
+use crate::vm::JmpType::True;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum DataType {
     Int,
     Float,
@@ -22,6 +23,48 @@ pub enum DataType {
     Char,
     Array { inner: Box<DataType> },
     Object(Box<ObjectMeta>),
+}
+
+impl PartialEq<Self> for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Int => {
+                match other {
+                    Int => true,
+                    _ => false
+                }
+            }
+            Float => {
+                match other {
+                    Float => true,
+                    _ => false
+                }
+            }
+            Bool => {
+                match other {
+                    Bool => true,
+                    _ => false
+                }
+            }
+            Char => {
+                match other {
+                    Char => true,
+                    _ => false
+                }
+            }
+            Array { .. } => {
+                false
+            }
+            Object(o) => {
+                match other {
+                    Object(v) => {
+                        o.name == v.name
+                    }
+                    _ => false
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -562,7 +605,45 @@ impl Value {
             }
             Bool => {}
             Array { .. } => {}
-            Object { .. } => {}
+            Object(it) => {
+                if it.name == "String" {
+                    match self {
+                        Reference { instance } => {
+                            match instance {
+                                None => {
+                                    panic!()
+                                }
+                                Some(v) => {
+                                    match v.borrow_mut().downcast_mut::<Str>() {
+                                        None => panic!(),
+                                        Some(v) => {
+                                            match value {
+                                                Reference { instance } => {
+                                                    match instance {
+                                                        None => {
+                                                            panic!()
+                                                        }
+                                                        Some(va) => {
+                                                            match va.borrow_mut().downcast_mut::<Str>() {
+                                                                None => panic!(),
+                                                                Some(ve) => {
+                                                                    v.string.push_str(&ve.string)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                _ => panic!()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => panic!()
+                    }
+                }
+            }
             Char => panic!()
         }
     }
