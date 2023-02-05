@@ -170,7 +170,7 @@ fn genStatement(
             for arg in e.arguments {
                 let t = arg.toDataType(vTable, functionReturns).unwrap();
                 match t {
-                    None => return Err(Box::new(NoValue { msg: "".to_string() })),
+                    None => return Err(Box::new(NoValue { msg: "e".to_string() })),
                     Some(v) => {
                         argTypes.push(v);
                         genExpression(arg, ops, functionReturns, vTable)?;

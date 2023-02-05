@@ -102,7 +102,11 @@ impl Expression {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types);
                 match functionReturns.get(&enc) {
-                    None => Err(Box::new(TypeNotFound { typ: enc.clone() })),
+                    None => {
+                        panic!();
+                        println!("{:?}", functionReturns);
+                        Err(Box::new(TypeNotFound { typ: enc.clone() }))
+                    },
                     Some(v) => Ok(v.clone())
                 }
             }

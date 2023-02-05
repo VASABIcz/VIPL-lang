@@ -196,7 +196,7 @@ impl LexingUnit for RangeLexingUnit {
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
-        println!("parsing {:?}", self.tokenType);
+        // println!("parsing {:?}", self.tokenType);
         lexer.consumeMany(self.start.len());
 
         let mut buf = String::new();

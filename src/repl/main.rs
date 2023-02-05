@@ -11,6 +11,7 @@ use rust_vm::ast;
 use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::{bytecodeGen, complexBytecodeGen};
 use rust_vm::lexer::{Token, tokenizeSource};
+use rust_vm::objects::{Object, Str};
 use rust_vm::parser::{Operation, parse, parseOne, parseTokens, parsingUnits, TokenProvider};
 use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around};
 use rust_vm::vm::{bootStrapVM, DataType, evaluateBytecode, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
@@ -31,7 +32,8 @@ fn readInput() -> String {
 }
 
 fn handleError(err: Box<dyn Error>) {
-    eprintln!("ERROR: {}", err)
+    eprintln!("ERROR: {}", err);
+    eprintln!("ERROR: {:?}", err);
 }
 
 fn main() {
@@ -44,6 +46,10 @@ fn main() {
     let mut opcodeIndex: usize = 0;
     let mut opcodes = vec![];
     let parsingUnits = parsingUnits();
+
+    for f in &vm.functions {
+        functionReturns.insert(f.0.clone(), f.1.returnType.clone());
+    }
 
     println!("VIPL-repl");
     println!("(vasuf insejn programing language)");
@@ -153,7 +159,7 @@ fn main() {
                 Value::Num(v) => println!("{}", v),
                 Value::Flo(v) => println!("{}", v),
                 Value::Bol(v) => println!("{}", v),
-                Value::Reference { instance } => println!("object {:?}", instance.as_ref().map(|it| { it.getName() })),
+                Value::Reference { instance } => println!("object {:?}", instance.as_ref().map(|it| { it.borrow().downcast_ref::<Str>().unwrap().getName() })),
                 Value::Chr(v) => println!("{}", v)
             }
         }

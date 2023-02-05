@@ -1,6 +1,11 @@
+use std::any::Any;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::intrinsics::transmute;
+use std::ops::Deref;
 use std::rc::Rc;
+use crate::lexer::TokenType::Var;
 
 use crate::objects::{ObjectDefinition, Str};
 use crate::vm::DataType::*;
@@ -90,7 +95,7 @@ impl DataType {
             Float => Flo(0.),
             Bool => Bol(false),
             Array { .. } => panic!(),
-            Object { .. } => panic!(),
+            Object { .. } => Value::Reference { instance: None },
             Char => Chr('a')
         }
     }
@@ -314,7 +319,7 @@ pub enum Value {
     Bol(bool),
     Chr(char),
     Reference {
-        instance: Option<Rc<dyn crate::objects::Object>>,
+        instance: Option<Rc<RefCell<dyn Any>>>,
     },
 }
 
@@ -1112,9 +1117,68 @@ pub fn bootStrapVM() -> VirtualMachine {
         None,
     );
 
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata{ name: "".to_string(), typ: Object(Box::new(ObjectMeta{ name: "String".to_string(), generics: Box::new([]) })) }]), |a, b| {
+        let c = b.localVariables.get(0).unwrap();
+        match c {
+            Num(_) => {}
+            Flo(_) => {}
+            Bol(_) => {}
+            Chr(_) => {}
+            Reference { instance } => {
+                match instance {
+                    None => {}
+                    Some(ee) => {
+                        match ee.borrow().downcast_ref::<Str>() {
+                            None => {}
+                            Some(ff) => {
+                                println!("{}", ff.string);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }, None);
+
     vm.makeNative(String::from("makeString"), Box::new([]), |a, b| {
-        a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
+        a.stack.push(Value::Reference { instance: Some(Rc::new(RefCell::new(Str { string: "".to_string() }))) })
     }, Some(Object(Box::new(ObjectMeta { name: String::from("String"), generics: Box::new([]) }))));
+
+    vm.makeNative(
+        String::from("appendChar"),
+        Box::new([
+            VariableMetadata{ name: "str".to_string(), typ: Object(Box::new(ObjectMeta{ name: "String".to_string(), generics: Box::new([]) })) },
+            VariableMetadata{ name: "chr".to_string(), typ: DataType::Char }
+        ]), |a, b| {
+            let chr = match b.localVariables.get(0).unwrap() {
+                Chr(c) => *c,
+                n => {
+                    panic!("{:?}", n)
+                }
+            };
+            let str = b.localVariables.get_mut(1).unwrap();
+            match str {
+                Reference { instance } => {
+                    match instance {
+                        None => {
+                            panic!()
+                        }
+                        Some(v) => {
+                            match v.borrow_mut().downcast_mut::<Str>() {
+                                None => {}
+                                Some(v) => {
+                                    // println!("appending {} char {}", &v.string, chr);
+                                    v.string.push(chr)
+                                }
+                            }
+                        }
+                    }
+                }
+                ee => {
+                    panic!("{:?}", ee);
+                }
+            }
+        }, None);
 
     vm
 }

@@ -5,6 +5,7 @@ use std::ops::Deref;
 
 use crate::vm::{DataType, Value};
 
+
 pub trait Object: Debug {
     fn getName(&self) -> String;
     fn getFields(&self) -> &[DataType];
