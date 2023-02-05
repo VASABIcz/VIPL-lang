@@ -72,7 +72,6 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
         }
     };
     let retClone = ret.clone();
-    index += 1;
 
     let size = abstractStack.len();
 
@@ -83,17 +82,20 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
     }
 
     let genName = genFunNameMeta(&name, vars);
-    checkedFunctions.insert(genName);
+    checkedFunctions.insert(genName.clone());
     opCodes.index += index as isize;
 
     checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm, checkedFunctions)?;
 
+    // FIXME
+    opCodes.nextOpcode();
+
     let last = match abstractStack.stack.last() {
         None => {
             if retClone.is_some() {
-                return Err(Box::new(InvalidOpcode{ msg: format!("invalid stack state") }))
+                return Err(Box::new(InvalidOpcode { msg: format!("expected function {} to return {:?}", genName, retClone) }))
             } else if size != abstractStack.len() {
-                return Err(Box::new(InvalidOpcode{ msg: format!("invalid stack state") }))
+                return Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
             }
             return Ok(())
         }
@@ -106,16 +108,16 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
                 Ok(())
             }
             else {
-                Err(Box::new(InvalidOpcode{ msg: format!("invalid stack state") }))
+                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
             }
         },
         Some(v) => {
-            if size == abstractStack.len() + 1 && *last == v {
+            if *last != v {
+                Err(Box::new(InvalidOpcode { msg: format!("function returned wrong type {:?} expected {:?}", *last, v) }))
+            } else if size + 1 != abstractStack.len() {
+                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
+            } else {
                 Ok(())
-            }
-            else {
-                Err(Box::new(InvalidOpcode{ msg: format!("invalid stack state") }))
-
             }
         }
     }
@@ -152,7 +154,6 @@ impl AbstractStack {
             None => Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: None })),
             Some(v) => {
                 if v != *typ {
-                    panic!();
                     Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: Some(v) }))
                 }
                 else {
@@ -278,6 +279,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                         match &fun.returnType {
                             None => {}
                             Some(v) => {
+                                // println!("returning value {:?}", v);
                                 abstractStack.push(v.clone())
                             }
                         }
