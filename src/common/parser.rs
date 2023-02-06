@@ -3,11 +3,11 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter, write};
 use std::fs::read;
 
-use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
+use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, CSB, Identifier, Minus, New, ORB, OSB, Return, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, CSB, Equals, Identifier, Minus, New, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, ObjectMeta, VariableMetadata};
 
@@ -82,6 +82,7 @@ pub fn parse(
 ) -> Result<Vec<Operation>, Box<dyn Error>> {
     let mut buf = vec![];
     let mut counter = 0;
+    let mut opBuf = None;
 
 
     'main: while !tokens.isDone() {
@@ -98,15 +99,35 @@ pub fn parse(
             if canParse && unit.canParse(&tokens) {
                 let res = if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1 {
                     *isPrevUser = true;
+                    println!("a {:?}", &previous);
                     unit.parse(tokens, previous.clone(), parsingUnits)?
                 } else {
-                    unit.parse(tokens, None, parsingUnits)?
+                    println!("b {:?}", &previous);
+
+                    if parserType == Around || parserType == Back {
+                        unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
+                    } else {
+                        unit.parse(tokens, None, parsingUnits)?
+                    }
                 };
+
+                if parserType == Back {
+                    opBuf = Some(res);
+                    continue 'main
+                }
+
+                println!("{:?}", &res);
                 buf.push(res);
                 continue 'main;
             }
         }
         return Err(Box::new(NoSuchParsingUnit { typ, token: tokens.peekOne().map(|it| { it.clone() }) }))
+    }
+    match opBuf {
+        None => {}
+        Some(v) => {
+            buf.push(v)
+        }
     }
     Ok(buf)
 }
@@ -125,6 +146,7 @@ pub fn parseTokens(
             let canParse = parserType == ParsingUnitSearchType::Ahead;
 
             if canParse && unit.canParse(&tokens) {
+                println!("sus parse");
                 let res = unit.parse(&mut tokens, None, &parsingUnits)?;
                 buf.push(res);
                 continue 'main;
@@ -501,6 +523,7 @@ impl ParsingUnit for ArithmeticParsingUnit {
 
         match par {
             None => Ok(Operation::Expression(Expression::ArithmeticOp {
+                // FIXME
                 left: Box::new(previous.unwrap().asExpr()?),
                 right: Box::new(res.asExpr()?),
                 op: self.op.clone(),
@@ -711,7 +734,7 @@ impl ParsingUnit for WhileParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        tokenProvider.getAssert(TokenType::While);
+        tokenProvider.getAssert(TokenType::While)?;
 
         let op = parseExpr(tokenProvider, parser)?;
 
@@ -735,7 +758,7 @@ pub struct IfParsingUnit;
 fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>]) -> Result<Vec<Statement>, Box<dyn Error>> {
     let mut statements = vec![];
 
-    tokenProvider.getAssert(TokenType::OCB);
+    tokenProvider.getAssert(TokenType::OCB)?;
 
     while !tokenProvider.isPeekType(CCB) {
         statements.push(
@@ -743,7 +766,7 @@ fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
         );
     }
 
-    tokenProvider.getAssert(TokenType::CCB);
+    tokenProvider.getAssert(TokenType::CCB)?;
 
     Ok(statements)
 }
@@ -1027,12 +1050,45 @@ impl ParsingUnit for ArrayIndexingParsingUnit {
         let expr = parseExpr(tokenProvider, parser)?;
         tokenProvider.getAssert(CSB)?;
 
-        Ok(Operation::Expression(Expression::ArrayIndexing { expr: Box::new(previous.ok_or("cannot index non existing item")?.asExpr()?), index: Box::new(expr) }))
+        Ok(Operation::Expression(Expression::ArrayIndexing(Box::new(ArrayAccess { expr: previous.ok_or("cannot index non existing item")?.asExpr()?, index: expr }))))
     }
 
     fn getPriority(&self) -> usize { usize::MAX }
 
     fn setPriority(&mut self, priority: usize) {}
+}
+
+struct ArrayAssignParsingUnit;
+
+impl ParsingUnit for ArrayAssignParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Around
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Equals)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Equals)?;
+        let value = parseExpr(tokenProvider, parser)?;
+
+        let arrayExpr = previous.ok_or("array asign must have expression")?.asExpr()?;
+        let arrayAccess = match arrayExpr {
+            Expression::ArrayIndexing(v) => Some(v),
+            _ => None
+        }.ok_or("expected array indexing")?;
+
+        Ok(Operation::Statement(Statement::ArrayAssign { left: *arrayAccess, right: value }))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
 }
 
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
@@ -1046,6 +1102,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArrayIndexingParsingUnit),
         Box::new(StringParsingUnit),
         Box::new(ArrayLiteralParsingUnit),
+        Box::new(ArrayAssignParsingUnit),
         Box::new(CallParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,

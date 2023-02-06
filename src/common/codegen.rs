@@ -159,9 +159,9 @@ fn genExpression(
                 ops.push(ArrayStore(d.clone()));
             }
         }
-        Expression::ArrayIndexing { expr, index } => {
-            genExpression(*expr, ops, functionReturns, vTable)?;
-            genExpression(*index, ops, functionReturns, vTable)?;
+        Expression::ArrayIndexing(i) => {
+            genExpression(i.expr, ops, functionReturns, vTable)?;
+            genExpression(i.index, ops, functionReturns, vTable)?;
             ops.push(OpCode::ArrayLoad(DataType::Int));
         }
     }
@@ -271,6 +271,13 @@ fn genStatement(
                     ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });
                 }
             }
+        }
+        Statement::ArrayAssign { left, right } => {
+            genExpression(left.expr, ops, functionReturns, vTable)?;
+            let t = right.toDataType(vTable, functionReturns)?.ok_or("cant assign void to array")?;
+            genExpression(right, ops, functionReturns, vTable)?;
+            genExpression(left.index, ops, functionReturns, vTable)?;
+            ops.push(ArrayStore(t))
         }
     }
     Ok(())

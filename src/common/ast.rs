@@ -46,7 +46,13 @@ pub enum Expression {
     Variable(String),
     CharLiteral(char),
     ArrayLiteral(Vec<Expression>),
-    ArrayIndexing{ expr: Box<Expression>, index: Box<Expression> }
+    ArrayIndexing(Box<ArrayAccess>)
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayAccess {
+    pub expr: Expression,
+    pub index: Expression,
 }
 
 #[derive(Debug, Clone)]
@@ -126,8 +132,8 @@ impl Expression {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
                 Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t]) }))))
             }
-            Expression::ArrayIndexing { expr, index } => {
-                expr.toDataType(typesMapping, functionReturns)
+            Expression::ArrayIndexing(i) => {
+                i.expr.toDataType(typesMapping, functionReturns)
             }
         }
     }
@@ -141,6 +147,7 @@ pub enum Statement {
     VariableMod(VariableMod),
     If(If),
     Return(Return),
+    ArrayAssign { left: ArrayAccess, right: Expression }
 }
 
 #[derive(Debug, Clone)]
