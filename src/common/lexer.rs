@@ -137,6 +137,7 @@ pub enum TokenType {
     Continue,
     Break,
     Return,
+    New,
 
     ORB,
     CRB,
@@ -393,6 +394,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("continue", TokenType::Continue),
         KeywordLexingUnit::new("false", TokenType::False),
         KeywordLexingUnit::new("true", TokenType::True),
+        KeywordLexingUnit::new("new", TokenType::New),
 
         //
         KeywordLexingUnit::new("+=", TokenType::AddAs),

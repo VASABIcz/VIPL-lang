@@ -1,9 +1,12 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::rc::Rc;
 
+use crate::objects::Array;
 use crate::vm::*;
-use crate::vm::DataType::{Bool, Char, Float, Int};
+use crate::vm::DataType::{Bool, Char, Float, Int, Object};
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
@@ -343,13 +346,24 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             New { .. } => panic!(),
             GetField { .. } => panic!(),
             SetField { .. } => panic!(),
-            ArrayNew(_) => panic!(),
-            ArrayStore(_) => panic!(),
-            ArrayLoad(_) => panic!(),
+            ArrayNew(t) => {
+                abstractStack.assertPop(&Int)?;
+                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))
+            },
+            ArrayStore(t) => {
+                abstractStack.assertPop(&Int)?;
+                abstractStack.assertPop(t)?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))?;
+            },
+            ArrayLoad(t) => {
+                abstractStack.assertPop(&Int)?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))?;
+                abstractStack.push(t.clone())
+            },
             ArrayLength => panic!(),
             Inc { typ, index } => {
-                if *index >= abstractLocals.len() || *index < 0 {
-                    return Err(Box::new(OutOfBoundsException{
+                if *index >= abstractLocals.len() {
+                    return Err(Box::new(OutOfBoundsException {
                         max: (abstractLocals.len() - 1) as isize,
                         index: *index as isize,
                         msg: "locals".to_string(),

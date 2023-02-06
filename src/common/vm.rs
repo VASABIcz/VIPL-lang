@@ -15,7 +15,7 @@ use crate::vm::JmpType::True;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DataType {
     Int,
     Float,
@@ -25,48 +25,6 @@ pub enum DataType {
     Object(Box<ObjectMeta>),
 }
 
-impl PartialEq<Self> for DataType {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            Int => {
-                match other {
-                    Int => true,
-                    _ => false
-                }
-            }
-            Float => {
-                match other {
-                    Float => true,
-                    _ => false
-                }
-            }
-            Bool => {
-                match other {
-                    Bool => true,
-                    _ => false
-                }
-            }
-            Char => {
-                match other {
-                    Char => true,
-                    _ => false
-                }
-            }
-            Array { .. } => {
-                false
-            }
-            Object(o) => {
-                match other {
-                    Object(v) => {
-                        o.name == v.name
-                    }
-                    _ => false
-                }
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct ObjectMeta {
     pub name: String,
@@ -74,6 +32,7 @@ pub struct ObjectMeta {
 }
 
 impl DataType {
+    /*
     pub fn fromString(s: &str) -> Self {
         if s.ends_with("[]") {
             return DataType::Array {
@@ -88,6 +47,8 @@ impl DataType {
             _ => DataType::Object(Box::new(ObjectMeta { name: s.to_string(), generics: Box::new([]) })),
         }
     }
+
+     */
 }
 
 #[repr(u8)]
@@ -1150,10 +1111,57 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             New { .. } => panic!(),
             GetField { .. } => panic!(),
             SetField { .. } => panic!(),
-            ArrayNew(d) => panic!(),
-            ArrayStore(_) => panic!(),
-            ArrayLoad(_) => panic!(),
-            ArrayLength => panic!(),
+            ArrayNew(d) => {
+                println!("{}", vm.stack.len());
+                let size = vm.stack.pop().unwrap();
+                vm.stack.push(Value::Reference { instance: Some(Rc::new(RefCell::new(crate::objects::Array { internal: vec![], typ: d.clone() }))) })
+            },
+            ArrayStore(_) => {
+                let index = vm.stack.pop().unwrap().getNum();
+                let val = vm.stack.pop().unwrap();
+                match vm.stack.pop().unwrap() {
+                    Reference { instance } => {
+                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                            Some(v) => {
+                                if index as usize == v.internal.len() {
+                                    v.internal.push(val)
+                                } else {
+                                    v.internal[index as usize] = val
+                                }
+                            }
+                            None => panic!()
+                        }
+                    }
+                    _ => panic!()
+                };
+            },
+            ArrayLoad(_) => {
+                let index = vm.stack.pop().unwrap().getNum();
+                match vm.stack.pop().unwrap() {
+                    Reference { instance } => {
+                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                            None => {}
+                            Some(v) => {
+                                vm.stack.push(v.internal.get(index as usize).unwrap().clone())
+                            }
+                        }
+                    }
+                    _ => panic!()
+                };
+            },
+            ArrayLength => {
+                match vm.stack.pop().unwrap() {
+                    Reference { instance } => {
+                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                            None => {}
+                            Some(v) => {
+                                vm.stack.push(Value::Num(v.internal.len() as isize))
+                            }
+                        }
+                    }
+                    _ => panic!()
+                };
+            },
             Inc { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().inc(typ),
             Dec { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().dec(typ),
             PushChar(c) => {

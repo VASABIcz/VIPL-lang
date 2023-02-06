@@ -5,7 +5,6 @@ use std::ops::Deref;
 
 use crate::vm::{DataType, Value};
 
-
 pub trait Object: Debug {
     fn getName(&self) -> String;
     fn getFields(&self) -> &[DataType];
@@ -42,7 +41,8 @@ impl Object for Str {
 
 #[derive(Debug)]
 pub struct Array {
-    internal: Vec<Value>,
+    pub internal: Vec<Value>,
+    pub typ: DataType,
 }
 
 impl Object for Array {

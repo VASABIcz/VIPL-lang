@@ -148,6 +148,17 @@ fn genExpression(
         Expression::CharLiteral(c) => {
             ops.push(PushChar(c))
         }
+        Expression::ArrayLiteral(i) => {
+            let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns)?.ok_or("array elements must have type")?;
+            ops.push(PushInt(i.len() as isize));
+            ops.push(ArrayNew(d.clone()));
+            for (ind, exp) in i.iter().enumerate() {
+                ops.push(Dup);
+                genExpression(exp.clone(), ops, functionReturns, vTable)?;
+                ops.push(PushInt(ind as isize));
+                ops.push(ArrayStore(d.clone()));
+            }
+        }
     }
     Ok(())
 }

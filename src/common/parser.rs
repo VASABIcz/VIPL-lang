@@ -7,9 +7,9 @@ use crate::ast::{Expression, FunctionCall, ModType, Node, Op, Statement, Variabl
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Identifier, Minus, ORB, Return, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, CSB, Identifier, Minus, New, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around};
-use crate::vm::{DataType, VariableMetadata};
+use crate::vm::{DataType, ObjectMeta, VariableMetadata};
 
 #[derive(Debug)]
 struct NoSuchParsingUnit {
@@ -344,8 +344,9 @@ impl ParsingUnit for FunctionParsingUnit {
         while !tokens.isPeekType(TokenType::CRB) {
             let argName = tokens.getIdentifier()?;
             tokens.getAssert(TokenType::Colon)?;
-            let argType = tokens.getIdentifier()?;
-            let t = DataType::fromString(&argType);
+
+            let t = parseDataType(tokens)?;
+
             args.push(VariableMetadata {
                 name: argName,
                 typ: t,
@@ -359,7 +360,7 @@ impl ParsingUnit for FunctionParsingUnit {
 
         if tokens.isPeekType(Colon) {
             tokens.getAssert(Colon)?;
-            returnType = Some(DataType::fromString(&tokens.getIdentifier()?));
+            returnType = Some(parseDataType(tokens)?);
         }
 
         let statements = parseBody(tokens, parser)?;
@@ -749,13 +750,6 @@ fn parseBody(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
 }
 
 fn parseExpr(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>]) -> Result<Expression, Box<dyn Error>> {
-    let mut encounteredBrackets = false;
-
-    if tokenProvider.isPeekType(TokenType::ORB) {
-        tokenProvider.getAssert(TokenType::ORB)?;
-        encounteredBrackets = true;
-    }
-
     let res = parseOne(tokenProvider, Ahead, parser, None)?;
     let par = getParsingUnit(tokenProvider, Around, parser);
 
@@ -763,10 +757,6 @@ fn parseExpr(tokenProvider: &mut TokenProvider, parser: &[Box<dyn ParsingUnit>])
         None => res,
         Some(p) => p.parse(tokenProvider, Some(res), parser)?,
     };
-
-    if encounteredBrackets {
-        tokenProvider.getAssert(TokenType::CRB);
-    }
 
     op.asExpr()
 }
@@ -928,6 +918,28 @@ impl ParsingUnit for StringParsingUnit {
         Ok(Operation::Expression(Expression::StringLiteral(str.str.clone())))
     }
 
+    fn getPriority(&self) -> usize { usize::MAX }
+
+    fn setPriority(&mut self, priority: usize) {}
+}
+
+/*
+struct NewParsingUnit;
+
+impl ParsingUnit for NewParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(New)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(New)?
+        return Ok(None)
+    }
+
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -935,6 +947,71 @@ impl ParsingUnit for StringParsingUnit {
     fn setPriority(&mut self, priority: usize) {
         todo!()
     }
+}
+
+ */
+
+pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Error>> {
+    let t = tokens.getIdentifier()?;
+
+    match t.as_str() {
+        "bool" => {
+            return Ok(DataType::Bool)
+        }
+        "char" => {
+            return Ok(DataType::Char)
+        }
+        "int" => {
+            return Ok(DataType::Int)
+        }
+        "float" => {
+            return Ok(DataType::Float)
+        }
+        _ => {}
+    }
+
+    let mut generics = vec![];
+
+    if tokens.isPeekType(TokenType::Gt) {
+        tokens.getAssert(TokenType::Gt)?;
+        while !tokens.isPeekType(TokenType::Less) {
+            generics.push(parseDataType(tokens)?);
+        }
+        tokens.getAssert(TokenType::Less)?;
+    }
+    Ok(DataType::Object(Box::new(ObjectMeta { name: t, generics: generics.into_boxed_slice() })))
+}
+
+struct ArrayLiteralParsingUnit;
+
+impl ParsingUnit for ArrayLiteralParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(OSB)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(OSB)?;
+
+        let mut buf = vec![];
+
+        while !tokenProvider.isPeekType(CSB) {
+            buf.push(parseExpr(tokenProvider, parser)?);
+            if tokenProvider.isPeekType(Comma) {
+                tokenProvider.getAssert(Comma)?;
+            }
+        }
+        tokenProvider.getAssert(CSB)?;
+
+        return Ok(Operation::Expression(Expression::ArrayLiteral(buf)))
+    }
+
+    fn getPriority(&self) -> usize { usize::MAX }
+
+    fn setPriority(&mut self, priority: usize) {}
 }
 
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
@@ -946,6 +1023,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
         Box::new(StringParsingUnit),
+        Box::new(ArrayLiteralParsingUnit),
         Box::new(CallParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,

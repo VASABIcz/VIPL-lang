@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::vm::{DataType, genFunName, ObjectMeta, VariableMetadata};
-use crate::vm::DataType::{Bool, Char};
+use crate::vm::DataType::{Bool, Char, Object};
 
 #[derive(Debug)]
 pub(crate) struct TypeNotFound {
@@ -44,7 +44,8 @@ pub enum Expression {
     BoolLiteral(bool),
     FunctionCall(FunctionCall),
     Variable(String),
-    CharLiteral(char)
+    CharLiteral(char),
+    ArrayLiteral(Vec<Expression>)
 }
 
 #[derive(Debug, Clone)]
@@ -119,7 +120,11 @@ impl Expression {
                 }
             }
             Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
-            Expression::CharLiteral(_) => Ok(Some(Char))
+            Expression::CharLiteral(_) => Ok(Some(Char)),
+            Expression::ArrayLiteral(e) => {
+                let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
+                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t]) }))))
+            }
         }
     }
 }
