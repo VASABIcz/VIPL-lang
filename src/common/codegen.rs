@@ -186,6 +186,7 @@ fn genStatement(
     ops: &mut Vec<OpCode>,
     functionReturns: &HashMap<String, Option<DataType>>,
     vTable: &HashMap<String, (DataType, usize)>,
+    loopContext: Option<usize>
 ) -> Result<(), Box<dyn Error>> {
     match statement {
         Statement::FunctionExpr(e) => {
@@ -238,7 +239,7 @@ fn genStatement(
                     genExpression(w.exp, ops, functionReturns, vTable)?;
                     let mut bodyBuf = vec![];
                     for s in w.body {
-                        genStatement(s, &mut bodyBuf, functionReturns, vTable)?;
+                        genStatement(s, &mut bodyBuf, functionReturns, vTable, Some(size))?;
                     }
                     let len = bodyBuf.len();
                     ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::False });
@@ -250,7 +251,7 @@ fn genStatement(
         Statement::If(flow) => {
             let mut buf = vec![];
             for s in flow.body {
-                genStatement(s, &mut buf, functionReturns, vTable)?;
+                genStatement(s, &mut buf, functionReturns, vTable, loopContext)?;
             }
 
             genExpression(flow.condition, ops, functionReturns, vTable)?;
@@ -266,7 +267,7 @@ fn genStatement(
                 Some(els) => {
                     buf = vec![];
                     for s in els {
-                        genStatement(s, &mut buf, functionReturns, vTable)?;
+                        genStatement(s, &mut buf, functionReturns, vTable, loopContext)?;
                     }
 
                     ops.push(OpCode::Jmp { offset: buf.len() as isize, jmpType: JmpType::Jmp });
@@ -304,6 +305,21 @@ fn genStatement(
             genExpression(left.index, ops, functionReturns, vTable)?;
             ops.push(ArrayStore(t))
         }
+        Statement::Continue => {
+            let index = loopContext.ok_or("continue can be only used in loops")?;
+            ops.push(Jmp { offset: (index - ops.len() + 2) as isize, jmpType: JmpType::Jmp })
+        },
+        Statement::Break => panic!(),
+        Statement::Loop(body) => {
+            let mut buf = vec![];
+            let context = ops.len();
+            for s in body {
+                genStatement(s, &mut buf, functionReturns, vTable, Some(context))?;
+            }
+            let bufLen = buf.len() as isize;
+            ops.extend(buf);
+            ops.push(OpCode::Jmp { offset: (bufLen + 1) * -1, jmpType: JmpType::Jmp });
+        }
     }
     Ok(())
 }
@@ -325,7 +341,7 @@ fn genFunctionDef(
     ops.push(FunReturn { typ: fun.returnType });
 
     for statement in fun.body {
-        genStatement(statement, ops, functionReturns, &vTable.1)?;
+        genStatement(statement, ops, functionReturns, &vTable.1, None)?;
     }
     ops.push(OpCode::Return);
     ops.push(OpCode::FunEnd);
@@ -382,7 +398,7 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals)?;
+                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
             }
             Operation::Expression(e) => {
                 genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
@@ -445,7 +461,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals)?;
+                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
             }
             Operation::Expression(e) => {
                 genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;

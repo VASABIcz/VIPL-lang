@@ -8,8 +8,9 @@ use std::usize;
 use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
+use crate::ast::Statement::Break;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, CSB, Equals, Identifier, Minus, New, ORB, OSB, Return, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, New, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, ObjectMeta, VariableMetadata};
 
@@ -1094,10 +1095,87 @@ impl ParsingUnit for ArrayAssignParsingUnit {
     }
 }
 
+struct ContinueParsingUnit;
+
+impl ParsingUnit for ContinueParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Continue)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Continue)?;
+        Ok(Operation::Statement(Statement::Continue))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+struct BreakParsingUnit;
+
+impl ParsingUnit for BreakParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::Break)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(TokenType::Break)?;
+        Ok(Operation::Statement(Statement::Break))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+struct LoopParsingUnit;
+
+impl ParsingUnit for LoopParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Loop)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Loop)?;
+        let body = parseBody(tokenProvider, parser)?;
+        Ok(Operation::Statement(Statement::Loop(body)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
         Box::new(WhileParsingUnit),
+        Box::new(LoopParsingUnit),
         Box::new(FunctionParsingUnit),
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
@@ -1107,6 +1185,8 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArrayLiteralParsingUnit),
         Box::new(ArrayAssignParsingUnit),
         Box::new(CallParsingUnit),
+        Box::new(BreakParsingUnit),
+        Box::new(ContinueParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,
             typ: TokenType::Mul,
@@ -1115,7 +1195,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArithmeticParsingUnit {
             op: Op::Div,
             typ: TokenType::Div,
-            priority: 1
+            priority: 1,
         }),
         Box::new(ArithmeticParsingUnit {
             op: Op::Add,

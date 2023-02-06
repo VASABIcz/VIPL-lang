@@ -147,7 +147,10 @@ pub enum Statement {
     VariableMod(VariableMod),
     If(If),
     Return(Return),
-    ArrayAssign { left: ArrayAccess, right: Expression }
+    ArrayAssign { left: ArrayAccess, right: Expression },
+    Continue,
+    Break,
+    Loop(Vec<Statement>),
 }
 
 #[derive(Debug, Clone)]
