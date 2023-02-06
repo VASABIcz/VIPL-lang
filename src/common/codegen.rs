@@ -241,14 +241,39 @@ fn genStatement(
                         genStatement(s, &mut bodyBuf, functionReturns, vTable)?;
                     }
                     let len = bodyBuf.len();
-                    ops.push(Not);
-                    ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::True });
+                    ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::False });
                     ops.extend(bodyBuf);
                     ops.push(OpCode::Jmp { offset: (ops.len() as isize - size as isize + 1) * -1, jmpType: JmpType::Jmp })
                 }
             }
         }
-        Statement::If(_) => {}
+        Statement::If(flow) => {
+            let mut buf = vec![];
+            for s in flow.body {
+                genStatement(s, &mut buf, functionReturns, vTable)?;
+            }
+
+            genExpression(flow.condition, ops, functionReturns, vTable)?;
+            let mut jumpDist = buf.len() as isize;
+            if flow.elseBody.is_some() {
+                jumpDist += 1;
+            }
+            ops.push(OpCode::Jmp { offset: jumpDist, jmpType: JmpType::False });
+            ops.extend(buf);
+
+            match flow.elseBody {
+                None => {}
+                Some(els) => {
+                    buf = vec![];
+                    for s in els {
+                        genStatement(s, &mut buf, functionReturns, vTable)?;
+                    }
+
+                    ops.push(OpCode::Jmp { offset: buf.len() as isize, jmpType: JmpType::Jmp });
+                    ops.extend(buf);
+                }
+            }
+        },
         Statement::Return(ret) => {
             genExpression(ret.exp, ops, functionReturns, vTable)?;
             ops.push(OpCode::Return)

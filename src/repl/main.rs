@@ -13,7 +13,7 @@ use rust_vm::codegen::{bytecodeGen, complexBytecodeGen};
 use rust_vm::lexer::{Token, tokenizeSource};
 use rust_vm::objects::{Object, Str};
 use rust_vm::parser::{Operation, parse, parseOne, parseTokens, parsingUnits, TokenProvider};
-use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around};
+use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use rust_vm::vm::{bootStrapVM, DataType, evaluateBytecode, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 use rust_vm::vm::RawOpCode::PushInt;
 
@@ -70,10 +70,10 @@ fn main() {
             continue
         }
 
-        // println!("tokens {:?}", &tokens);
+        println!("tokens {:?}", &tokens);
 
         let mut tokenProvider = TokenProvider { tokens, index: 0 };
-        let mut first = match parseOne(&mut tokenProvider, Ahead, &parsingUnits, None) {
+        let first = match parseOne(&mut tokenProvider, Ahead, &parsingUnits, None) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("first parser");
@@ -86,7 +86,7 @@ fn main() {
         // println!("first {:?}", &first);
 
         let res = if !tokenProvider.isDone() {
-            match parse(&mut tokenProvider, Around, &parsingUnits, Some(first.clone()), &mut isPrevUsed) {
+            match parse(&mut tokenProvider, Back, &parsingUnits, Some(first.clone()), &mut isPrevUsed) {
                 Ok(mut v) => {
                     if !isPrevUsed {
                         v.insert(0, first);

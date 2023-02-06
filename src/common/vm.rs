@@ -114,6 +114,7 @@ pub enum JmpType {
     Gt,
     Less,
     True,
+    False
 }
 
 impl JmpType {
@@ -965,6 +966,13 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 JmpType::True => {
                     let a = vm.stack.pop().unwrap();
                     if a.getBool() {
+                        let x = *offset;
+                        opCodes.seek(x)
+                    }
+                }
+                JmpType::False => {
+                    let a = vm.stack.pop().unwrap();
+                    if !a.getBool() {
                         let x = *offset;
                         opCodes.seek(x)
                     }

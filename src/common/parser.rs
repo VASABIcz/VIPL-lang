@@ -1,7 +1,9 @@
 use core::fmt;
+use std::char::MAX;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter, write};
 use std::fs::read;
+use std::usize;
 
 use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
 use crate::ast;
@@ -91,9 +93,9 @@ pub fn parse(
             let parserType = unit.getType();
 
             let canParse = match typ {
-                ParsingUnitSearchType::Around => true,
-                ParsingUnitSearchType::Back => parserType == ParsingUnitSearchType::Back,
-                ParsingUnitSearchType::Ahead => parserType == ParsingUnitSearchType::Ahead,
+                Around => true,
+                Back => parserType == Back || parserType == Around,
+                Ahead => parserType == Ahead || parserType == Around,
             };
 
             if canParse && unit.canParse(&tokens) {
@@ -361,10 +363,10 @@ impl ParsingUnit for FunctionParsingUnit {
         let mut argCount = 0;
         let mut returnType = None;
 
-        tokens.getAssert(TokenType::ORB);
-        while !tokens.isPeekType(TokenType::CRB) {
+        tokens.getAssert(ORB)?;
+        while !tokens.isPeekType(CRB) {
             let argName = tokens.getIdentifier()?;
-            tokens.getAssert(TokenType::Colon)?;
+            tokens.getAssert(Colon)?;
 
             let t = parseDataType(tokens)?;
 
@@ -462,7 +464,7 @@ impl ParsingUnit for CallParsingUnit {
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
         let name = tokens.getIdentifier()?;
-        tokens.getAssert(TokenType::ORB)?;
+        tokens.getAssert(ORB)?;
 
         let mut args = vec![];
 
@@ -580,7 +582,7 @@ impl ParsingUnit for NumericParsingUnit {
             Some(v) => v
         }.typ;
 
-        if peek == TokenType::Minus && (peek1 == TokenType::DoubleLiteral || peek1 == TokenType::LongLiteral || peek1 == TokenType::FloatLiteral || peek1 == TokenType::IntLiteral) {
+        if peek == Minus && (peek1 == TokenType::DoubleLiteral || peek1 == TokenType::LongLiteral || peek1 == TokenType::FloatLiteral || peek1 == TokenType::IntLiteral) {
             return true
         }
         return false
@@ -705,7 +707,7 @@ impl ParsingUnit for ReturnParsingUnit {
     }
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
-        tokenProvider.getAssert(Return);
+        tokenProvider.getAssert(Return)?;
         let exp = parseExpr(tokenProvider, parser)?;
         return Ok(Operation::Statement(Statement::Return(ast::Return { exp })))
     }
@@ -798,7 +800,7 @@ impl ParsingUnit for IfParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        tokenProvider.getAssert(TokenType::If);
+        tokenProvider.getAssert(TokenType::If)?;
 
         let cond = parseExpr(tokenProvider, parser)?;
 
@@ -842,7 +844,10 @@ impl ParsingUnit for BracketsParsingUnit {
     }
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
-        Ok(Operation::Expression(parseExpr(tokenProvider, parser)?))
+        tokenProvider.getAssert(ORB)?;
+        let expr = Ok(Operation::Expression(parseExpr(tokenProvider, parser)?));
+        tokenProvider.getAssert(CRB)?;
+        expr
     }
 
     fn getPriority(&self) -> usize {
@@ -1082,9 +1087,7 @@ impl ParsingUnit for ArrayAssignParsingUnit {
         Ok(Operation::Statement(Statement::ArrayAssign { left: *arrayAccess, right: value }))
     }
 
-    fn getPriority(&self) -> usize {
-        todo!()
-    }
+    fn getPriority(&self) -> usize { usize::MAX }
 
     fn setPriority(&mut self, priority: usize) {
         todo!()
