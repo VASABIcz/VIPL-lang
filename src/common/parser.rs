@@ -8,7 +8,7 @@ use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, CSB, Identifier, Minus, New, ORB, OSB, Return, StringLiteral};
-use crate::parser::ParsingUnitSearchType::{Ahead, Around};
+use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, ObjectMeta, VariableMetadata};
 
 #[derive(Debug)]
@@ -96,9 +96,8 @@ pub fn parse(
             };
 
             if canParse && unit.canParse(&tokens) {
-                let res = if !*isPrevUser && (parserType == Around || parserType == Around) && counter == 1 {
+                let res = if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1 {
                     *isPrevUser = true;
-                    // println!("fuuuck");
                     unit.parse(tokens, previous.clone(), parsingUnits)?
                 } else {
                     unit.parse(tokens, None, parsingUnits)?
@@ -1014,6 +1013,28 @@ impl ParsingUnit for ArrayLiteralParsingUnit {
     fn setPriority(&mut self, priority: usize) {}
 }
 
+struct ArrayIndexingParsingUnit;
+
+impl ParsingUnit for ArrayIndexingParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType { Back }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(OSB)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(OSB)?;
+        let expr = parseExpr(tokenProvider, parser)?;
+        tokenProvider.getAssert(CSB)?;
+
+        Ok(Operation::Expression(Expression::ArrayIndexing { expr: Box::new(previous.ok_or("cannot index non existing item")?.asExpr()?), index: Box::new(expr) }))
+    }
+
+    fn getPriority(&self) -> usize { usize::MAX }
+
+    fn setPriority(&mut self, priority: usize) {}
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
@@ -1022,6 +1043,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(StatementVarCreateParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
+        Box::new(ArrayIndexingParsingUnit),
         Box::new(StringParsingUnit),
         Box::new(ArrayLiteralParsingUnit),
         Box::new(CallParsingUnit),

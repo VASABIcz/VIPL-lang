@@ -159,6 +159,11 @@ fn genExpression(
                 ops.push(ArrayStore(d.clone()));
             }
         }
+        Expression::ArrayIndexing { expr, index } => {
+            genExpression(*expr, ops, functionReturns, vTable)?;
+            genExpression(*index, ops, functionReturns, vTable)?;
+            ops.push(OpCode::ArrayLoad(DataType::Int));
+        }
     }
     Ok(())
 }

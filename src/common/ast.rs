@@ -45,7 +45,8 @@ pub enum Expression {
     FunctionCall(FunctionCall),
     Variable(String),
     CharLiteral(char),
-    ArrayLiteral(Vec<Expression>)
+    ArrayLiteral(Vec<Expression>),
+    ArrayIndexing{ expr: Box<Expression>, index: Box<Expression> }
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +125,9 @@ impl Expression {
             Expression::ArrayLiteral(e) => {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
                 Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t]) }))))
+            }
+            Expression::ArrayIndexing { expr, index } => {
+                expr.toDataType(typesMapping, functionReturns)
             }
         }
     }
