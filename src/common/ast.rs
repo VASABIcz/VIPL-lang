@@ -27,6 +27,8 @@ pub enum Op {
     Gt,
     Less,
     Eq,
+    And,
+    Or
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +79,12 @@ impl Expression {
                         return Ok(Some(Bool))
                     }
                     Op::Eq => {
+                        return Ok(Some(Bool))
+                    }
+                    Op::And => {
+                        return Ok(Some(Bool))
+                    }
+                    Op::Or => {
                         return Ok(Some(Bool))
                     }
                     _ => {}

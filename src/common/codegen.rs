@@ -97,6 +97,8 @@ fn genExpression(
                         Op::Gt => OpCode::Greater(dat),
                         Op::Less => OpCode::Less(dat),
                         Op::Eq => OpCode::Equals(dat),
+                        Op::And => OpCode::And,
+                        Op::Or => OpCode::Or
                     };
                     ops.push(t);
                 }

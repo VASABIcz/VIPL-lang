@@ -1222,6 +1222,16 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
             typ: TokenType::Gt,
             priority: 6,
         }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::And,
+            typ: TokenType::And,
+            priority: 7,
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: Op::Or,
+            typ: TokenType::Or,
+            priority: 8,
+        }),
         Box::new(BracketsParsingUnit),
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),

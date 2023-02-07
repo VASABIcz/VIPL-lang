@@ -159,7 +159,10 @@ pub enum TokenType {
     AddAs,
     SubAs,
     DivAs,
-    MulAs
+    MulAs,
+
+    And,
+    Or
 }
 
 #[derive(Clone, Debug)]
@@ -395,6 +398,9 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("false", TokenType::False),
         KeywordLexingUnit::new("true", TokenType::True),
         KeywordLexingUnit::new("new", TokenType::New),
+
+        KeywordLexingUnit::new("&&", TokenType::And),
+        KeywordLexingUnit::new("||", TokenType::Or),
 
         //
         KeywordLexingUnit::new("+=", TokenType::AddAs),

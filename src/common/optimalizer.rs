@@ -51,7 +51,9 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
                 Op::Div => l.div(&r, &l.toDataType()),
                 Op::Gt => l.refGt(&r, &l.toDataType()),
                 Op::Less => l.refLess(&r, &l.toDataType()),
-                Op::Eq => l.refEq(&r, &l.toDataType())
+                Op::Eq => l.refEq(&r, &l.toDataType()),
+                Op::And => l.and(&r),
+                Op::Or => l.or(&r)
             };
 
             Some(l)

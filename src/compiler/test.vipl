@@ -1,13 +1,11 @@
 fn fact(n: int): int {
-    if n > 0 {
-        return n*fact(n-1)
-    }
-    return 1
+    return n*fact(n-1)*fact(n*2)
 }
 
 x = 0
 
-while x < 10_000_000 {
+while true{
     fact(20)
     x += 1
+    print(x)
 }
