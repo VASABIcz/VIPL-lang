@@ -553,6 +553,16 @@ impl Value {
         };
         *self = Bol(x)
     }
+
+    pub fn toDataType(&self) -> DataType {
+        match self {
+            Num(_) => DataType::Int,
+            Flo(_) => DataType::Float,
+            Bol(_) => DataType::Bool,
+            Chr(_) => DataType::Char,
+            Reference { instance } => DataType::Object(Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) }))
+        }
+    }
 }
 
 impl Value {
@@ -941,11 +951,12 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 JmpType::One => {
                     vm.stack.pop().unwrap();
                     let _b = vm.stack.pop().unwrap();
+                    panic!()
                 }
                 JmpType::Zero => {}
                 JmpType::Jmp => {
                     let x = *offset;
-                    opCodes.seek(x)
+                    opCodes.seek(x);
                 }
                 JmpType::Gt => {
                     let a = vm.stack.pop().unwrap();
@@ -1120,7 +1131,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             GetField { .. } => panic!(),
             SetField { .. } => panic!(),
             ArrayNew(d) => {
-                println!("{}", vm.stack.len());
+                // println!("{}", vm.stack.len());
                 let size = vm.stack.pop().unwrap();
                 vm.stack.push(Value::Reference { instance: Some(Rc::new(RefCell::new(crate::objects::Array { internal: vec![], typ: d.clone() }))) })
             },
@@ -1170,8 +1181,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     _ => panic!()
                 };
             },
-            Inc { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().inc(typ),
-            Dec { typ, index } => stackFrame.localVariables.get_mut(*index).unwrap().dec(typ),
+            Inc { typ, index } => unsafe {stackFrame.localVariables.get_unchecked_mut(*index).inc(typ)},
+            Dec { typ, index } => unsafe {stackFrame.localVariables.get_unchecked_mut(*index).dec(typ)},
             PushChar(c) => {
                 vm.stack.push(Value::Chr(*c))
             }

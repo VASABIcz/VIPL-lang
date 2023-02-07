@@ -133,7 +133,13 @@ impl Expression {
                 Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t]) }))))
             }
             Expression::ArrayIndexing(i) => {
-                i.expr.toDataType(typesMapping, functionReturns)
+                let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;
+                match e {
+                    Object(o) => {
+                        Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone()))
+                    }
+                    _ => panic!()
+                }
             }
         }
     }

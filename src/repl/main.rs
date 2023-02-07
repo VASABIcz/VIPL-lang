@@ -102,7 +102,7 @@ fn main() {
         } else {
             vec![first]
         };
-        // println!("{:?}", &res);
+        println!("{:?}", &res);
 
         let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals) {
             Ok(v) => v,

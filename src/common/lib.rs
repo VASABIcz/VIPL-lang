@@ -7,3 +7,4 @@ pub mod vm;
 pub mod objects;
 pub mod bytecodeChecker;
 mod tests;
+pub mod optimalizer;

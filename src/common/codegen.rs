@@ -9,10 +9,11 @@ use Statement::VariableCreate;
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
 use crate::objects::Str;
+use crate::optimalizer::evalExpr;
 use crate::parser::{*};
 use crate::parser::ParsingUnitSearchType::*;
-use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, VariableMetadata};
-use crate::vm::DataType::Bool;
+use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata};
+use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
 #[derive(Debug)]
@@ -292,9 +293,30 @@ fn genStatement(
                         ModType::Div => OpCode::Div(v.0.clone()),
                         ModType::Mul => OpCode::Mul(v.0.clone())
                     };
-                    genExpression(m.expr, ops, functionReturns, vTable)?;
-                    ops.push(op);
-                    ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });
+                    match evalExpr(&m.expr) {
+                        None => {
+                            genExpression(m.expr, ops, functionReturns, vTable)?;
+                            ops.push(op);
+                            ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });
+                        }
+                        Some(e) => {
+                            if e.isType(&Int) && e.getNum() == 1 {
+                                // panic!("this is good panic");
+                                match m.modType {
+                                    ModType::Add => {
+                                        ops.push(Inc { typ: DataType::Int, index: v.1 });
+                                        return Ok(())
+                                    }
+                                    ModType::Sub => {
+                                        ops.push(Inc { typ: DataType::Int, index: v.1 });
+                                        return Ok(())
+                                    }
+                                    ModType::Div => {}
+                                    ModType::Mul => {}
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -149,7 +149,7 @@ pub fn parseTokens(
             let canParse = parserType == ParsingUnitSearchType::Ahead;
 
             if canParse && unit.canParse(&tokens) {
-                println!("sus parse");
+                // println!("sus parse");
                 let res = unit.parse(&mut tokens, None, &parsingUnits)?;
                 buf.push(res);
                 continue 'main;
@@ -655,10 +655,10 @@ impl ParsingUnit for BoolParsingUnit {
         _parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
         if tokenProvider.isPeekType(TokenType::False) {
-            tokenProvider.getAssert(TokenType::False);
+            tokenProvider.getAssert(TokenType::False)?;
             return Ok(Operation::Expression(Expression::BoolLiteral(false)));
         }
-        tokenProvider.getAssert(TokenType::True);
+        tokenProvider.getAssert(TokenType::True)?;
         Ok(Operation::Expression(Expression::BoolLiteral(true)))
     }
 
