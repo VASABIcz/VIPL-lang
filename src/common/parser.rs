@@ -387,7 +387,7 @@ impl ParsingUnit for FunctionParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        tokens.getAssert(TokenType::Fn);
+        tokens.getAssert(TokenType::Fn)?;
         let name = tokens.getIdentifier()?;
         let mut args = vec![];
         let mut argCount = 0;

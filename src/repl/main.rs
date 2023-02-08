@@ -164,7 +164,7 @@ fn main() {
         opcodeIndex = opCodes.index as usize - 1;
 
         for val in &vm.stack {
-            println!(".{}", val.valueStr())
+            println!("{}", val.valueStr())
         }
         vm.stack.clear();
     }

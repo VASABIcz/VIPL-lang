@@ -9,7 +9,6 @@ fn countFile(path: String): int {
     fileLen = strLen(file)
     i = 0
     counter = 1
-    c = 'a'
 
     while i < fileLen {
         c = getChar(file, i)
@@ -32,7 +31,6 @@ fn countDir(path: String): int {
     i = 0
     len = arrayLen(files)
     counter = 0
-    ft = 0
 
     while i < len {
         ft = fileType(path + ("/" + (files[i])))

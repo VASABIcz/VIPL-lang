@@ -8,6 +8,7 @@ use Statement::VariableCreate;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
+use crate::lexer::TokenType::Var;
 use crate::objects::Str;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
@@ -28,50 +29,6 @@ impl Display for NoValue {
 }
 
 impl Error for NoValue {}
-
-fn constructVarTable(
-    fun: &FunctionDef,
-    functionReturns: &HashMap<String, Option<DataType>>,
-) -> Result<(Vec<VariableMetadata>, HashMap<String, (DataType, usize)>), Box<dyn Error>> {
-    let mut vTable = vec![];
-    let mut counter = 0;
-    let mut registeredVars = HashMap::new();
-
-    for arg in &fun.args {
-        vTable.push(arg.clone());
-        registeredVars.insert(arg.name.clone(), (arg.typ.clone(), counter));
-        counter += 1
-    }
-
-    for statement in &fun.body {
-        if let VariableCreate(v) = statement {
-            if registeredVars.contains_key(&v.name) {
-                continue;
-            }
-            match &v.init {
-                None => return Err(Box::new(NoValue { msg: format!("variable {} must have initializing value", v.name) })),
-                Some(e) => {
-                    let returnType = e.toDataType(&registeredVars, functionReturns)?;
-
-                    match returnType {
-                        None => {
-                            return Err(Box::new(NoValue { msg: format!("initializing expression for variable {} must have return value", v.name) }));
-                        }
-                        Some(ret) => {
-                            vTable.push(VariableMetadata {
-                                name: v.name.clone(),
-                                typ: ret.clone(),
-                            });
-                            registeredVars.insert(v.name.clone(), (ret.clone(), counter));
-                            counter += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok((vTable, registeredVars))
-}
 
 fn genExpression(
     exp: Expression,
@@ -376,15 +333,28 @@ fn genFunctionDef(
     ops.push(FunName {
         name: fun.name.clone(),
     });
-    let vTable = constructVarTable(&fun, functionReturns)?;
+
+    let mut idk1 = HashMap::new();
+    let mut idk2 = vec![];
+
+    for arg in fun.args {
+        idk1.insert(arg.name.clone(), (arg.typ.clone(), idk2.len()));
+        idk2.push(arg.clone())
+    }
+
+    for s in &fun.body {
+        buildLocalsTable(s, &mut idk1, &mut idk2, functionReturns)?;
+    }
+
+    // let vTable = constructVarTable(&fun, functionReturns)?;
     ops.push(LocalVarTable {
-        typ: vTable.0.clone().into_boxed_slice(),
+        typ: idk2.into_boxed_slice(),
         argsCount: fun.argCount,
     });
     ops.push(FunReturn { typ: fun.returnType });
 
     for statement in fun.body {
-        genStatement(statement, ops, functionReturns, &vTable.1, None)?;
+        genStatement(statement, ops, functionReturns, &idk1, None)?;
     }
     ops.push(OpCode::Return);
     ops.push(OpCode::FunEnd);
@@ -516,40 +486,59 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     Ok((ops, localTypes))
 }
 
+pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<String, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<String, Option<DataType>>) -> Result<(), Box<dyn Error>> {
+    match statement {
+        VariableCreate(c) => {
+            let res = c.init.clone().ok_or("variable expected initializer")?;
+            let t = res.toDataType(&mainLocals, &functionReturns)?;
+            println!("creating variable {} type {:?}", &c.name, &t);
+            mainLocals.insert(c.name.clone(), (t.clone().unwrap(), localTypes.len()));
+            localTypes.push(VariableMetadata { name: c.name.clone(), typ: t.unwrap().clone() });
+        }
+        Statement::While(w) => {
+            for s in &w.body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+        }
+        Statement::If(i) => {
+            for s in &i.body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+            if let Some(body) = &i.elseBody {
+                for s in body {
+                    buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+                }
+            }
+        }
+        Statement::Loop(body) => {
+            for s in body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+        }
+        Statement::FunctionExpr(_) => {}
+        Statement::VariableMod(_) => {}
+        Statement::Return(_) => {}
+        Statement::ArrayAssign { .. } => {}
+        Statement::Continue => {}
+        Statement::Break => {}
+    }
+
+    Ok(())
+}
+
 pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<String, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
     let mut ops = vec![];
-    let mut counter = 0;
     let mut localTypes = vec![];
 
     for op in &operations {
-        match op {
-            Operation::FunctionDef(f) => match f {
-                Node::FunctionDef(v) => {
-                    functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount),
-                        v.returnType.clone(),
-                    );
-                }
-            },
-            Operation::Statement(v) => {
-                if let VariableCreate(c) = v {
-                    match c.init {
-                        None => {
-                            return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
-                        }
-                        Some(ref ex) => {
-                            let t = ex.clone().toDataType(&mainLocals, &functionReturns)?;
-                            mainLocals.insert(c.name.clone(), (t.clone().unwrap(), counter));
-                            localTypes.push(t.unwrap().clone());
-                            counter += 1;
-                        }
-                    }
-                }
-                inlineMain.push(op.clone())
-            }
-            _ => inlineMain.push(op.clone()),
+        if let Operation::Statement(stat) = op {
+            buildLocalsTable(stat, &mut mainLocals, &mut localTypes, functionReturns)?;
+            inlineMain.push(op);
+        } else if let Operation::Expression(Expression::FunctionCall(call)) = op {
+            buildLocalsTable(&Statement::FunctionExpr(call.clone()), &mut mainLocals, &mut localTypes, functionReturns)?;
+            inlineMain.push(op);
         }
     }
 
@@ -575,7 +564,9 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<St
         }
     }
 
-    Ok((ops, localTypes))
+    Ok((ops, localTypes.iter().map(|it| {
+        it.typ.clone()
+    }).collect()))
 }
 
 #[test]
