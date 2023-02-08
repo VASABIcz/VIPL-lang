@@ -48,7 +48,8 @@ pub enum Expression {
     Variable(String),
     CharLiteral(char),
     ArrayLiteral(Vec<Expression>),
-    ArrayIndexing(Box<ArrayAccess>)
+    ArrayIndexing(Box<ArrayAccess>),
+    NotExpression(Box<Expression>)
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +140,16 @@ impl Expression {
                         Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone().ok_or("")?))
                     }
                     _ => panic!()
+                }
+            }
+            Expression::NotExpression(i) => {
+                let d = i.toDataType(typesMapping, functionReturns)?;
+
+                match d.ok_or("not operator cant work ok none")? {
+                    DataType::Bool => Ok(Some(DataType::Bool)),
+                    _ => {
+                        panic!()
+                    }
                 }
             }
         }

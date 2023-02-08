@@ -1,5 +1,10 @@
 fn countFile(path: String): int {
+    if !endsWith(path, ".vipl") {
+        return 0
+    }
     print("file")
+    print(path)
+
     file = readFile(path)
     fileLen = strLen(file)
     i = 0
@@ -9,11 +14,11 @@ fn countFile(path: String): int {
     while i < fileLen {
         c = getChar(file, i)
 
-        if c == 'a' {
-            counter = counter + 1
+        if c == '\n' {
+            counter += 1
         }
 
-        i = i + 1
+        i += 1
     }
 
     return counter
@@ -21,6 +26,8 @@ fn countFile(path: String): int {
 
 fn countDir(path: String): int {
     print("dir")
+    print(path)
+
     files = ls(path)
     i = 0
     len = arrayLen(files)
@@ -28,26 +35,25 @@ fn countDir(path: String): int {
     ft = 0
 
     while i < len {
-        print(path + ("/" + (files[i])))
-        ft = fileType(files[i])
+        ft = fileType(path + ("/" + (files[i])))
         if ft == 2 {
-            print(counter)
-            counter = counter + countDir(files[i])
-            print(counter)
+            counter += countDir(path + ("/" + (files[i])))
         }
         else {
             if ft == 1 {
-                print(counter)
-                counter = counter countFile(files[i])
-                print(counter)
+                counter += countFile(path + ("/" + (files[i])))
+            }
+            else {
+                print(ft)
+                print("ERROR")
             }
         }
-        i = i + 1
+        i += 1
     }
     return counter
 }
 
-directory = "/home/vasabi/Downloads/vm-rust/src/compiler"
+directory = "/home/vasabi/Downloads/vm-rust/src/compiler/counter.vipl"
 dirType = fileType(directory)
 res = 0
 
@@ -57,12 +63,10 @@ if dirType == 0 {
 }
 else {
     if dirType == 1 {
-        print("counting file")
-        res = countFile(directory)
+        res += countFile(directory)
     }
     else {
-        print("counting dir")
-        res = countDir(directory)
+        res += countDir(directory)
     }
 }
 print(res)

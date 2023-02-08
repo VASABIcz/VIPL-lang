@@ -98,7 +98,8 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
             if retClone.is_some() {
                 return Err(Box::new(InvalidOpcode { msg: format!("expected function {} to return {:?}", genName, retClone) }))
             } else if size != abstractStack.len() {
-                return Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
+                println!("{}", abstractStack.len());
+                return Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack a", genName) }))
             }
             return Ok(())
         }
@@ -111,14 +112,16 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
                 Ok(())
             }
             else {
-                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
+                println!("{}", abstractStack.len());
+                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack b", genName) }))
             }
         },
         Some(v) => {
             if *last != v {
                 Err(Box::new(InvalidOpcode { msg: format!("function returned wrong type {:?} expected {:?}", *last, v) }))
             } else if size + 1 != abstractStack.len() {
-                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack", genName) }))
+                println!("{}", abstractStack.len());
+                Err(Box::new(InvalidOpcode { msg: format!("function {} corrupted stack c", genName) }))
             } else {
                 Ok(())
             }

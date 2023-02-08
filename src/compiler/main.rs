@@ -32,7 +32,7 @@ fn main() {
         functionReturns.insert(f.0.clone(), f.1.returnType.clone());
     }
 
-    let mut tokens = match tokenizeSource(&src) {
+    let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("tokenizer");

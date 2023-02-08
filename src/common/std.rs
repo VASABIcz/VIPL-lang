@@ -185,7 +185,42 @@ pub fn bootStrapVM() -> VirtualMachine {
                         match v.borrow_mut().downcast_mut::<Str>() {
                             None => panic!(),
                             Some(v) => {
-                                vm.stack.push(Value::Chr(v.string.chars().nth(index as usize).unwrap()))
+                                vm.stack.push(Value::Chr(v.string.bytes().nth(index as usize).unwrap() as char))
+                            }
+                        }
+                    }
+                }
+            }
+            _ => panic!()
+        }
+    }, Some(DataType::Char));
+
+    vm.makeNative("endsWith".to_string(), Box::new([VariableMetadata { name: "".to_string(), typ: DataType::Str() }, VariableMetadata { name: "".to_string(), typ: DataType::Str() }]), |vm, locals| {
+        let sec = locals.localVariables.get(1).unwrap().clone();
+        match locals.localVariables.get_mut(0).unwrap() {
+            Reference { instance } => {
+                match instance {
+                    None => panic!(),
+                    Some(v) => {
+                        match v.borrow_mut().downcast_mut::<Str>() {
+                            None => panic!(),
+                            Some(v) => {
+                                match sec {
+                                    Reference { instance } => {
+                                        match instance {
+                                            None => panic!(),
+                                            Some(k) => {
+                                                match k.borrow_mut().downcast_mut::<Str>() {
+                                                    None => panic!(),
+                                                    Some(c) => {
+                                                        vm.stack.push(Value::Bol(v.string.ends_with(&c.string)))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => panic!()
+                                }
                             }
                         }
                     }

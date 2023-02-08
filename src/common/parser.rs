@@ -10,7 +10,7 @@ use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::ast::Statement::Break;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, New, ORB, OSB, Return, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, New, Not, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, ObjectMeta, VariableMetadata};
 
@@ -1216,6 +1216,34 @@ impl ParsingUnit for LoopParsingUnit {
     }
 }
 
+struct NotParsingUnit;
+
+impl ParsingUnit for NotParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Not)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Not)?;
+
+        let expr = parseExpr(tokenProvider, parser)?;
+
+        Ok(Operation::Expression(Expression::NotExpression(Box::new(expr))))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
@@ -1231,6 +1259,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArrayAssignParsingUnit),
         Box::new(CallParsingUnit),
         Box::new(BreakParsingUnit),
+        Box::new(NotParsingUnit),
         Box::new(ContinueParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,

@@ -124,6 +124,7 @@ fn main() {
 
         println!("{:?}", &bs);
 
+        /*
         match checkBytecode(&mut SeekableOpcodes {
             index: 0,
             opCodes: &bs,
@@ -137,6 +138,8 @@ fn main() {
                 continue
             }
         }
+
+         */
 
         for _ in 0..bs.len() {
             vm.opCodeCache.push(None)
@@ -161,7 +164,7 @@ fn main() {
         opcodeIndex = opCodes.index as usize - 1;
 
         for val in &vm.stack {
-            println!("{}", val.valueStr())
+            println!(".{}", val.valueStr())
         }
         vm.stack.clear();
     }

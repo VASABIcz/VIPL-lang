@@ -181,6 +181,10 @@ fn genExpression(
                 v => panic!("{:?}", v)
             }
         }
+        Expression::NotExpression(e) => {
+            genExpression(*e, ops, functionReturns, vTable)?;
+            ops.push(Not)
+        }
     }
     Ok(())
 }
@@ -303,7 +307,6 @@ fn genStatement(
                     return Err(Box::new(VariableNotFound { name: m.varName }));
                 }
                 Some(v) => {
-                    ops.push(OpCode::PushLocal { index: v.1 });
                     let op = match m.modType {
                         ModType::Add => OpCode::Add(v.0.clone()),
                         ModType::Sub => OpCode::Sub(v.0.clone()),
@@ -312,6 +315,7 @@ fn genStatement(
                     };
                     match evalExpr(&m.expr) {
                         None => {
+                            ops.push(OpCode::PushLocal { index: v.1 });
                             genExpression(m.expr, ops, functionReturns, vTable)?;
                             ops.push(op);
                             ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });

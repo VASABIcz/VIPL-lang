@@ -15,7 +15,8 @@ fn canBeOptimized(expr: &Expression) -> bool {
         Expression::Variable(_) => false,
         Expression::CharLiteral(_) => true,
         Expression::ArrayLiteral(_) => true,
-        Expression::ArrayIndexing(_) => false
+        Expression::ArrayIndexing(_) => false,
+        Expression::NotExpression(_) => true
     }
 }
 
@@ -35,6 +36,7 @@ fn optimizeExpr(exp: &mut Expression) {
         Expression::CharLiteral(_) => {}
         Expression::ArrayLiteral(_) => {}
         Expression::ArrayIndexing(_) => {}
+        Expression::NotExpression(_) => {}
     }
 }
 
@@ -68,7 +70,8 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::Variable(_) => None,
         Expression::CharLiteral(c) => Some(Value::Chr(c.clone())),
         Expression::ArrayLiteral(_) => None,
-        Expression::ArrayIndexing(_) => None
+        Expression::ArrayIndexing(_) => None,
+        Expression::NotExpression(_) => Some(Value::Bol(false))
     }
 }
 
