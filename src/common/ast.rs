@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::vm::{DataType, genFunName, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 
 #[derive(Debug)]
@@ -90,18 +90,10 @@ impl Expression {
                     _ => {}
                 }
 
-                let _leftType = left.toDataType(typesMapping, functionReturns);
-                let _rightType = left.toDataType(typesMapping, functionReturns);
+                let _leftType = left.toDataType(typesMapping, functionReturns)?;
+                let _rightType = left.toDataType(typesMapping, functionReturns)?;
 
-                match DataType::Int {
-                    DataType::Int => {}
-                    DataType::Float => {}
-                    DataType::Bool => {}
-                    DataType::Array { .. } => {}
-                    DataType::Object { .. } => {}
-                    DataType::Char => {}
-                }
-                Ok(Some(DataType::Int))
+                Ok(_leftType)
             }
             Expression::IntLiteral(_) => Ok(Some(DataType::Int)),
             Expression::LongLiteral(_) => {
@@ -119,7 +111,7 @@ impl Expression {
                 let enc = genFunName(&f.name, &types);
                 match functionReturns.get(&enc) {
                     None => {
-                        panic!();
+                        // panic!();
                         println!("{:?}", functionReturns);
                         Err(Box::new(TypeNotFound { typ: enc.clone() }))
                     },
@@ -138,13 +130,13 @@ impl Expression {
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
-                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t]) }))))
+                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t)]) }))))
             }
             Expression::ArrayIndexing(i) => {
                 let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;
                 match e {
                     Object(o) => {
-                        Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone()))
+                        Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone().ok_or("")?))
                     }
                     _ => panic!()
                 }

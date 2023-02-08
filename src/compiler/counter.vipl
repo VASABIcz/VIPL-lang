@@ -1,0 +1,68 @@
+fn countFile(path: String): int {
+    print("file")
+    file = readFile(path)
+    fileLen = strLen(file)
+    i = 0
+    counter = 1
+    c = 'a'
+
+    while i < fileLen {
+        c = getChar(file, i)
+
+        if c == 'a' {
+            counter = counter + 1
+        }
+
+        i = i + 1
+    }
+
+    return counter
+}
+
+fn countDir(path: String): int {
+    print("dir")
+    files = ls(path)
+    i = 0
+    len = arrayLen(files)
+    counter = 0
+    ft = 0
+
+    while i < len {
+        print(path + ("/" + (files[i])))
+        ft = fileType(files[i])
+        if ft == 2 {
+            print(counter)
+            counter = counter + countDir(files[i])
+            print(counter)
+        }
+        else {
+            if ft == 1 {
+                print(counter)
+                counter = counter countFile(files[i])
+                print(counter)
+            }
+        }
+        i = i + 1
+    }
+    return counter
+}
+
+directory = "/home/vasabi/Downloads/vm-rust/src/compiler"
+dirType = fileType(directory)
+res = 0
+
+if dirType == 0 {
+    print("invalid path")
+    assert(1, 0)
+}
+else {
+    if dirType == 1 {
+        print("counting file")
+        res = countFile(directory)
+    }
+    else {
+        print("counting dir")
+        res = countDir(directory)
+    }
+}
+print(res)

@@ -4,7 +4,7 @@ use crate::codegen::bytecodeGen;
 use crate::lexer::{lexingUnits, SourceProvider, tokenize, tokenizeSource, TokenType};
 use crate::parser::*;
 use crate::parser::ParsingUnitSearchType::Ahead;
-use crate::vm::{bootStrapVM, evaluateBytecode, run, SeekableOpcodes, StackFrame, Value};
+use crate::vm::{evaluateBytecode, run, SeekableOpcodes, StackFrame, Value};
 
 #[test]
 fn testNumericLexingUnit() {
@@ -30,7 +30,7 @@ fn testStringLexingUnit() {
     let input = "\"UwU\" \'A\'";
 
     let tokens = tokenizeSource(input).unwrap();
-    println!("{:?}", &tokens);
+    // println!("{:?}", &tokens);
 
     assert_eq!(tokens[0].typ, TokenType::StringLiteral);
     assert_eq!(tokens[1].typ, TokenType::CharLiteral);

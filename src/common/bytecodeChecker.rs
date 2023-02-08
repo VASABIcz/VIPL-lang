@@ -84,7 +84,7 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
         abstractLocals.push(var.typ.clone())
     }
 
-    let genName = genFunNameMeta(&name, vars);
+    let genName = genFunNameMeta(&name, vars, *argCount);
     checkedFunctions.insert(genName.clone());
     opCodes.index += index as isize;
 
@@ -157,6 +157,25 @@ impl AbstractStack {
             None => Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: None })),
             Some(v) => {
                 if v != *typ {
+                    match typ {
+                        Object(o) => {
+                            match o.generics.first() {
+                                None => {}
+                                Some(g) => {
+                                    if *g == Generic::Any {
+                                        match v {
+                                            Object(_) => {
+                                                return Ok(())
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+
                     Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: Some(v) }))
                 }
                 else {
@@ -265,6 +284,29 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 }
             }
             Jmp { offset, jmpType } => {
+                match jmpType {
+                    JmpType::One => {
+                        abstractStack.assertPop(&Int)?
+                    }
+                    JmpType::Zero => {
+                        abstractStack.assertPop(&Int)?
+                    }
+                    JmpType::Jmp => {}
+                    JmpType::Gt => {
+                        abstractStack.assertPop(&Int)?;
+                        abstractStack.assertPop(&Int)?
+                    }
+                    JmpType::Less => {
+                        abstractStack.assertPop(&Int)?;
+                        abstractStack.assertPop(&Int)?
+                    }
+                    JmpType::True => {
+                        abstractStack.assertPop(&Bool)?
+                    }
+                    JmpType::False => {
+                        abstractStack.assertPop(&Bool)?
+                    }
+                }
             }
             Call { encoded } => {
                 if checkedFunctions.contains(encoded) {
@@ -348,16 +390,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             SetField { .. } => panic!(),
             ArrayNew(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))
+                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))
             },
             ArrayStore(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(t)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))?;
             },
             ArrayLoad(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([t.clone()]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))?;
                 abstractStack.push(t.clone())
             },
             ArrayLength => panic!(),

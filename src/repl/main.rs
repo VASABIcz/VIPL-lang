@@ -10,11 +10,13 @@ use std::process::exit;
 use rust_vm::ast;
 use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::{bytecodeGen, complexBytecodeGen};
+use rust_vm::fs::setupFs;
 use rust_vm::lexer::{Token, tokenizeSource};
 use rust_vm::objects::{Object, Str};
 use rust_vm::parser::{Operation, parse, parseOne, parseTokens, parsingUnits, TokenProvider};
 use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around, Back};
-use rust_vm::vm::{bootStrapVM, DataType, evaluateBytecode, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
+use rust_vm::std::bootStrapVM;
+use rust_vm::vm::{DataType, evaluateBytecode, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 use rust_vm::vm::RawOpCode::PushInt;
 
 fn readInput() -> String {
@@ -38,6 +40,7 @@ fn handleError(err: Box<dyn Error>) {
 
 fn main() {
     let mut vm = bootStrapVM();
+    setupFs(&mut vm);
     let mut localTypes = vec![];
     let mut functionReturns = HashMap::new();
     let mut mainLocals = HashMap::new();
@@ -70,7 +73,7 @@ fn main() {
             continue
         }
 
-        println!("tokens {:?}", &tokens);
+        // println!("tokens {:?}", &tokens);
 
         let mut tokenProvider = TokenProvider { tokens, index: 0 };
         let first = match parseOne(&mut tokenProvider, Ahead, &parsingUnits, None) {
@@ -102,7 +105,7 @@ fn main() {
         } else {
             vec![first]
         };
-        println!("{:?}", &res);
+        // println!("{:?}", &res);
 
         let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals) {
             Ok(v) => v,
@@ -112,6 +115,7 @@ fn main() {
                 continue;
             }
         };
+
         if lastLocalSize < localTypes.len() {
             for x in &localTypes[lastLocalSize..localTypes.len()] {
                 localValues.push(x.toDefaultValue())
@@ -143,7 +147,7 @@ fn main() {
         let mut stack = StackFrame {
             previous: None,
             localVariables: &mut localValues,
-            name: None,
+            name: None
         };
 
         let mut opCodes = SeekableOpcodes {

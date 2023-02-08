@@ -12,7 +12,7 @@ use crate::ast::Statement::Break;
 use crate::lexer::{lexingUnits, SourceProvider, Token, tokenize, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, New, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
-use crate::vm::{DataType, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Generic, ObjectMeta, VariableMetadata};
 
 #[derive(Debug)]
 struct NoSuchParsingUnit {
@@ -100,6 +100,35 @@ pub fn parse(
             };
 
             if canParse && unit.canParse(&tokens) {
+                let res = if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1 {
+                    *isPrevUser = true;
+                    println!("a {:?}", &previous);
+                    unit.parse(tokens, previous.clone(), parsingUnits)?
+                } else {
+                    println!("b {:?}", &previous);
+
+                    if parserType == Around || parserType == Back {
+                        unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
+                    } else {
+                        unit.parse(tokens, None, parsingUnits)?
+                    }
+                };
+
+                if parserType == Back {
+                    opBuf = Some(res);
+                    continue 'main
+                }
+
+                println!("{:?}", &res);
+                buf.push(res);
+                continue 'main;
+            }
+        }
+
+        for unit in parsingUnits.iter() {
+            let parserType = unit.getType();
+
+            if unit.canParse(&tokens) {
                 let res = if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1 {
                     *isPrevUser = true;
                     println!("a {:?}", &previous);
@@ -911,12 +940,28 @@ impl ParsingUnit for CharParsingUnit {
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
         let c = tokenProvider.getAssert(CharLiteral)?;
-        match c.str.chars().next() {
+        let mut chars = c.str.chars();
+        match &chars.next() {
             None => {
                 Err(Box::new(InvalidToken { msg: format!("char literal cannot be empty") }))
             }
             Some(c) => {
-                Ok(Operation::Expression(Expression::CharLiteral(c)))
+                if *c == '\\' {
+                    match chars.next() {
+                        None => panic!(),
+                        Some(c) => {
+                            let e = match c {
+                                'n' => '\n',
+                                'r' => '\r',
+                                't' => '\t',
+                                '\\' => '\\',
+                                _ => panic!()
+                            };
+                            return Ok(Operation::Expression(Expression::CharLiteral(e)))
+                        }
+                    }
+                }
+                Ok(Operation::Expression(Expression::CharLiteral(*c)))
             }
         }
     }
@@ -1003,7 +1048,7 @@ pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Err
     if tokens.isPeekType(TokenType::Gt) {
         tokens.getAssert(TokenType::Gt)?;
         while !tokens.isPeekType(TokenType::Less) {
-            generics.push(parseDataType(tokens)?);
+            generics.push(Generic::Type(parseDataType(tokens)?));
         }
         tokens.getAssert(TokenType::Less)?;
     }

@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::intrinsics::transmute;
 use std::ops::Deref;
+use std::pin::Pin;
 use std::rc::Rc;
 
 use crate::lexer::TokenType::Var;
 use crate::objects::{ObjectDefinition, Str};
+use crate::std::bootStrapVM;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::JmpType::True;
@@ -25,10 +27,38 @@ pub enum DataType {
     Object(Box<ObjectMeta>),
 }
 
+impl DataType {
+    pub fn Str() -> Self {
+        Object(
+            Box::new(ObjectMeta { name: "String".to_string(), generics: Box::new([]) })
+        )
+    }
+    pub fn Arr(inner: Generic) -> Self {
+        Object(
+            Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([inner]) })
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Generic {
+    Any,
+    Type(DataType),
+}
+
+impl Generic {
+    pub fn ok_or<E>(self, err: E) -> Result<DataType, E> {
+        match self {
+            Generic::Any => Err(err),
+            Generic::Type(v) => Ok(v)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ObjectMeta {
     pub name: String,
-    pub generics: Box<[DataType]>,
+    pub generics: Box<[Generic]>,
 }
 
 impl DataType {
@@ -330,6 +360,37 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn getString(&self) -> String {
+        match self {
+            Reference { instance } => {
+                match instance {
+                    None => panic!(),
+                    Some(v) => {
+                        match v.borrow_mut().downcast_mut::<Str>() {
+                            None => panic!(),
+                            Some(v) => {
+                                v.string.clone()
+                            }
+                        }
+                    }
+                }
+            }
+            e => panic!("{:?}", e)
+        }
+    }
+
+    pub fn makeString(str: String) -> Value {
+        Value::Reference { instance: Some(Rc::new(RefCell::new(Str { string: str }))) }
+    }
+
+    pub fn makeObject(obj: Box<dyn Any>) -> Value {
+        Value::Reference { instance: Some(Rc::new(RefCell::new(obj))) }
+    }
+
+    pub fn makeArray(arr: Vec<Value>, typ: DataType) -> Value {
+        Value::Reference { instance: Some(Rc::new(RefCell::new(crate::objects::Array { internal: arr, typ }))) }
+    }
+
     pub fn valueStr(&self) -> String {
         match self {
             Num(it) => format!("{}", it),
@@ -343,7 +404,14 @@ impl Value {
                         let c = v.borrow_mut();
                         match c.downcast_ref::<Str>() {
                             None => {
-                                format!("{:?}", self)
+                                match c.downcast_ref::<crate::objects::Array>() {
+                                    None => format!("KUS {:?}", c),
+                                    Some(v) => {
+                                        format!("{:?}", v.internal.iter().map(|it| {
+                                            it.valueStr()
+                                        }).collect::<Vec<String>>())
+                                    }
+                                }
                             }
                             Some(s) => {
                                 format!("{}", s.string)
@@ -549,9 +617,16 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
-            Char => panic!()
+            Char => self.getChar() == val.getChar()
         };
         *self = Bol(x)
+    }
+
+    pub fn getChar(&self) -> char {
+        match self {
+            Chr(c) => *c,
+            _ => panic!()
+        }
     }
 
     pub fn toDataType(&self) -> DataType {
@@ -773,7 +848,7 @@ impl VirtualMachine {
         fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
         ret: Option<DataType>,
     ) {
-        let genName = genFunNameMeta(&name, &args);
+        let genName = genFunNameMeta(&name, &args, args.len());
         let l = args.len();
         self.functions.insert(
             genName,
@@ -788,7 +863,7 @@ impl VirtualMachine {
     }
 
     pub fn makeRuntime(&mut self, name: String, args: Box<[VariableMetadata]>, begin: usize, argsCount: usize, ret: Option<DataType>, end: usize) {
-        let genName = genFunNameMeta(&name, &args);
+        let genName = genFunNameMeta(&name, &args, argsCount);
 
         let fun = Func {
             name,
@@ -862,8 +937,8 @@ pub fn genFunName(name: &str, args: &[DataType]) -> String {
 }
 
 #[inline(always)]
-pub fn genFunNameMeta(name: &String, args: &[VariableMetadata]) -> String {
-    format!("{}({})", name, argsToStringMeta(args))
+pub fn genFunNameMeta(name: &String, args: &[VariableMetadata], argsLen: usize) -> String {
+    format!("{}({})", name, argsToStringMeta(&args[0..argsLen]))
 }
 
 #[inline(always)]
@@ -1002,12 +1077,15 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     },
                     None => {
                         let f = vm.functions.get(encoded).unwrap();
+                        // println!("meta {:?}", f.varTable);
+                        let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
 
-                        let mut localVars = Vec::with_capacity(f.varTable.len());
-
+                        /*
                         for i in &*f.varTable {
                             localVars.push(i.typ.toDefaultValue())
                         }
+
+                         */
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
                             stack: localVars,
@@ -1030,6 +1108,9 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 };
 
                 let ee = &mut cached.0.clone();
+                let argsLen = ee.len();
+                // println!("args len {} {}", argsLen, cached.2);
+                // println!("vm {:?} {}", vm.stack, encoded);
 
                 for i in 0..(*cached.2) {
                     let arg = match vm.stack.pop() {
@@ -1038,12 +1119,13 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                         }
                         Some(v) => v
                     };
-                    ee[i] = arg;
+                    // println!("seting {:?} {:?}", i, &arg);
+                    ee[(cached.2 - 1) - i] = arg;
                 }
 
                 // FIXME
                 // let enc = &String::from(encoded);
-
+                // println!("frame {:?}", &ee);
                 match cached.1 {
                     Runtime {
                         rangeStart: s,
@@ -1190,139 +1272,6 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
     }
 }
 
-pub fn bootStrapVM() -> VirtualMachine {
-    let mut vm = VirtualMachine::new();
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: "value".to_string(),
-            typ: Int,
-        }]),
-        |_a, b| println!("{}", b.localVariables[0].getNum()),
-        None,
-    );
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: "value".to_string(),
-            typ: Float,
-        }]),
-        |_a, b| println!("{}", b.localVariables[0].getFlo()),
-        None,
-    );
-
-    vm.makeNative(
-        String::from("assert"),
-        Box::new([VariableMetadata::i(String::from("left")), VariableMetadata::i(String::from("right"))]),
-        |_a, b| {
-            let left = b.localVariables[1].getNum();
-            let right = b.localVariables[0].getNum();
-            if left != right {
-                panic!("assert {} != {}", left, right)
-            }
-        },
-        None,
-    );
-
-    vm.makeNative(
-        String::from("exec"),
-        Box::default(),
-        |a, b| {
-            /*
-            let stack = match b.previous {
-                None => b,
-                Some(v) => v
-            };
-             */
-            let genOps = [
-                PushInt(1),
-                Pop,
-                PushInt(69),
-                Call {
-                    encoded: "print(int)".to_string(),
-                },
-            ];
-
-            let mut seek = SeekableOpcodes {
-                index: 0,
-                opCodes: &genOps,
-                start: None,
-                end: None,
-            };
-
-            run(&mut seek, a, b);
-        },
-        None,
-    );
-
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata{ name: "".to_string(), typ: Object(Box::new(ObjectMeta{ name: "String".to_string(), generics: Box::new([]) })) }]), |a, b| {
-        let c = b.localVariables.get(0).unwrap();
-        match c {
-            Num(_) => {}
-            Flo(_) => {}
-            Bol(_) => {}
-            Chr(_) => {}
-            Reference { instance } => {
-                match instance {
-                    None => {}
-                    Some(ee) => {
-                        match ee.borrow_mut().downcast_ref::<Str>() {
-                            None => {}
-                            Some(ff) => {
-                                println!("{}", ff.string);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }, None);
-
-    vm.makeNative(String::from("makeString"), Box::new([]), |a, b| {
-        a.stack.push(Value::Reference { instance: Some(Rc::new(RefCell::new(Str { string: "".to_string() }))) })
-    }, Some(Object(Box::new(ObjectMeta { name: String::from("String"), generics: Box::new([]) }))));
-
-    vm.makeNative(
-        String::from("appendChar"),
-        Box::new([
-            VariableMetadata{ name: "str".to_string(), typ: Object(Box::new(ObjectMeta{ name: "String".to_string(), generics: Box::new([]) })) },
-            VariableMetadata{ name: "chr".to_string(), typ: DataType::Char }
-        ]), |a, b| {
-            let chr = match b.localVariables.get(0).unwrap() {
-                Chr(c) => *c,
-                n => {
-                    panic!("{:?}", n)
-                }
-            };
-            let str = b.localVariables.get_mut(1).unwrap();
-            match str {
-                Reference { instance } => {
-                    match instance {
-                        None => {
-                            panic!()
-                        }
-                        Some(v) => {
-                            match v.borrow_mut().downcast_mut::<Str>() {
-                                None => {}
-                                Some(v) => {
-                                    // println!("appending {} char {}", &v.string, chr);
-                                    v.string.push(chr)
-                                }
-                            }
-                        }
-                    }
-                }
-                ee => {
-                    panic!("{:?}", ee);
-                }
-            }
-        }, None);
-
-    vm
-}
-
 pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine {
     let mut vals = vec![];
     for b in &locals {
@@ -1344,4 +1293,24 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Virtual
     );
 
     vm
+}
+
+pub fn evaluateBytecode2(bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut VirtualMachine) {
+    let mut vals = vec![];
+    for b in &locals {
+        vals.push(b.toDefaultValue())
+    }
+    for _ in &bytecode {
+        vm.opCodeCache.push(None);
+    }
+    run(
+        &mut SeekableOpcodes {
+            index: 0,
+            opCodes: &bytecode,
+            start: None,
+            end: None,
+        },
+        vm,
+        &mut StackFrame::new(&mut vals),
+    );
 }

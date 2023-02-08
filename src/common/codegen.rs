@@ -12,7 +12,7 @@ use crate::objects::Str;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
 use crate::parser::ParsingUnitSearchType::*;
-use crate::vm::{bootStrapVM, DataType, evaluateBytecode, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata};
+use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -163,9 +163,23 @@ fn genExpression(
             }
         }
         Expression::ArrayIndexing(i) => {
-            genExpression(i.expr, ops, functionReturns, vTable)?;
-            genExpression(i.index, ops, functionReturns, vTable)?;
-            ops.push(OpCode::ArrayLoad(DataType::Int));
+            println!("{:?}", i.expr);
+            let d = i.expr.toDataType(vTable, functionReturns)?.ok_or("ewgergreg")?;
+            match d {
+                DataType::Object(o) => {
+                    println!("{:?}", o);
+                    match o.generics.first().unwrap() {
+                        Generic::Type(v) => {
+                            genExpression(i.expr, ops, functionReturns, vTable)?;
+                            genExpression(i.index, ops, functionReturns, vTable)?;
+
+                            ops.push(OpCode::ArrayLoad(v.clone()));
+                        },
+                        Generic::Any => panic!()
+                    }
+                }
+                v => panic!("{:?}", v)
+            }
         }
     }
     Ok(())
@@ -220,6 +234,7 @@ fn genStatement(
                     }
                     Some(ve) => {
                         genExpression(e, ops, functionReturns, vTable)?;
+                        println!("{}", &v.name);
                         ops.push(OpCode::SetLocal {
                             index: vTable.get(&v.name).unwrap().1,
                             typ: ve.clone(),
@@ -382,7 +397,7 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone()),
+                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount),
                         v.returnType.clone(),
                     );
                 }
@@ -447,7 +462,69 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone()),
+                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount),
+                        v.returnType.clone(),
+                    );
+                }
+            },
+            Operation::Statement(v) => {
+                if let VariableCreate(c) = v {
+                    match c.init {
+                        None => {
+                            return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
+                        }
+                        Some(ref ex) => {
+                            let t = ex.clone().toDataType(&mainLocals, &functionReturns)?;
+                            mainLocals.insert(c.name.clone(), (t.clone().unwrap(), counter));
+                            localTypes.push(t.unwrap().clone());
+                            counter += 1;
+                        }
+                    }
+                }
+                inlineMain.push(op.clone())
+            }
+            _ => inlineMain.push(op.clone()),
+        }
+    }
+
+    for op in &operations {
+        if let Operation::FunctionDef(f) = op {
+            match f {
+                Node::FunctionDef(v) => {
+                    genFunctionDef(v.clone(), &mut ops, &functionReturns)?;
+                }
+            }
+        }
+    }
+
+    for op in &inlineMain {
+        match op {
+            Operation::Statement(s) => {
+                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
+            }
+            Operation::Expression(e) => {
+                genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok((ops, localTypes))
+}
+
+pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<String, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
+    let mut inlineMain = vec![];
+    let mut mainLocals = HashMap::new();
+    let mut ops = vec![];
+    let mut counter = 0;
+    let mut localTypes = vec![];
+
+    for op in &operations {
+        match op {
+            Operation::FunctionDef(f) => match f {
+                Node::FunctionDef(v) => {
+                    functionReturns.insert(
+                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount),
                         v.returnType.clone(),
                     );
                 }
