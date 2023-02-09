@@ -86,3 +86,5 @@ else {
 }
 print(res)
 ```
+
+![](https://cdn.discordapp.com/attachments/856286428715155486/1073322694642253875/image.png)
