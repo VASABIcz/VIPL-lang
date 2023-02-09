@@ -1,7 +1,7 @@
 ## small interpreted stack based programing language
 
 - build size around 500kb
-- performance comparable or better than python
+- performance better than python
 - extensible
 - statically typed
 - REPL + compiler
