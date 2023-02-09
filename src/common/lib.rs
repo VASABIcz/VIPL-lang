@@ -3,7 +3,6 @@
 #![feature(type_name_of_val)]
 #![feature(trait_upcasting)]
 
-use crate::vm::{DataType, ObjectMeta, VariableMetadata, VirtualMachine};
 
 pub mod ast;
 pub mod codegen;

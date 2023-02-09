@@ -1,7 +1,6 @@
 use std::mem::transmute;
 
-use crate::vm::{DataType, JmpType, ObjectMeta, OpCode, RawDataType, RawOpCode, VariableMetadata};
-use crate::vm::DataType::Object;
+use crate::vm::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
 use crate::vm::OpCode::*;
 
 pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
@@ -156,7 +155,7 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
 
     let n: RawDataType = unsafe { transmute(d) };
 
-    println!("a {:?}", n);
+    println!("a {n:?}");
 
     let t = match n {
         RawDataType::Int => DataType::Int,
@@ -213,7 +212,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
             continue;
         }
         let op: RawOpCode = unsafe { transmute(*o) };
-        println!("{:?}", op);
+        println!("{op:?}");
 
         match op {
             RawOpCode::FunBegin => buf.push(FunBegin),

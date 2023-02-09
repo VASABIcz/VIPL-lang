@@ -1,19 +1,15 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io;
 use std::io::Write;
 
 use Statement::VariableCreate;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
-use crate::lexer::TokenType::Var;
-use crate::objects::Str;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
-use crate::parser::ParsingUnitSearchType::*;
-use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -41,7 +37,7 @@ fn genExpression(
             let dataType = left.toDataType(vTable, functionReturns)?;
             match dataType {
                 None => {
-                    return Err(Box::new(NoValue { msg: format!("expression must have return value") }));
+                    return Err(Box::new(NoValue { msg: "expression must have return value".to_string() }));
                 }
                 Some(dat) => {
                     genExpression(*left, ops, functionReturns, vTable)?;
@@ -90,7 +86,7 @@ fn genExpression(
             })
         }
         Expression::Variable(v) => {
-            let res = match vTable.get(&v.clone().into_boxed_str()) {
+            let _res = match vTable.get(&v.clone().into_boxed_str()) {
                 None => {
                     return Err(Box::new(VariableNotFound { name: v }));
                 }
@@ -137,7 +133,7 @@ fn genExpression(
                         Generic::Any => panic!()
                     }
                 }
-                v => panic!("{:?}", v)
+                v => panic!("{v:?}")
             }
         }
         Expression::NotExpression(e) => {
@@ -225,7 +221,7 @@ fn genStatement(
                     let len = bodyBuf.len();
                     ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::False });
                     ops.extend(bodyBuf);
-                    ops.push(OpCode::Jmp { offset: (ops.len() as isize - size as isize + 1) * -1, jmpType: JmpType::Jmp })
+                    ops.push(OpCode::Jmp { offset: -(ops.len() as isize - size as isize + 1), jmpType: JmpType::Jmp })
                 }
             }
         }
@@ -320,7 +316,7 @@ fn genStatement(
             }
             let bufLen = buf.len() as isize;
             ops.extend(buf);
-            ops.push(OpCode::Jmp { offset: (bufLen + 1) * -1, jmpType: JmpType::Jmp });
+            ops.push(OpCode::Jmp { offset: -(bufLen + 1), jmpType: JmpType::Jmp });
         }
     }
     Ok(())
@@ -385,9 +381,9 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
                             return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
                         }
                         Some(ref ex) => {
-                            let t = ex.clone().toDataType(&mainLocals, &functionReturns)?;
-                            if !mainLocals.contains_key(&c.name.clone().into_boxed_str()) {
-                                mainLocals.insert(c.name.clone().into_boxed_str(), (t.clone().unwrap(), counter));
+                            let t = ex.clone().toDataType(mainLocals, functionReturns)?;
+                            if let std::collections::hash_map::Entry::Vacant(e) = mainLocals.entry(c.name.clone().into_boxed_str()) {
+                                e.insert((t.clone().unwrap(), counter));
                                 localTypes.push(t.unwrap().clone());
                                 counter += 1;
                             }
@@ -404,7 +400,7 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
         if let Operation::FunctionDef(f) = op {
             match f {
                 Node::FunctionDef(v) => {
-                    genFunctionDef(v.clone(), &mut ops, &functionReturns)?;
+                    genFunctionDef(v.clone(), &mut ops, functionReturns)?;
                 }
             }
         }
@@ -413,10 +409,10 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
+                genStatement(s.clone(), &mut ops, functionReturns, mainLocals, None)?;
             }
             Operation::Expression(e) => {
-                genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
+                genExpression(e.clone(), &mut ops, functionReturns, mainLocals)?;
             }
             _ => {}
         }
@@ -492,10 +488,10 @@ pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<Box<str>
     match statement {
         VariableCreate(c) => {
             let res = c.init.clone().ok_or("variable expected initializer")?;
-            let t = res.toDataType(&mainLocals, &functionReturns)?;
+            let t = res.toDataType(mainLocals, functionReturns)?;
             // println!("creating variable {} type {:?}", &c.name, &t);
             mainLocals.insert(c.name.clone().into_boxed_str(), (t.clone().unwrap(), localTypes.len()));
-            localTypes.push(VariableMetadata { name: c.name.clone().into_boxed_str(), typ: t.unwrap().clone() });
+            localTypes.push(VariableMetadata { name: c.name.clone().into_boxed_str(), typ: t.unwrap() });
         }
         Statement::While(w) => {
             for s in &w.body {
@@ -548,7 +544,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<Bo
         if let Operation::FunctionDef(f) = op {
             match f {
                 Node::FunctionDef(v) => {
-                    genFunctionDef(v.clone(), &mut ops, &functionReturns)?;
+                    genFunctionDef(v.clone(), &mut ops, functionReturns)?;
                 }
             }
         }
@@ -557,10 +553,10 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<Bo
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
+                genStatement(s.clone(), &mut ops, functionReturns, &mainLocals, None)?;
             }
             Operation::Expression(e) => {
-                genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
+                genExpression(e.clone(), &mut ops, functionReturns, &mainLocals)?;
             }
             _ => {}
         }

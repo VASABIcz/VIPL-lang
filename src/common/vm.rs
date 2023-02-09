@@ -1,22 +1,16 @@
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 
-use std::any::Any;
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Cell, Ref, RefCell};
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::intrinsics::transmute;
-use std::ops::Deref;
-use std::pin::Pin;
 use std::rc::Rc;
 
-use crate::lexer::TokenType::Var;
 use crate::objects::{ObjectDefinition, Str};
 use crate::std::bootStrapVM;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
-use crate::vm::JmpType::True;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
@@ -380,7 +374,7 @@ impl Value {
                     }
                 }
             }
-            e => panic!("{:?}", e)
+            e => panic!("{e:?}")
         }
     }
 
@@ -398,10 +392,10 @@ impl Value {
 
     pub fn valueStr(&self) -> String {
         match self {
-            Num(it) => format!("{}", it),
-            Flo(it) => format!("{}", it),
-            Bol(it) => format!("{}", it),
-            Chr(it) => format!("{}", it),
+            Num(it) => format!("{it}"),
+            Flo(it) => format!("{it}"),
+            Bol(it) => format!("{it}"),
+            Chr(it) => format!("{it}"),
             Reference { instance } => {
                 match instance {
                     None => String::from("null"),
@@ -579,7 +573,7 @@ impl Value {
         let l = match typ {
             Int => self.getNum() < val.getNum(),
             Float => self.getFlo() < val.getFlo(),
-            Bool => self.getBool() < val.getBool(),
+            Bool => !self.getBool() & val.getBool(),
             Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
@@ -626,7 +620,7 @@ impl Value {
             Flo(_) => DataType::Float,
             Bol(_) => DataType::Bool,
             Chr(_) => DataType::Char,
-            Reference { instance } => DataType::Object(Box::new(ObjectMeta { name: "".to_string().into_boxed_str(), generics: Box::new([]) }))
+            Reference { instance: _ } => DataType::Object(Box::new(ObjectMeta { name: "".to_string().into_boxed_str(), generics: Box::new([]) }))
         }
     }
 }
@@ -947,17 +941,17 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let mut index = opCodes.index as usize;
                 let name = match opCodes.getOpcode(index).unwrap() {
                     FunName { name } => name,
-                    v => panic!("{:?}", v)
+                    v => panic!("{v:?}")
                 };
                 index += 1;
                 let (vars, argCount) = match opCodes.getOpcode(index).unwrap() {
                     LocalVarTable { typ, argsCount } => (typ, argsCount),
-                    v => panic!("{:?}", v)
+                    v => panic!("{v:?}")
                 };
                 index += 1;
                 let ret = match opCodes.getOpcode(index).unwrap() {
                     FunReturn { typ } => typ,
-                    v => panic!("{:?}", v)
+                    v => panic!("{v:?}")
                 };
                 index += 1;
                 let startIndex = index;
@@ -1009,7 +1003,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             },
             SetLocal { index, typ: _ } => {
                 let x = vm.stack.pop().unwrap();
-                *unsafe{ (stackFrame.localVariables.get_unchecked_mut(*index)) } = x;
+                *unsafe { stackFrame.localVariables.get_unchecked_mut(*index) } = x;
                 // println!("{:?}", stackFrame.localVariables.get(*index));
                 // stackFrame.get_mut().localVariables.insert(*index, x);
             }
@@ -1099,7 +1093,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 };
 
                 let ee = &mut cached.0.clone();
-                let argsLen = ee.len();
+                let _argsLen = ee.len();
                 // println!("args len {} {}", argsLen, cached.2);
                 // println!("vm {:?} {}", vm.stack, encoded);
 
@@ -1120,7 +1114,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 match cached.1 {
                     Runtime {
                         rangeStart: s,
-                        rangeStop: e,
+                        rangeStop: _e,
                     } => {
                         let old = index + 1;
 
@@ -1205,7 +1199,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             SetField { .. } => panic!(),
             ArrayNew(d) => {
                 // println!("{}", vm.stack.len());
-                let size = vm.stack.pop().unwrap();
+                let _size = vm.stack.pop().unwrap();
                 vm.stack.push(Value::Reference { instance: Some(Rc::new(crate::objects::Array { internal: vec![], typ: d.clone() })) })
             },
             ArrayStore(_) => {

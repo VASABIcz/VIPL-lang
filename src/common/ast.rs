@@ -113,15 +113,15 @@ impl Expression {
                 match functionReturns.get(&enc.clone().into_boxed_str()) {
                     None => {
                         // panic!();
-                        println!("{:?}", functionReturns);
-                        Err(Box::new(TypeNotFound { typ: enc.clone() }))
+                        println!("{functionReturns:?}");
+                        Err(Box::new(TypeNotFound { typ: enc }))
                     },
                     Some(v) => Ok(v.clone())
                 }
             }
             Expression::Variable(name) => {
                 match typesMapping.get(&name.clone().into_boxed_str()) {
-                    None => Err(Box::new(TypeNotFound { typ: format!("variable {} not found", name) })),
+                    None => Err(Box::new(TypeNotFound { typ: format!("variable {name} not found") })),
                     Some(v) => {
                         Ok(Some(v.0.clone()))
                     }

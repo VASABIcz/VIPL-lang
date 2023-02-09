@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::objects::Str;
@@ -37,7 +36,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             let left = b.localVariables[1].getNum();
             let right = b.localVariables[0].getNum();
             if left != right {
-                panic!("assert {} != {}", left, right)
+                panic!("assert {left} != {right}")
             }
         },
         None,
@@ -74,7 +73,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         None,
     );
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "".to_string().into(), typ: Object(Box::new(ObjectMeta { name: "String".to_string().into(), generics: Box::new([]) })) }]), |a, b| {
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "".to_string().into(), typ: Object(Box::new(ObjectMeta { name: "String".to_string().into(), generics: Box::new([]) })) }]), |_a, b| {
         let c = b.localVariables.get(0).unwrap();
         match c {
             Num(_) => {}
@@ -99,7 +98,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, None);
 
-    vm.makeNative(String::from("makeString"), Box::new([]), |a, b| {
+    vm.makeNative(String::from("makeString"), Box::new([]), |a, _b| {
         a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
     }, Some(Object(Box::new(ObjectMeta { name: String::from("String").into(), generics: Box::new([]) }))));
 
@@ -108,11 +107,11 @@ pub fn bootStrapVM() -> VirtualMachine {
         Box::new([
             VariableMetadata { name: "str".to_string().into(), typ: DataType::str() },
             VariableMetadata { name: "chr".to_string().into(), typ: DataType::Char }
-        ]), |a, b| {
+        ]), |_a, b| {
             let chr = match b.localVariables.get(1).unwrap() {
                 Chr(c) => *c,
                 n => {
-                    panic!("{:?}", n)
+                    panic!("{n:?}")
                 }
             };
             let str = b.localVariables.get_mut(0).unwrap();
@@ -130,7 +129,7 @@ pub fn bootStrapVM() -> VirtualMachine {
                     }
                 }
                 ee => {
-                    panic!("{:?}", ee);
+                    panic!("{ee:?}");
                 }
             }
         }, None);

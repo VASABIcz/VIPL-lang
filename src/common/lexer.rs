@@ -1,10 +1,8 @@
 #![allow(non_snake_case)]
 
 use std::error::Error;
-use std::fmt::{Formatter, write};
+use std::fmt::Formatter;
 use std::ops::Index;
-
-use crate::lexer::TokenType::Break;
 
 #[derive(Debug)]
 struct UnknownToken {

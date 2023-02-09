@@ -1,6 +1,6 @@
 use crate::ast::{Expression, Op};
-use crate::parser::{Operation, parseDataType};
-use crate::vm::{DataType, Value};
+use crate::parser::Operation;
+use crate::vm::Value;
 
 fn canBeOptimized(expr: &Expression) -> bool {
     match expr {
@@ -22,9 +22,7 @@ fn canBeOptimized(expr: &Expression) -> bool {
 
 fn optimizeExpr(exp: &mut Expression) {
     match exp {
-        Expression::ArithmeticOp { left, right, op } => {
-
-        }
+        Expression::ArithmeticOp { left: _, right: _, op: _ } => {}
         Expression::IntLiteral(_) => {}
         Expression::LongLiteral(_) => {}
         Expression::FloatLiteral(_) => {}
@@ -63,12 +61,12 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::IntLiteral(n) => Some(Value::Num(n.parse::<isize>().unwrap())),
         Expression::LongLiteral(_) => None,
         Expression::FloatLiteral(f) => Some(Value::Flo(f.parse::<f32>().unwrap())),
-        Expression::DoubleLiteral(d) => None,
+        Expression::DoubleLiteral(_d) => None,
         Expression::StringLiteral(_) => None,
-        Expression::BoolLiteral(b) => Some(Value::Bol(b.clone())),
+        Expression::BoolLiteral(b) => Some(Value::Bol(*b)),
         Expression::FunctionCall(_) => None,
         Expression::Variable(_) => None,
-        Expression::CharLiteral(c) => Some(Value::Chr(c.clone())),
+        Expression::CharLiteral(c) => Some(Value::Chr(*c)),
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
         Expression::NotExpression(_) => Some(Value::Bol(false))
@@ -88,7 +86,5 @@ fn optimizeOp(op: &mut Operation) {
 }
 
 fn optimizeAst(ast: &mut Vec<Operation>) {
-    for item in ast {
-
-    }
+    for _item in ast {}
 }

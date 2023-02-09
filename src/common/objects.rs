@@ -1,8 +1,7 @@
-use std::any::{type_name_of_val, TypeId};
+use std::any::TypeId;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 use crate::vm::{DataType, Value};
 
@@ -78,13 +77,13 @@ impl Object for Str {
     }
 
     fn getFields(&self) -> &[DataType] {
-        return &[];
+        &[]
     }
 
-    fn setField(&mut self, field: usize, value: Value) {}
+    fn setField(&mut self, _field: usize, _value: Value) {}
 
-    fn getField(&self, field: usize) -> Option<Value> {
-        return None;
+    fn getField(&self, _field: usize) -> Option<Value> {
+        None
     }
 }
 
@@ -103,12 +102,12 @@ impl Object for Array {
         &[]
     }
 
-    fn setField(&mut self, field: usize, value: Value) {}
+    fn setField(&mut self, _field: usize, _value: Value) {}
 
-    fn getField(&self, field: usize) -> Option<Value> { None }
+    fn getField(&self, _field: usize) -> Option<Value> { None }
 }
 
-fn cd(mut r: Box<dyn Any>) {
+fn cd(r: Box<dyn Any>) {
     let res = r.downcast_ref::<Str>().unwrap();
     println!("{}", res.string);
 }

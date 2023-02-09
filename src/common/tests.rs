@@ -1,10 +1,5 @@
 #[cfg(test)]
 use crate::ast::Op;
-use crate::codegen::bytecodeGen;
-use crate::lexer::{lexingUnits, SourceProvider, tokenize, tokenizeSource, TokenType};
-use crate::parser::*;
-use crate::parser::ParsingUnitSearchType::Ahead;
-use crate::vm::{evaluateBytecode, run, SeekableOpcodes, StackFrame, Value};
 
 #[test]
 fn testNumericLexingUnit() {

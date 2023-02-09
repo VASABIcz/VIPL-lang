@@ -1,9 +1,6 @@
 use std::fs;
 
-use crate::objects::{Array, Str};
 use crate::vm::{DataType, Generic, Value, VariableMetadata, VirtualMachine};
-use crate::vm::DataType::Int;
-use crate::vm::Value::Reference;
 
 pub fn setupFs(vm: &mut VirtualMachine) {
     vm.makeNative("ls".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
