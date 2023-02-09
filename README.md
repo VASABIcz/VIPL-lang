@@ -1,4 +1,4 @@
-small interpreted stack based programing language
+## small interpreted stack based programing language
 
 - build size around 500kb
 - performance comparable or better than python
@@ -8,7 +8,9 @@ small interpreted stack based programing language
 - no 3rd party dependencies
 - syntax based on python/rust
 
-example program to count lines of code
+---
+
+## example program to count lines of code
 
 ```rust
 fn countFile(path: String): int {
