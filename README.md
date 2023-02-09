@@ -86,5 +86,5 @@ else {
 }
 print(res)
 ```
-
+benchmark of above script (my language left, python right) 500% speed up
 ![](https://cdn.discordapp.com/attachments/856286428715155486/1073322694642253875/image.png)
