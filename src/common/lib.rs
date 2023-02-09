@@ -1,3 +1,8 @@
+#![feature(get_mut_unchecked)]
+#![feature(downcast_unchecked)]
+#![feature(type_name_of_val)]
+#![feature(trait_upcasting)]
+
 use crate::vm::{DataType, ObjectMeta, VariableMetadata, VirtualMachine};
 
 pub mod ast;

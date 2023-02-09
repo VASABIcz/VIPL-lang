@@ -8,7 +8,7 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];
 
     for op in ops {
-        let opId: [u8; 48] = unsafe { std::mem::transmute((*op).clone()) };
+        let opId: [u8; 40] = unsafe { std::mem::transmute((*op).clone()) };
         buf.push(opId[0]);
 
         match op {
@@ -174,7 +174,7 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
             consumed += n2.1;
             todo!();
 
-            Object { 0: Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) }) }
+            // Object { 0: Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) }) }
         }
     };
 
@@ -193,7 +193,7 @@ pub fn getMeta(bytes: &[u8], index: usize) -> (VariableMetadata, usize) {
 
     (
         VariableMetadata {
-            name: n.0,
+            name: n.0.into_boxed_str(),
             typ: t.0,
         },
         consumed,
@@ -218,7 +218,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
             RawOpCode::FunName => {
                 let s = getStr(&data, i);
                 skip += s.1;
-                buf.push(FunName { name: s.0 })
+                buf.push(FunName { name: s.0.into_boxed_str() })
             }
             RawOpCode::FunReturn => buf.push(FunReturn { typ: None }),
             RawOpCode::LocalVarTable => {
@@ -293,7 +293,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
                 skip += encName.1;
                 offset += encName.1;
 
-                buf.push(Call { encoded: encName.0 })
+                buf.push(Call { encoded: encName.0.into_boxed_str() })
             }
             RawOpCode::Return => buf.push(Return),
             RawOpCode::Add => {
@@ -341,7 +341,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
             RawOpCode::New => {
                 let s = getStr(&data, i);
                 skip += s.1;
-                buf.push(New { name: s.0 })
+                buf.push(New { name: s.0.into_boxed_str() })
             }
             RawOpCode::GetField => {}
             RawOpCode::SetField => {}

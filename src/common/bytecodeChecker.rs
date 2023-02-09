@@ -52,12 +52,12 @@ impl Display for OutOfBoundsException {
 
 impl Error for OutOfBoundsException {}
 
-pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<String>) -> Result<(), Box<dyn Error>> {
+pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<Box<str>>) -> Result<(), Box<dyn Error>> {
     let mut index = opCodes.index as usize;
     let name = match opCodes.getOpcode(index).unwrap() {
         FunName { name } => name,
         v => {
-            return Err(Box::new(InvalidOpcode{ msg: format!("FunName") }))
+            return Err(Box::new(InvalidOpcode { msg: format!("FunName") }))
         }
     };
     index += 1;
@@ -85,7 +85,7 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
     }
 
     let genName = genFunNameMeta(&name, vars, *argCount);
-    checkedFunctions.insert(genName.clone());
+    checkedFunctions.insert(genName.clone().into_boxed_str());
     opCodes.index += index as isize;
 
     checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm, checkedFunctions)?;
@@ -205,7 +205,7 @@ impl AbstractStack {
 }
 
 #[inline(always)]
-pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec<DataType>, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<String>) -> Result<(), Box<dyn Error>> {
+pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec<DataType>, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<Box<str>>) -> Result<(), Box<dyn Error>> {
     loop {
         let (op, index) = match opCodes.nextOpcode() {
             (None, _) => {
@@ -393,16 +393,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             SetField { .. } => panic!(),
             ArrayNew(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))
+                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))
             },
             ArrayStore(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(t)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))?;
             },
             ArrayLoad(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))?;
                 abstractStack.push(t.clone())
             },
             ArrayLength => panic!(),

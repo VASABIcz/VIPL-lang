@@ -67,8 +67,8 @@ pub struct FunctionCall {
 impl Expression {
     pub fn toDataType(
         &self,
-        typesMapping: &HashMap<String, (DataType, usize)>,
-        functionReturns: &HashMap<String, Option<DataType>>,
+        typesMapping: &HashMap<Box<str>, (DataType, usize)>,
+        functionReturns: &HashMap<Box<str>, Option<DataType>>,
     ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
             Expression::ArithmeticOp { left, right: _, op: o } => {
@@ -106,11 +106,11 @@ impl Expression {
                 // FIXME
                 Ok(Some(DataType::Float))
             }
-            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: "String".to_string(), generics: Box::new([]) })))),
+            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: "String".to_string().into_boxed_str(), generics: Box::new([]) })))),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types);
-                match functionReturns.get(&enc) {
+                match functionReturns.get(&enc.clone().into_boxed_str()) {
                     None => {
                         // panic!();
                         println!("{:?}", functionReturns);
@@ -120,7 +120,7 @@ impl Expression {
                 }
             }
             Expression::Variable(name) => {
-                match typesMapping.get(name) {
+                match typesMapping.get(&name.clone().into_boxed_str()) {
                     None => Err(Box::new(TypeNotFound { typ: format!("variable {} not found", name) })),
                     Some(v) => {
                         Ok(Some(v.0.clone()))
@@ -131,7 +131,7 @@ impl Expression {
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
-                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([Generic::Type(t)]) }))))
+                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string().into_boxed_str(), generics: Box::new([Generic::Type(t)]) }))))
             }
             Expression::ArrayIndexing(i) => {
                 let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;

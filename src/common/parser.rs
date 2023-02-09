@@ -401,7 +401,7 @@ impl ParsingUnit for FunctionParsingUnit {
             let t = parseDataType(tokens)?;
 
             args.push(VariableMetadata {
-                name: argName,
+                name: argName.into_boxed_str(),
                 typ: t,
             });
             argCount += 1;
@@ -1052,7 +1052,7 @@ pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Err
         }
         tokens.getAssert(TokenType::Less)?;
     }
-    Ok(DataType::Object(Box::new(ObjectMeta { name: t, generics: generics.into_boxed_slice() })))
+    Ok(DataType::Object(Box::new(ObjectMeta { name: t.into_boxed_str(), generics: generics.into_boxed_slice() })))
 }
 
 struct ArrayLiteralParsingUnit;

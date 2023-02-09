@@ -2,6 +2,7 @@ extern crate rust_vm;
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::rc::Rc;
 
 use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::{bytecodeGen, bytecodeGen2};
@@ -56,7 +57,7 @@ fn main() {
         }
     };
 
-    println!("{:?}", &vm.functions.keys());
+    // println!("{:?}", &vm.functions.keys());
 
     let mut rets = HashMap::new();
 
@@ -73,7 +74,7 @@ fn main() {
         }
     };
 
-    println!("{:?}", &bs);
+    // println!("{:?}", &bs);
 
     /*
     match checkBytecode(&mut SeekableOpcodes {
@@ -91,6 +92,6 @@ fn main() {
     }
 
      */
-
+    return;
     evaluateBytecode2(bs.0, bs.1, &mut vm);
 }

@@ -1,6 +1,9 @@
+#![feature(get_mut_unchecked)]
+#![feature(downcast_unchecked)]
+
 use std::any::Any;
-use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::intrinsics::transmute;
@@ -30,12 +33,12 @@ pub enum DataType {
 impl DataType {
     pub fn Str() -> Self {
         Object(
-            Box::new(ObjectMeta { name: "String".to_string(), generics: Box::new([]) })
+            Box::new(ObjectMeta { name: "String".to_string().into_boxed_str(), generics: Box::new([]) })
         )
     }
     pub fn Arr(inner: Generic) -> Self {
         Object(
-            Box::new(ObjectMeta { name: "Array".to_string(), generics: Box::new([inner]) })
+            Box::new(ObjectMeta { name: "Array".to_string().into_boxed_str(), generics: Box::new([inner]) })
         )
     }
 }
@@ -57,7 +60,7 @@ impl Generic {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ObjectMeta {
-    pub name: String,
+    pub name: Box<str>,
     pub generics: Box<[Generic]>,
 }
 
@@ -156,21 +159,21 @@ impl JmpType {
 
 #[derive(Clone, Debug)]
 pub struct VariableMetadata {
-    pub name: String,
+    pub name: Box<str>,
     pub typ: DataType,
 }
 
 impl VariableMetadata {
     pub fn f(name: String) -> Self {
         Self {
-            name,
+            name: name.into_boxed_str(),
             typ: Float,
         }
     }
 
     pub fn i(name: String) -> Self {
         Self {
-            name,
+            name: name.into_boxed_str(),
             typ: Int,
         }
     }
@@ -189,7 +192,7 @@ impl VariableMetadata {
 pub enum OpCode {
     FunBegin,
     FunName {
-        name: String,
+        name: Box<str>,
     },
     FunReturn {
         typ: Option<DataType>,
@@ -219,7 +222,7 @@ pub enum OpCode {
         jmpType: JmpType,
     },
     Call {
-        encoded: String,
+        encoded: Box<str>,
     },
     Return,
 
@@ -238,22 +241,22 @@ pub enum OpCode {
 
     ClassBegin,
     ClassName {
-        name: String,
+        name: Box<str>,
     },
     ClassField {
-        name: String,
+        name: Box<str>,
         typ: DataType,
     },
     ClassEnd,
     New {
-        name: String,
+        name: Box<str>,
     },
     GetField {
-        name: String,
+        name: Box<str>,
         typ: DataType,
     },
     SetField {
-        name: String,
+        name: Box<str>,
         typ: DataType,
     },
     ArrayNew(DataType),
@@ -355,7 +358,7 @@ pub enum Value {
     Bol(bool),
     Chr(char),
     Reference {
-        instance: Option<Rc<RefCell<dyn Any>>>,
+        instance: Option<Rc<dyn crate::objects::Object>>,
     },
 }
 
@@ -365,8 +368,8 @@ impl Value {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
-                    Some(v) => {
-                        match v.borrow_mut().downcast_mut::<Str>() {
+                    Some(v) => unsafe {
+                        match Rc::get_mut_unchecked(&mut v.clone()).downcast_mut::<Str>() {
                             None => panic!(),
                             Some(v) => {
                                 v.string.clone()
@@ -380,15 +383,15 @@ impl Value {
     }
 
     pub fn makeString(str: String) -> Value {
-        Value::Reference { instance: Some(Rc::new(RefCell::new(Str { string: str }))) }
+        Value::Reference { instance: Some(Rc::new(Str { string: str })) }
     }
 
-    pub fn makeObject(obj: Box<dyn Any>) -> Value {
-        Value::Reference { instance: Some(Rc::new(RefCell::new(obj))) }
+    pub fn makeObject(obj: Box<dyn crate::objects::Object>) -> Value {
+        Value::Reference { instance: Some(Rc::from(obj)) }
     }
 
     pub fn makeArray(arr: Vec<Value>, typ: DataType) -> Value {
-        Value::Reference { instance: Some(Rc::new(RefCell::new(crate::objects::Array { internal: arr, typ }))) }
+        Value::Reference { instance: Some(Rc::new(crate::objects::Array { internal: arr, typ })) }
     }
 
     pub fn valueStr(&self) -> String {
@@ -400,23 +403,11 @@ impl Value {
             Reference { instance } => {
                 match instance {
                     None => String::from("null"),
-                    Some(v) => {
-                        let c = v.borrow_mut();
-                        match c.downcast_ref::<Str>() {
-                            None => {
-                                match c.downcast_ref::<crate::objects::Array>() {
-                                    None => format!("KUS {:?}", c),
-                                    Some(v) => {
-                                        format!("{:?}", v.internal.iter().map(|it| {
-                                            it.valueStr()
-                                        }).collect::<Vec<String>>())
-                                    }
-                                }
-                            }
-                            Some(s) => {
-                                format!("{}", s.string)
-                            }
-                        }
+                    Some(v) => unsafe {
+                        let mut clon = v.clone();
+                        let res = Rc::get_mut_unchecked(&mut clon);
+                        let e = res.downcast_mut_unchecked::<Str>();
+                        format!("{:?}", e)
                     }
                 }
             }
@@ -635,7 +626,7 @@ impl Value {
             Flo(_) => DataType::Float,
             Bol(_) => DataType::Bool,
             Chr(_) => DataType::Char,
-            Reference { instance } => DataType::Object(Box::new(ObjectMeta { name: "".to_string(), generics: Box::new([]) }))
+            Reference { instance } => DataType::Object(Box::new(ObjectMeta { name: "".to_string().into_boxed_str(), generics: Box::new([]) }))
         }
     }
 }
@@ -653,8 +644,8 @@ impl Value {
             Bool => {}
             Array { .. } => {}
             Object(it) => {
-                if it.name == "String" {
-                    let mut newStr = Rc::new(RefCell::new(Str { string: "".to_string() }));
+                if &*it.name == "String" {
+                    let mut buf = String::new();
 
                     match self {
                         Reference { instance } => {
@@ -662,8 +653,9 @@ impl Value {
                                 None => {
                                     panic!()
                                 }
-                                Some(v) => {
-                                    match v.borrow_mut().downcast_mut::<Str>() {
+                                Some(v) => unsafe {
+                                    let da = Rc::get_mut_unchecked(v);
+                                    match da.downcast_mut::<Str>() {
                                         None => panic!(),
                                         Some(ev) => {
                                             match value {
@@ -673,11 +665,13 @@ impl Value {
                                                             panic!()
                                                         }
                                                         Some(va) => {
-                                                            match va.borrow_mut().downcast_mut::<Str>() {
+                                                            let mut clon = va.clone();
+                                                            let ce = Rc::get_mut_unchecked(&mut clon);
+                                                            match ce.downcast_mut::<Str>() {
                                                                 None => panic!(),
                                                                 Some(ve) => {
-                                                                    newStr.borrow_mut().string.push_str(&ev.string);
-                                                                    newStr.borrow_mut().string.push_str(&ve.string);
+                                                                    buf.push_str(&ev.string);
+                                                                    buf.push_str(&ve.string);
                                                                 }
                                                             }
                                                         }
@@ -687,7 +681,7 @@ impl Value {
                                             }
                                         }
                                     }
-                                    *v = newStr;
+                                    *v = Rc::new(Str { string: buf })
                                 }
                             }
                         }
@@ -823,9 +817,9 @@ pub enum CachedOpCode {
 }
 
 pub struct VirtualMachine {
-    pub functions: HashMap<String, Func>,
+    pub functions: HashMap<Box<str>, Func>,
     pub stack: Vec<Value>,
-    pub classes: HashMap<String, ObjectDefinition>,
+    pub classes: HashMap<Box<str>, ObjectDefinition>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
@@ -851,7 +845,7 @@ impl VirtualMachine {
         let genName = genFunNameMeta(&name, &args, args.len());
         let l = args.len();
         self.functions.insert(
-            genName,
+            genName.into_boxed_str(),
             Func {
                 name,
                 returnType: ret,
@@ -873,7 +867,7 @@ impl VirtualMachine {
             typ: Runtime { rangeStart: begin, rangeStop: end }
         };
 
-        self.functions.insert(genName, fun);
+        self.functions.insert(genName.into_boxed_str(), fun);
     }
 }
 
@@ -937,7 +931,7 @@ pub fn genFunName(name: &str, args: &[DataType]) -> String {
 }
 
 #[inline(always)]
-pub fn genFunNameMeta(name: &String, args: &[VariableMetadata], argsLen: usize) -> String {
+pub fn genFunNameMeta(name: &str, args: &[VariableMetadata], argsLen: usize) -> String {
     format!("{}({})", name, argsToStringMeta(&args[0..argsLen]))
 }
 
@@ -985,7 +979,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 }
 
-                vm.makeRuntime(name.clone(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
+                vm.makeRuntime(name.clone().into_string(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
                 opCodes.index = index as isize;
             },
             FunName { .. } => panic!(),
@@ -1215,14 +1209,16 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             ArrayNew(d) => {
                 // println!("{}", vm.stack.len());
                 let size = vm.stack.pop().unwrap();
-                vm.stack.push(Value::Reference { instance: Some(Rc::new(RefCell::new(crate::objects::Array { internal: vec![], typ: d.clone() }))) })
+                vm.stack.push(Value::Reference { instance: Some(Rc::new(crate::objects::Array { internal: vec![], typ: d.clone() })) })
             },
             ArrayStore(_) => {
                 let index = vm.stack.pop().unwrap().getNum();
                 let val = vm.stack.pop().unwrap();
                 match vm.stack.pop().unwrap() {
-                    Reference { instance } => {
-                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                    Reference { instance } => unsafe {
+                        let mut clon = instance.unwrap();
+                        let ne = Rc::get_mut_unchecked(&mut clon);
+                        match ne.downcast_mut::<crate::objects::Array>() {
                             Some(v) => {
                                 if index as usize == v.internal.len() {
                                     v.internal.push(val)
@@ -1239,8 +1235,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             ArrayLoad(_) => {
                 let index = vm.stack.pop().unwrap().getNum();
                 match vm.stack.pop().unwrap() {
-                    Reference { instance } => {
-                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                    Reference { instance } => unsafe {
+                        let mut clon = instance.unwrap();
+                        let ne = Rc::get_mut_unchecked(&mut clon);
+                        match ne.downcast_mut::<crate::objects::Array>() {
                             None => {}
                             Some(v) => {
                                 vm.stack.push(v.internal.get(index as usize).unwrap().clone())
@@ -1252,8 +1250,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             },
             ArrayLength => {
                 match vm.stack.pop().unwrap() {
-                    Reference { instance } => {
-                        match instance.unwrap().borrow_mut().downcast_mut::<crate::objects::Array>() {
+                    Reference { instance } => unsafe {
+                        let mut clon = instance.unwrap();
+                        let ne = Rc::get_mut_unchecked(&mut clon);
+                        match ne.downcast_mut::<crate::objects::Array>() {
                             None => {}
                             Some(v) => {
                                 vm.stack.push(Value::Num(v.internal.len() as isize))
