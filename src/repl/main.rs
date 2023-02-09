@@ -1,23 +1,18 @@
 extern crate rust_vm;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::io::{BufRead, Write};
-use std::ops::Deref;
 use std::process::exit;
 
-use rust_vm::ast;
-use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
-use rust_vm::codegen::{bytecodeGen, complexBytecodeGen};
+use rust_vm::codegen::complexBytecodeGen;
 use rust_vm::fs::setupFs;
-use rust_vm::lexer::{Token, tokenizeSource};
-use rust_vm::objects::{Object, Str};
-use rust_vm::parser::{Operation, parse, parseOne, parseTokens, parsingUnits, TokenProvider};
-use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around, Back};
+use rust_vm::lexer::tokenizeSource;
+use rust_vm::parser::{parse, parseOne, parsingUnits, TokenProvider};
+use rust_vm::parser::ParsingUnitSearchType::{Ahead, Back};
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{DataType, evaluateBytecode, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
-use rust_vm::vm::RawOpCode::PushInt;
+use rust_vm::vm::{run, SeekableOpcodes, StackFrame};
 
 fn readInput() -> String {
     print!(">>> ");
@@ -45,7 +40,7 @@ fn main() {
     let mut functionReturns = HashMap::new();
     let mut mainLocals = HashMap::new();
     let mut localValues = vec![];
-    let mut lastLocalSize: usize = 0;
+    let lastLocalSize: usize = 0;
     let mut opcodeIndex: usize = 0;
     let mut opcodes = vec![];
     let parsingUnits = parsingUnits();
@@ -61,7 +56,7 @@ fn main() {
     loop {
         let str = readInput();
 
-        let mut tokens = match tokenizeSource(&str) {
+        let tokens = match tokenizeSource(&str) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("tokenizer");

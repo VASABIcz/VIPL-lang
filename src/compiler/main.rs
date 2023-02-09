@@ -1,18 +1,14 @@
 extern crate rust_vm;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
-use std::rc::Rc;
 
-use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
-use rust_vm::codegen::{bytecodeGen, bytecodeGen2};
-use rust_vm::fs;
+use rust_vm::codegen::bytecodeGen2;
 use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
-use rust_vm::parser::{Operation, parse, parseTokens, parsingUnits};
-use rust_vm::parser::ParsingUnitSearchType::{Ahead, Around};
+use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{DataType, evaluateBytecode, evaluateBytecode2, OpCode, SeekableOpcodes};
+use rust_vm::vm::evaluateBytecode2;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {}", err);
