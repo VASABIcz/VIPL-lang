@@ -12,7 +12,7 @@ example program to count lines of code
 
 ```rust
 fn countFile(path: String): int {
-  if ! endsWith(path, ".vipl") {
+  if !endsWith(path, ".vipl") {
     return 0
   }
 
