@@ -31,12 +31,12 @@ pub enum DataType {
 }
 
 impl DataType {
-    pub fn Str() -> Self {
+    pub fn str() -> Self {
         Object(
             Box::new(ObjectMeta { name: "String".to_string().into_boxed_str(), generics: Box::new([]) })
         )
     }
-    pub fn Arr(inner: Generic) -> Self {
+    pub fn arr(inner: Generic) -> Self {
         Object(
             Box::new(ObjectMeta { name: "Array".to_string().into_boxed_str(), generics: Box::new([inner]) })
         )
@@ -271,6 +271,8 @@ pub enum OpCode {
         typ: DataType,
         index: usize,
     },
+    StrNew(Box<str>),
+    GetChar
 }
 
 #[repr(u8)]
@@ -404,10 +406,8 @@ impl Value {
                 match instance {
                     None => String::from("null"),
                     Some(v) => unsafe {
-                        let mut clon = v.clone();
-                        let res = Rc::get_mut_unchecked(&mut clon);
-                        let e = res.downcast_mut_unchecked::<Str>();
-                        format!("{:?}", e)
+                        let e = v.downcast_ref_unchecked::<Str>();
+                        format!("{:?}", e.string)
                     }
                 }
             }
@@ -654,8 +654,7 @@ impl Value {
                                     panic!()
                                 }
                                 Some(v) => unsafe {
-                                    let da = Rc::get_mut_unchecked(v);
-                                    match da.downcast_mut::<Str>() {
+                                    match v.downcast_ref::<Str>() {
                                         None => panic!(),
                                         Some(ev) => {
                                             match value {
@@ -665,9 +664,7 @@ impl Value {
                                                             panic!()
                                                         }
                                                         Some(va) => {
-                                                            let mut clon = va.clone();
-                                                            let ce = Rc::get_mut_unchecked(&mut clon);
-                                                            match ce.downcast_mut::<Str>() {
+                                                            match va.downcast_ref::<Str>() {
                                                                 None => panic!(),
                                                                 Some(ve) => {
                                                                     buf.push_str(&ev.string);
@@ -1239,7 +1236,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                         let mut clon = instance.unwrap();
                         let ne = Rc::get_mut_unchecked(&mut clon);
                         match ne.downcast_mut::<crate::objects::Array>() {
-                            None => {}
+                            None => panic!(),
                             Some(v) => {
                                 vm.stack.push(v.internal.get(index as usize).unwrap().clone())
                             }
@@ -1251,9 +1248,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             ArrayLength => {
                 match vm.stack.pop().unwrap() {
                     Reference { instance } => unsafe {
-                        let mut clon = instance.unwrap();
-                        let ne = Rc::get_mut_unchecked(&mut clon);
-                        match ne.downcast_mut::<crate::objects::Array>() {
+                        let clon = instance.unwrap();
+                        match clon.downcast_ref::<crate::objects::Array>() {
                             None => {}
                             Some(v) => {
                                 vm.stack.push(Value::Num(v.internal.len() as isize))
@@ -1263,10 +1259,26 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     _ => panic!()
                 };
             },
-            Inc { typ, index } => unsafe {stackFrame.localVariables.get_unchecked_mut(*index).inc(typ)},
-            Dec { typ, index } => unsafe {stackFrame.localVariables.get_unchecked_mut(*index).dec(typ)},
+            Inc { typ, index } => unsafe { stackFrame.localVariables.get_unchecked_mut(*index).inc(typ) },
+            Dec { typ, index } => unsafe { stackFrame.localVariables.get_unchecked_mut(*index).dec(typ) },
             PushChar(c) => {
                 vm.stack.push(Value::Chr(*c))
+            }
+            StrNew(s) => {
+                vm.stack.push(Value::makeString(s.clone().into_string()))
+            }
+            GetChar => {
+                let index = vm.stack.pop().unwrap().getNum();
+                let s = vm.stack.pop().unwrap();
+                match s {
+                    Reference { instance } => unsafe {
+                        let u = instance.unwrap();
+                        let s = u.downcast_ref_unchecked::<Str>();
+                        let char = s.string.as_bytes().get(index as usize).unwrap();
+                        vm.stack.push(Value::Chr(*char as char))
+                    }
+                    _ => panic!()
+                }
             }
         }
     }

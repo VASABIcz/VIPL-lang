@@ -1,4 +1,8 @@
 fn countFile(path: String): int {
+    if !endsWith(path, ".vipl") {
+        return 0
+    }
+
     print("file")
     print(path)
 
@@ -8,7 +12,7 @@ fn countFile(path: String): int {
     counter = 1
 
     while i < fileLen {
-        c = getChar(file, i)
+        c = file[i]
 
         if c == '\n' {
             counter += 1

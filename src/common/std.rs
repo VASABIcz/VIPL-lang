@@ -106,7 +106,7 @@ pub fn bootStrapVM() -> VirtualMachine {
     vm.makeNative(
         String::from("appendChar"),
         Box::new([
-            VariableMetadata { name: "str".to_string().into(), typ: DataType::Str() },
+            VariableMetadata { name: "str".to_string().into(), typ: DataType::str() },
             VariableMetadata { name: "chr".to_string().into(), typ: DataType::Char }
         ]), |a, b| {
             let chr = match b.localVariables.get(1).unwrap() {
@@ -135,14 +135,13 @@ pub fn bootStrapVM() -> VirtualMachine {
             }
         }, None);
 
-    vm.makeNative("arrayLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Arr(Generic::Any) }]), |vm, locals| {
+    vm.makeNative("arrayLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::arr(Generic::Any) }]), |vm, locals| {
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        let ne = Rc::get_mut_unchecked(v);
-                        match ne.downcast_mut::<crate::objects::Array>() {
+                        match v.downcast_ref::<crate::objects::Array>() {
                             None => panic!(),
                             Some(v) => {
                                 vm.stack.push(Value::Num(v.internal.len() as isize))
@@ -155,14 +154,13 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Int));
 
-    vm.makeNative("strLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }]), |vm, locals| {
+    vm.makeNative("strLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        let ne = Rc::get_mut_unchecked(v);
-                        match ne.downcast_mut::<Str>() {
+                        match v.downcast_ref::<Str>() {
                             None => panic!(),
                             Some(v) => {
                                 vm.stack.push(Value::Num(v.string.len() as isize))
@@ -175,17 +173,16 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Int));
 
-    vm.makeNative("getChar".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::Int }]), |vm, locals| {
+    vm.makeNative("getChar".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::Int }]), |vm, locals| {
         let index = locals.localVariables.get(1).unwrap().getNum();
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        let ne = Rc::get_mut_unchecked(v);
-                        match ne.downcast_mut::<Str>() {
+                        match v.downcast_ref::<Str>() {
                             None => panic!(),
-                            Some(v) => unsafe {
+                            Some(v) => {
                                 vm.stack.push(Value::Chr(*v.string.as_bytes().get_unchecked(index as usize) as char))
                             }
                         }
@@ -196,24 +193,22 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Char));
 
-    vm.makeNative("endsWith".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }]), |vm, locals| {
+    vm.makeNative("endsWith".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
         let sec = locals.localVariables.get(1).unwrap().clone();
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        let ne = Rc::get_mut_unchecked(v);
-                        match ne.downcast_mut::<Str>() {
+                        match v.downcast_ref::<Str>() {
                             None => panic!(),
                             Some(v) => {
                                 match sec {
                                     Reference { instance } => {
                                         match instance {
                                             None => panic!(),
-                                            Some(mut k) => {
-                                                let ne = Rc::get_mut_unchecked(&mut k);
-                                                match ne.downcast_mut::<Str>() {
+                                            Some(k) => {
+                                                match k.downcast_ref::<Str>() {
                                                     None => panic!(),
                                                     Some(c) => {
                                                         vm.stack.push(Value::Bol(v.string.ends_with(&c.string)))

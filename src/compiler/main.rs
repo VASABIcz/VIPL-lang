@@ -92,6 +92,5 @@ fn main() {
     }
 
      */
-    return;
     evaluateBytecode2(bs.0, bs.1, &mut vm);
 }

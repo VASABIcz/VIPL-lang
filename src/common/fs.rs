@@ -6,7 +6,7 @@ use crate::vm::DataType::Int;
 use crate::vm::Value::Reference;
 
 pub fn setupFs(vm: &mut VirtualMachine) {
-    vm.makeNative("ls".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }]), |vm, locals| {
+    vm.makeNative("ls".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
         let path = locals.localVariables.first().unwrap().getString();
 
         let mut buf = vec![];
@@ -20,17 +20,17 @@ pub fn setupFs(vm: &mut VirtualMachine) {
             Err(_) => {}
         }
 
-        vm.stack.push(Value::makeArray(buf, DataType::Str()))
-    }, Some(DataType::Arr(Generic::Type(DataType::Str()))));
+        vm.stack.push(Value::makeArray(buf, DataType::str()))
+    }, Some(DataType::arr(Generic::Type(DataType::str()))));
 
-    vm.makeNative("readFile".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }]), |vm, locals| {
+    vm.makeNative("readFile".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
         let path = locals.localVariables.first().unwrap().getString();
 
         let str = fs::read_to_string(path).unwrap_or_default();
         vm.stack.push(Value::makeString(str))
-    }, Some(DataType::Str()));
+    }, Some(DataType::str()));
 
-    vm.makeNative("fileType".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::Str() }]), |vm, locals| {
+    vm.makeNative("fileType".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
         let path = locals.localVariables.first().unwrap().getString();
 
         let val = match fs::metadata(path) {

@@ -461,6 +461,14 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             PushChar(_) => {
                 abstractStack.push(Char)
             }
+            StrNew(_) => {
+                abstractStack.push(DataType::str())
+            }
+            GetChar => {
+                abstractStack.assertPop(&DataType::Int)?;
+                abstractStack.assertPop(&DataType::str())?;
+                abstractStack.push(DataType::Char);
+            }
         }
     }
 }

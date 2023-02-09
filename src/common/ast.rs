@@ -137,6 +137,9 @@ impl Expression {
                 let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;
                 match e {
                     Object(o) => {
+                        if &*o.name == "String" {
+                            return Ok(Some(Char));
+                        }
                         Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone().ok_or("")?))
                     }
                     _ => panic!()

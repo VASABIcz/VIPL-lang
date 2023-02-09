@@ -66,12 +66,7 @@ fn genExpression(
         Expression::FloatLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::DoubleLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::StringLiteral(i) => {
-            ops.push(Call { encoded: String::from("makeString()").into_boxed_str() });
-            for c in i.chars() {
-                ops.push(Dup);
-                ops.push(PushChar(c));
-                ops.push(Call { encoded: String::from("appendChar(String, char)").into_boxed_str() })
-            }
+            ops.push(StrNew(i.into_boxed_str()));
         }
         Expression::BoolLiteral(i) => ops.push(OpCode::PushBool(i)),
         Expression::FunctionCall(e) => {
@@ -125,6 +120,13 @@ fn genExpression(
             match d {
                 DataType::Object(o) => {
                     // println!("{:?}", o);
+                    if &*o.name == "String" {
+                        genExpression(i.expr, ops, functionReturns, vTable)?;
+                        genExpression(i.index, ops, functionReturns, vTable)?;
+                        ops.push(GetChar);
+                        return Ok(())
+                    }
+
                     match o.generics.first().unwrap() {
                         Generic::Type(v) => {
                             genExpression(i.expr, ops, functionReturns, vTable)?;
