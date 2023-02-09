@@ -1,7 +1,4 @@
 fn countFile(path: String): int {
-    if !endsWith(path, ".vipl") {
-        return 0
-    }
     print("file")
     print(path)
 
@@ -33,13 +30,14 @@ fn countDir(path: String): int {
     counter = 0
 
     while i < len {
-        ft = fileType(path + ("/" + (files[i])))
+        buf = path + ("/" + (files[i]))
+        ft = fileType(buf)
         if ft == 2 {
-            counter += countDir(path + ("/" + (files[i])))
+            counter += countDir(buf)
         }
         else {
             if ft == 1 {
-                counter += countFile(path + ("/" + (files[i])))
+                counter += countFile(buf)
             }
             else {
                 print(ft)
@@ -51,7 +49,7 @@ fn countDir(path: String): int {
     return counter
 }
 
-directory = "/home/vasabi/Downloads/vm-rust/src/compiler/counter.vipl"
+directory = "/home/vasabi/Downloads/vm-rust/src"
 dirType = fileType(directory)
 res = 0
 

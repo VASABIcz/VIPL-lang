@@ -184,8 +184,8 @@ pub fn bootStrapVM() -> VirtualMachine {
                     Some(v) => {
                         match v.borrow_mut().downcast_mut::<Str>() {
                             None => panic!(),
-                            Some(v) => {
-                                vm.stack.push(Value::Chr(v.string.bytes().nth(index as usize).unwrap() as char))
+                            Some(v) => unsafe {
+                                vm.stack.push(Value::Chr(*v.string.as_bytes().get_unchecked(index as usize) as char))
                             }
                         }
                     }
