@@ -15,6 +15,7 @@ use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
 #[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
 pub enum DataType {
     Int,
     Float,
@@ -38,6 +39,7 @@ impl DataType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
 pub enum Generic {
     Any,
     Type(DataType),
@@ -53,6 +55,7 @@ impl Generic {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
 pub struct ObjectMeta {
     pub name: Box<str>,
     pub generics: Box<[Generic]>,
@@ -152,6 +155,7 @@ impl JmpType {
 }
 
 #[derive(Clone, Debug)]
+#[repr(C)]
 pub struct VariableMetadata {
     pub name: Box<str>,
     pub typ: DataType,
@@ -805,6 +809,12 @@ pub enum CachedOpCode {
         typ: FuncType,
         argCount: usize,
     },
+}
+
+impl Drop for VirtualMachine {
+    fn drop(&mut self) {
+        println!("FUUUUUUUUUUUUCK")
+    }
 }
 
 pub struct VirtualMachine {

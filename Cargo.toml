@@ -25,6 +25,7 @@ path = "src/compiler/main.rs"
 [lib]
 mame = "common"
 path = "src/common/lib.rs"
+crate-type = ["staticlib"]
 
 
 [dependencies]
