@@ -161,13 +161,6 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
         RawDataType::Int => DataType::Int,
         RawDataType::Float => DataType::Float,
         RawDataType::Bool => DataType::Bool,
-        RawDataType::Array => {
-            let t = getType(bytes, index + consumed);
-            consumed += t.1;
-            DataType::Array {
-                inner: Box::new(t.0),
-            }
-        }
         RawDataType::Object => {
             let n = getStr(bytes, index + consumed);
             consumed += n.1;

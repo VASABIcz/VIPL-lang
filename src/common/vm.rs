@@ -14,6 +14,15 @@ use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
+#[macro_export]
+macro_rules! makeStr {
+    ( $x:expr ) => {
+        {
+            String::from($x).into_boxed_str()
+        }
+    };
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub enum DataType {
@@ -21,14 +30,13 @@ pub enum DataType {
     Float,
     Bool,
     Char,
-    Array { inner: Box<DataType> },
     Object(Box<ObjectMeta>),
 }
 
 impl DataType {
     pub fn str() -> Self {
         Object(
-            Box::new(ObjectMeta { name: "String".to_string().into_boxed_str(), generics: Box::new([]) })
+            Box::new(ObjectMeta { name: makeStr!("String"), generics: Box::new([]) })
         )
     }
     pub fn arr(inner: Generic) -> Self {
@@ -61,33 +69,12 @@ pub struct ObjectMeta {
     pub generics: Box<[Generic]>,
 }
 
-impl DataType {
-    /*
-    pub fn fromString(s: &str) -> Self {
-        if s.ends_with("[]") {
-            return DataType::Array {
-                inner: Box::new(DataType::fromString(s.strip_suffix("[]").unwrap())),
-            };
-        }
-
-        match s {
-            "int" => DataType::Int,
-            "float" => DataType::Float,
-            "bool" => DataType::Bool,
-            _ => DataType::Object(Box::new(ObjectMeta { name: s.to_string(), generics: Box::new([]) })),
-        }
-    }
-
-     */
-}
-
 #[repr(u8)]
 #[derive(Debug)]
 pub enum RawDataType {
     Int,
     Float,
     Bool,
-    Array,
     Object,
 }
 
@@ -99,7 +86,6 @@ impl DataType {
             Int => {}
             Float => {}
             Bool => {}
-            Array { inner } => inner.toBytes(bytes),
             Object(x) => {
                 let bs = x.name.escape_default().to_string();
                 bytes.extend(bs.len().to_ne_bytes());
@@ -116,7 +102,6 @@ impl DataType {
             Int => "int",
             Float => "float",
             Bool => "bool",
-            Array { inner: _ } => "",
             Object(x) => &x.name,
             Char => "char"
         }
@@ -124,14 +109,14 @@ impl DataType {
 }
 
 impl DataType {
+    #[inline]
     pub fn toDefaultValue(&self) -> Value {
         match self {
             Int => Num(0),
             Float => Flo(0.),
             Bool => Bol(false),
-            Array { .. } => panic!(),
             Object { .. } => Value::Reference { instance: None },
-            Char => Chr('a')
+            Char => Chr(0u8 as char)
         }
     }
 }
@@ -149,7 +134,7 @@ pub enum JmpType {
 
 impl JmpType {
     pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 1] = unsafe { std::mem::transmute((*self).clone()) };
+        let opId: [u8; 1] = unsafe { transmute((*self).clone()) };
         bytes.push(opId[0]);
     }
 }
@@ -173,6 +158,20 @@ impl VariableMetadata {
         Self {
             name: name.into_boxed_str(),
             typ: Int,
+        }
+    }
+
+    pub fn c(name: String) -> Self {
+        Self {
+            name: name.into_boxed_str(),
+            typ: Char,
+        }
+    }
+
+    pub fn b(name: String) -> Self {
+        Self {
+            name: name.into_boxed_str(),
+            typ: Bool,
         }
     }
 }
@@ -363,6 +362,7 @@ pub enum Value {
 }
 
 impl Value {
+    #[inline]
     pub fn getString(&self) -> String {
         match self {
             Reference { instance } => {
@@ -382,18 +382,22 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn makeString(str: String) -> Value {
         Value::Reference { instance: Some(Rc::new(Str { string: str })) }
     }
 
+    #[inline]
     pub fn makeObject(obj: Box<dyn crate::objects::Object>) -> Value {
         Value::Reference { instance: Some(Rc::from(obj)) }
     }
 
+    #[inline]
     pub fn makeArray(arr: Vec<Value>, typ: DataType) -> Value {
         Value::Reference { instance: Some(Rc::new(crate::objects::Array { internal: arr, typ })) }
     }
 
+    #[inline]
     pub fn valueStr(&self) -> String {
         match self {
             Num(it) => format!("{it}"),
@@ -414,7 +418,7 @@ impl Value {
 }
 
 impl Value {
-    #[inline(always)]
+    #[inline]
     pub fn getNum(&self) -> isize {
         match self {
             Num(v) => *v,
@@ -425,7 +429,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getFlo(&self) -> f32 {
         match self {
             Num(_) => panic!(),
@@ -436,7 +440,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getRefFlo(&mut self) -> &mut f32 {
         match self {
             Num(_) => panic!(),
@@ -447,7 +451,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getRefNum(&mut self) -> &mut isize {
         match self {
             Num(v) => v,
@@ -458,7 +462,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getRefBol(&mut self) -> &mut bool {
         match self {
             Num(_) => panic!(),
@@ -469,7 +473,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getBool(&self) -> bool {
         match self {
             Num(_) => panic!(),
@@ -482,19 +486,19 @@ impl Value {
 }
 
 impl Value {
-    #[inline(always)]
+    #[inline]
     pub fn or(&mut self, val: &Value) {
         let r = self.getRefBol();
         *r = *r || val.getBool();
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn and(&mut self, val: &Value) {
         let r = self.getRefBol();
         *r = *r && val.getBool();
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn not(&mut self) {
         let r = self.getRefBol();
         *r = !*r;
@@ -502,19 +506,18 @@ impl Value {
 }
 
 impl Value {
-    #[inline(always)]
+    #[inline]
     pub fn gt(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() > val.getNum(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn inc(&mut self, typ: &DataType) {
         match typ {
             Int => {
@@ -524,13 +527,12 @@ impl Value {
                 *self.getRefFlo() += 1.;
             }
             Bool => panic!(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn dec(&mut self, typ: &DataType) {
         match typ {
             Int => {
@@ -540,31 +542,28 @@ impl Value {
                 *self.getRefFlo() -= 1.;
             }
             Bool => panic!(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn less(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() < val.getNum(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn refLess(&mut self, val: &Value, typ: &DataType) {
         let l = match typ {
             Int => self.getNum() > val.getNum(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         };
@@ -572,13 +571,12 @@ impl Value {
         *self = Bol(l)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn refGt(&mut self, val: &Value, typ: &DataType) {
         let l = match typ {
             Int => self.getNum() < val.getNum(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         };
@@ -586,31 +584,30 @@ impl Value {
         *self = Bol(l)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn eq(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn refEq(&mut self, val: &Value, typ: &DataType) {
         let x = match typ {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
-            Array { .. } => panic!(),
             Object { .. } => panic!(),
             Char => self.getChar() == val.getChar()
         };
         *self = Bol(x)
     }
 
+    #[inline]
     pub fn getChar(&self) -> char {
         match self {
             Chr(c) => *c,
@@ -618,6 +615,7 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn toDataType(&self) -> DataType {
         match self {
             Num(_) => DataType::Int,
@@ -630,7 +628,7 @@ impl Value {
 }
 
 impl Value {
-    #[inline(always)]
+    #[inline]
     pub fn add(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -640,7 +638,6 @@ impl Value {
                 *self.getRefFlo() += value.getFlo();
             }
             Bool => {}
-            Array { .. } => {}
             Object(it) => {
                 if &*it.name == "String" {
                     let mut buf = String::new();
@@ -688,7 +685,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn sub(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -698,13 +695,12 @@ impl Value {
                 *self.getRefFlo() -= value.getFlo();
             }
             Bool => {}
-            Array { .. } => {}
             Object { .. } => {}
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -714,13 +710,12 @@ impl Value {
                 *self.getRefFlo() *= value.getFlo();
             }
             Bool => {}
-            Array { .. } => {}
             Object { .. } => {}
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
@@ -730,25 +725,24 @@ impl Value {
                 *self.getRefFlo() /= value.getFlo();
             }
             Bool => {}
-            Array { .. } => {}
             Object { .. } => {}
             Char => panic!()
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn f2i(&mut self) -> Value {
         Num(self.getFlo() as isize)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn i2f(&mut self) -> Value {
         Flo(self.getNum() as f32)
     }
 }
 
 impl Value {
-    #[inline(always)]
+    #[inline]
     pub fn isType(&self, typ: &DataType) -> bool {
         match self {
             Num(_) => {
@@ -809,12 +803,6 @@ pub enum CachedOpCode {
         typ: FuncType,
         argCount: usize,
     },
-}
-
-impl Drop for VirtualMachine {
-    fn drop(&mut self) {
-        println!("FUUUUUUUUUUUUCK")
-    }
 }
 
 pub struct VirtualMachine {
@@ -880,13 +868,13 @@ pub struct SeekableOpcodes<'a> {
 }
 
 impl SeekableOpcodes<'_> {
-    #[inline(always)]
+    #[inline]
     pub fn seek(&mut self, offset: isize) {
         // FIXME boundary check
         self.index += offset;
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn nextOpcode(&mut self) -> (Option<&OpCode>, usize) {
         let n = self.opCodes.get(self.index as usize);
         self.index += 1;
@@ -894,13 +882,13 @@ impl SeekableOpcodes<'_> {
         (n, (self.index - 1) as usize)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
         self.opCodes.get(index)
     }
 }
 
-#[inline(always)]
+#[inline]
 pub fn argsToString(args: &[DataType]) -> String {
     let mut buf = String::new();
 
@@ -913,7 +901,7 @@ pub fn argsToString(args: &[DataType]) -> String {
     buf
 }
 
-#[inline(always)]
+#[inline]
 pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
@@ -926,17 +914,17 @@ pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     buf
 }
 
-#[inline(always)]
+#[inline]
 pub fn genFunName(name: &str, args: &[DataType]) -> String {
     format!("{}({})", name, argsToString(args))
 }
 
-#[inline(always)]
+#[inline]
 pub fn genFunNameMeta(name: &str, args: &[VariableMetadata], argsLen: usize) -> String {
     format!("{}({})", name, argsToStringMeta(&args[0..argsLen]))
 }
 
-#[inline(always)]
+#[inline]
 pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
     loop {
         let (op, index) = match opCodes.nextOpcode() {
