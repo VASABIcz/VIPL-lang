@@ -1,13 +1,13 @@
 use std::mem::transmute;
 
-use crate::vm::{DataType, JmpType, OpCode, RawDataType, RawOpCode, VariableMetadata};
+use crate::vm::{DataType, JmpType, MyStr, OpCode, RawDataType, RawOpCode, VariableMetadata};
 use crate::vm::OpCode::*;
 
 pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];
 
     for op in ops {
-        let opId: [u8; 40] = unsafe { std::mem::transmute((*op).clone()) };
+        let opId: [u8; 48] = unsafe { std::mem::transmute((*op).clone()) };
         buf.push(opId[0]);
 
         match op {
@@ -48,12 +48,12 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
                 }
             },
             ClassName { name } | New { name } | FunName { name } => {
-                let bs = name.escape_default().to_string();
+                let bs = name.to_string().escape_default().to_string();
                 buf.extend(bs.len().to_ne_bytes());
                 buf.extend(bs.as_bytes());
             }
             ClassField { name, typ } | GetField { name, typ } | SetField { name, typ } => {
-                let bs = name.escape_default().to_string();
+                let bs = name.to_string().escape_default().to_string();
                 buf.extend(bs.len().to_ne_bytes());
                 buf.extend(bs.as_bytes());
                 typ.toBytes(&mut buf);
@@ -70,7 +70,7 @@ pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
                 jmpType.toBytes(&mut buf);
             }
             Call { encoded } => {
-                let be = encoded.escape_default().to_string();
+                let be = encoded.to_string().escape_default().to_string();
                 buf.extend(be.len().to_ne_bytes());
                 buf.extend(be.as_bytes());
             }
@@ -112,6 +112,21 @@ pub fn getStr(bytes: &[u8], index: usize) -> (String, usize) {
         buf.push(bytes[index + d.len() + i])
     }
     (String::from_utf8_lossy(&buf).to_string(), consumed)
+}
+
+pub fn getOp(bytes: &[u8], index: usize) -> (RawOpCode, usize) {
+    let d = [
+        bytes[index],
+        bytes[index + 1],
+        bytes[index + 2],
+        bytes[index + 3]
+    ];
+
+    let consumed = d.len();
+
+    let n: RawOpCode = unsafe { transmute(d) };
+
+    (n, consumed)
 }
 
 pub fn getSize(bytes: &[u8], index: usize) -> (usize, usize) {
@@ -187,32 +202,37 @@ pub fn getMeta(bytes: &[u8], index: usize) -> (VariableMetadata, usize) {
 
     (
         VariableMetadata {
-            name: n.0.into_boxed_str(),
+            name: MyStr::Runtime(n.0.into_boxed_str()),
             typ: t.0,
         },
         consumed,
     )
 }
 
+// FIXME
+
 pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
     let mut buf = vec![];
     let mut skip = 0;
 
     for (ind, o) in data.iter().enumerate() {
-        let i = ind + 1;
+        let i = ind;
         if skip > 0 {
             skip -= 1;
             continue;
         }
-        let op: RawOpCode = unsafe { transmute(*o) };
+
+
+        let op = getOp(&data, i);
+        i += op.1;
         println!("{op:?}");
 
-        match op {
+        match op.0 {
             RawOpCode::FunBegin => buf.push(FunBegin),
             RawOpCode::FunName => {
                 let s = getStr(&data, i);
                 skip += s.1;
-                buf.push(FunName { name: s.0.into_boxed_str() })
+                buf.push(FunName { name: MyStr::Runtime(s.0.into_boxed_str()) })
             }
             RawOpCode::FunReturn => buf.push(FunReturn { typ: None }),
             RawOpCode::LocalVarTable => {
@@ -287,7 +307,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
                 skip += encName.1;
                 offset += encName.1;
 
-                buf.push(Call { encoded: encName.0.into_boxed_str() })
+                buf.push(Call { encoded: MyStr::Runtime(encName.0.into_boxed_str()) })
             }
             RawOpCode::Return => buf.push(Return),
             RawOpCode::Add => {
@@ -335,7 +355,7 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
             RawOpCode::New => {
                 let s = getStr(&data, i);
                 skip += s.1;
-                buf.push(New { name: s.0.into_boxed_str() })
+                buf.push(New { name: MyStr::Runtime(s.0.into_boxed_str()) })
             }
             RawOpCode::GetField => {}
             RawOpCode::SetField => {}

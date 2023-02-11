@@ -1,9 +1,8 @@
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 
-
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::intrinsics::transmute;
 use std::rc::Rc;
 
@@ -14,13 +13,32 @@ use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-#[macro_export]
-macro_rules! makeStr {
-    ( $x:expr ) => {
-        {
-            String::from($x).into_boxed_str()
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+pub enum MyStr {
+    Static(&'static str),
+    Runtime(Box<str>),
+}
+
+impl Display for MyStr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MyStr::Static(v) => {
+                write!(f, "{}", v)
+            }
+            MyStr::Runtime(v) => {
+                write!(f, "{}", v)
+            }
         }
-    };
+    }
+}
+
+impl MyStr {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MyStr::Static(s) => s,
+            MyStr::Runtime(v) => v
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,12 +54,12 @@ pub enum DataType {
 impl DataType {
     pub fn str() -> Self {
         Object(
-            Box::new(ObjectMeta { name: makeStr!("String"), generics: Box::new([]) })
+            Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })
         )
     }
     pub fn arr(inner: Generic) -> Self {
         Object(
-            Box::new(ObjectMeta { name: "Array".to_string().into_boxed_str(), generics: Box::new([inner]) })
+            Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([inner]) })
         )
     }
 }
@@ -65,7 +83,7 @@ impl Generic {
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct ObjectMeta {
-    pub name: Box<str>,
+    pub name: MyStr,
     pub generics: Box<[Generic]>,
 }
 
@@ -87,7 +105,7 @@ impl DataType {
             Float => {}
             Bool => {}
             Object(x) => {
-                let bs = x.name.escape_default().to_string();
+                let bs = x.name.to_string().escape_default().to_string();
                 bytes.extend(bs.len().to_ne_bytes());
                 bytes.extend(bs.as_bytes())
             }
@@ -102,7 +120,7 @@ impl DataType {
             Int => "int",
             Float => "float",
             Bool => "bool",
-            Object(x) => &x.name,
+            Object(x) => x.name.as_str(),
             Char => "char"
         }
     }
@@ -142,35 +160,35 @@ impl JmpType {
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct VariableMetadata {
-    pub name: Box<str>,
+    pub name: MyStr,
     pub typ: DataType,
 }
 
 impl VariableMetadata {
-    pub fn f(name: String) -> Self {
+    pub fn f(name: MyStr) -> Self {
         Self {
-            name: name.into_boxed_str(),
+            name,
             typ: Float,
         }
     }
 
-    pub fn i(name: String) -> Self {
+    pub fn i(name: MyStr) -> Self {
         Self {
-            name: name.into_boxed_str(),
+            name,
             typ: Int,
         }
     }
 
-    pub fn c(name: String) -> Self {
+    pub fn c(name: MyStr) -> Self {
         Self {
-            name: name.into_boxed_str(),
+            name,
             typ: Char,
         }
     }
 
-    pub fn b(name: String) -> Self {
+    pub fn b(name: MyStr) -> Self {
         Self {
-            name: name.into_boxed_str(),
+            name,
             typ: Bool,
         }
     }
@@ -178,7 +196,7 @@ impl VariableMetadata {
 
 impl VariableMetadata {
     pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let bs = self.name.escape_default().to_string();
+        let bs = self.name.to_string().escape_default().to_string();
         bytes.extend(bs.len().to_ne_bytes());
         bytes.extend(bs.as_bytes());
         self.typ.toBytes(bytes);
@@ -186,10 +204,11 @@ impl VariableMetadata {
 }
 
 #[derive(Clone, Debug)]
+#[repr(C)]
 pub enum OpCode {
     FunBegin,
     FunName {
-        name: Box<str>,
+        name: MyStr,
     },
     FunReturn {
         typ: Option<DataType>,
@@ -219,7 +238,7 @@ pub enum OpCode {
         jmpType: JmpType,
     },
     Call {
-        encoded: Box<str>,
+        encoded: MyStr,
     },
     Return,
 
@@ -238,22 +257,22 @@ pub enum OpCode {
 
     ClassBegin,
     ClassName {
-        name: Box<str>,
+        name: MyStr,
     },
     ClassField {
-        name: Box<str>,
+        name: MyStr,
         typ: DataType,
     },
     ClassEnd,
     New {
-        name: Box<str>,
+        name: MyStr,
     },
     GetField {
-        name: Box<str>,
+        name: MyStr,
         typ: DataType,
     },
     SetField {
-        name: Box<str>,
+        name: MyStr,
         typ: DataType,
     },
     ArrayNew(DataType),
@@ -268,11 +287,11 @@ pub enum OpCode {
         typ: DataType,
         index: usize,
     },
-    StrNew(Box<str>),
+    StrNew(MyStr),
     GetChar
 }
 
-#[repr(u8)]
+#[repr(C)]
 #[derive(Debug)]
 pub enum RawOpCode {
     FunBegin,
@@ -351,6 +370,7 @@ pub struct MyClass {
 }
 
 #[derive(Clone, Debug)]
+#[repr(C)]
 pub enum Value {
     Num(isize),
     Flo(f32),
@@ -622,7 +642,7 @@ impl Value {
             Flo(_) => DataType::Float,
             Bol(_) => DataType::Bool,
             Chr(_) => DataType::Char,
-            Reference { instance: _ } => DataType::Object(Box::new(ObjectMeta { name: "".to_string().into_boxed_str(), generics: Box::new([]) }))
+            Reference { instance: _ } => DataType::Object(Box::new(ObjectMeta { name: MyStr::Static(""), generics: Box::new([]) }))
         }
     }
 }
@@ -639,7 +659,7 @@ impl Value {
             }
             Bool => {}
             Object(it) => {
-                if &*it.name == "String" {
+                if it.name.as_str() == "String" {
                     let mut buf = String::new();
 
                     match self {
@@ -806,9 +826,9 @@ pub enum CachedOpCode {
 }
 
 pub struct VirtualMachine {
-    pub functions: HashMap<Box<str>, Func>,
+    pub functions: HashMap<MyStr, Func>,
     pub stack: Vec<Value>,
-    pub classes: HashMap<Box<str>, ObjectDefinition>,
+    pub classes: HashMap<MyStr, ObjectDefinition>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
@@ -834,7 +854,7 @@ impl VirtualMachine {
         let genName = genFunNameMeta(&name, &args, args.len());
         let l = args.len();
         self.functions.insert(
-            genName.into_boxed_str(),
+            MyStr::Runtime(genName.into_boxed_str()),
             Func {
                 name,
                 returnType: ret,
@@ -856,7 +876,7 @@ impl VirtualMachine {
             typ: Runtime { rangeStart: begin, rangeStop: end }
         };
 
-        self.functions.insert(genName.into_boxed_str(), fun);
+        self.functions.insert(MyStr::Runtime(genName.into_boxed_str()), fun);
     }
 }
 
@@ -968,7 +988,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 }
 
-                vm.makeRuntime(name.clone().into_string(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
+                vm.makeRuntime(name.to_string(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
                 opCodes.index = index as isize;
             },
             FunName { .. } => panic!(),
@@ -1257,7 +1277,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 vm.stack.push(Value::Chr(*c))
             }
             StrNew(s) => {
-                vm.stack.push(Value::makeString(s.clone().into_string()))
+                vm.stack.push(Value::makeString(s.clone().to_string()))
             }
             GetChar => {
                 let index = vm.stack.pop().unwrap().getNum();

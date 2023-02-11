@@ -9,7 +9,7 @@ use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
 use crate::lexer::*;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, OpCode, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -29,8 +29,8 @@ impl Error for NoValue {}
 fn genExpression(
     exp: Expression,
     ops: &mut Vec<OpCode>,
-    functionReturns: &HashMap<Box<str>, Option<DataType>>,
-    vTable: &HashMap<Box<str>, (DataType, usize)>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+    vTable: &HashMap<MyStr, (DataType, usize)>,
 ) -> Result<(), Box<dyn Error>> {
     match exp {
         Expression::ArithmeticOp { left, right, op } => {
@@ -62,7 +62,7 @@ fn genExpression(
         Expression::FloatLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::DoubleLiteral(i) => ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::StringLiteral(i) => {
-            ops.push(StrNew(i.into_boxed_str()));
+            ops.push(StrNew(MyStr::Runtime(i.into_boxed_str())));
         }
         Expression::BoolLiteral(i) => ops.push(OpCode::PushBool(i)),
         Expression::FunctionCall(e) => {
@@ -82,18 +82,18 @@ fn genExpression(
             }
 
             ops.push(Call {
-                encoded: genFunName(&e.name, &argTypes).into_boxed_str(),
+                encoded: MyStr::Runtime(genFunName(&e.name, &argTypes).into_boxed_str()),
             })
         }
         Expression::Variable(v) => {
-            let _res = match vTable.get(&v.clone().into_boxed_str()) {
+            let _res = match vTable.get(&MyStr::Runtime(v.clone().into_boxed_str())) {
                 None => {
                     return Err(Box::new(VariableNotFound { name: v }));
                 }
                 Some(v) => v
             };
             ops.push(OpCode::PushLocal {
-                index: vTable.get(&v.into_boxed_str()).unwrap().1,
+                index: vTable.get(&MyStr::Runtime(v.into_boxed_str())).unwrap().1,
             })
         }
         Expression::CharLiteral(c) => {
@@ -116,7 +116,7 @@ fn genExpression(
             match d {
                 DataType::Object(o) => {
                     // println!("{:?}", o);
-                    if &*o.name == "String" {
+                    if o.name.as_str() == "String" {
                         genExpression(i.expr, ops, functionReturns, vTable)?;
                         genExpression(i.index, ops, functionReturns, vTable)?;
                         ops.push(GetChar);
@@ -160,8 +160,8 @@ impl Error for VariableNotFound {}
 fn genStatement(
     statement: Statement,
     ops: &mut Vec<OpCode>,
-    functionReturns: &HashMap<Box<str>, Option<DataType>>,
-    vTable: &HashMap<Box<str>, (DataType, usize)>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+    vTable: &HashMap<MyStr, (DataType, usize)>,
     loopContext: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
     match statement {
@@ -180,7 +180,7 @@ fn genStatement(
             }
 
             ops.push(Call {
-                encoded: genFunName(&e.name, &argTypes).into_boxed_str(),
+                encoded: MyStr::Runtime(genFunName(&e.name, &argTypes).into_boxed_str()),
             });
         }
         VariableCreate(v) => match v.init {
@@ -195,7 +195,7 @@ fn genStatement(
                         genExpression(e, ops, functionReturns, vTable)?;
                         // println!("{}", &v.name);
                         ops.push(OpCode::SetLocal {
-                            index: vTable.get(&v.name.into_boxed_str()).unwrap().1,
+                            index: vTable.get(&MyStr::Runtime(v.name.into_boxed_str())).unwrap().1,
                             typ: ve.clone(),
                         });
                     }
@@ -257,7 +257,7 @@ fn genStatement(
             ops.push(OpCode::Return)
         }
         Statement::VariableMod(m) => {
-            match vTable.get(&m.varName.clone().into_boxed_str()) {
+            match vTable.get(&MyStr::Runtime(m.clone().varName.into_boxed_str())) {
                 None => {
                     return Err(Box::new(VariableNotFound { name: m.varName }));
                 }
@@ -325,18 +325,18 @@ fn genStatement(
 fn genFunctionDef(
     fun: FunctionDef,
     ops: &mut Vec<OpCode>,
-    functionReturns: &HashMap<Box<str>, Option<DataType>>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     ops.push(OpCode::FunBegin);
     ops.push(FunName {
-        name: fun.name.clone().into_boxed_str(),
+        name: MyStr::Runtime(fun.name.clone().into_boxed_str()),
     });
 
     let mut idk1 = HashMap::new();
     let mut idk2 = vec![];
 
     for arg in fun.args {
-        idk1.insert(String::from(arg.name.clone()).into_boxed_str(), (arg.typ.clone(), idk2.len()));
+        idk1.insert(arg.name.clone(), (arg.typ.clone(), idk2.len()));
         idk2.push(arg.clone())
     }
 
@@ -359,7 +359,7 @@ fn genFunctionDef(
     Ok(())
 }
 
-pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataType>, functionReturns: &mut HashMap<Box<str>, Option<DataType>>, mainLocals: &mut HashMap<Box<str>, (DataType, usize)>) -> Result<Vec<OpCode>, Box<dyn Error>> {
+pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataType>, functionReturns: &mut HashMap<MyStr, Option<DataType>>, mainLocals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<Vec<OpCode>, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut ops = vec![];
     let mut counter = localTypes.len();
@@ -369,7 +369,7 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str(),
+                        MyStr::Runtime(genFunNameMeta(v.name.as_str(), &v.args.clone(), v.argCount).into_boxed_str()),
                         v.returnType.clone(),
                     );
                 }
@@ -382,11 +382,6 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
                         }
                         Some(ref ex) => {
                             let t = ex.clone().toDataType(mainLocals, functionReturns)?;
-                            if let std::collections::hash_map::Entry::Vacant(e) = mainLocals.entry(c.name.clone().into_boxed_str()) {
-                                e.insert((t.clone().unwrap(), counter));
-                                localTypes.push(t.unwrap().clone());
-                                counter += 1;
-                            }
                         }
                     }
                 }
@@ -434,7 +429,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
             Operation::FunctionDef(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str(),
+                        MyStr::Runtime(genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str()),
                         v.returnType.clone(),
                     );
                 }
@@ -447,7 +442,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
                         }
                         Some(ref ex) => {
                             let t = ex.clone().toDataType(&mainLocals, &functionReturns)?;
-                            mainLocals.insert(c.name.clone().into_boxed_str(), (t.clone().unwrap(), counter));
+                            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), counter));
                             localTypes.push(t.unwrap().clone());
                             counter += 1;
                         }
@@ -484,14 +479,14 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     Ok((ops, localTypes))
 }
 
-pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<Box<str>, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<Box<str>, Option<DataType>>) -> Result<(), Box<dyn Error>> {
+pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<MyStr, Option<DataType>>) -> Result<(), Box<dyn Error>> {
     match statement {
         VariableCreate(c) => {
             let res = c.init.clone().ok_or("variable expected initializer")?;
             let t = res.toDataType(mainLocals, functionReturns)?;
             // println!("creating variable {} type {:?}", &c.name, &t);
-            mainLocals.insert(c.name.clone().into_boxed_str(), (t.clone().unwrap(), localTypes.len()));
-            localTypes.push(VariableMetadata { name: c.name.clone().into_boxed_str(), typ: t.unwrap() });
+            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), localTypes.len()));
+            localTypes.push(VariableMetadata { name: MyStr::Runtime(c.name.clone().into_boxed_str()), typ: t.unwrap() });
         }
         Statement::While(w) => {
             for s in &w.body {
@@ -524,7 +519,7 @@ pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<Box<str>
     Ok(())
 }
 
-pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<Box<str>, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
+pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<MyStr, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
     let mut ops = vec![];

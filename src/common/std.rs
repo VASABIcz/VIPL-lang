@@ -12,7 +12,7 @@ pub fn bootStrapVM() -> VirtualMachine {
     vm.makeNative(
         String::from("print"),
         Box::new([VariableMetadata {
-            name: "value".to_string().into(),
+            name: MyStr::Static("Value"),
             typ: Int,
         }]),
         |_a, b| println!("{}", b.localVariables[0].getNum()),
@@ -22,7 +22,7 @@ pub fn bootStrapVM() -> VirtualMachine {
     vm.makeNative(
         String::from("print"),
         Box::new([VariableMetadata {
-            name: "value".to_string().into(),
+            name: MyStr::Static("Value"),
             typ: Float,
         }]),
         |_a, b| println!("{}", b.localVariables[0].getFlo()),
@@ -31,7 +31,7 @@ pub fn bootStrapVM() -> VirtualMachine {
 
     vm.makeNative(
         String::from("assert"),
-        Box::new([VariableMetadata::i(String::from("left")), VariableMetadata::i(String::from("right"))]),
+        Box::new([VariableMetadata::i(MyStr::Static("left")), VariableMetadata::i(MyStr::Static("right"))]),
         |_a, b| {
             let left = b.localVariables[1].getNum();
             let right = b.localVariables[0].getNum();
@@ -57,7 +57,7 @@ pub fn bootStrapVM() -> VirtualMachine {
                 Pop,
                 PushInt(69),
                 Call {
-                    encoded: "print(int)".to_string().into(),
+                    encoded: MyStr::Static("print(int)"),
                 },
             ];
 
@@ -73,7 +73,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         None,
     );
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: "".to_string().into(), typ: Object(Box::new(ObjectMeta { name: "String".to_string().into(), generics: Box::new([]) })) }]), |_a, b| {
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: MyStr::Static(""), typ: Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })) }]), |_a, b| {
         let c = b.localVariables.get(0).unwrap();
         match c {
             Num(_) => {}
@@ -100,13 +100,13 @@ pub fn bootStrapVM() -> VirtualMachine {
 
     vm.makeNative(String::from("makeString"), Box::new([]), |a, _b| {
         a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
-    }, Some(Object(Box::new(ObjectMeta { name: String::from("String").into(), generics: Box::new([]) }))));
+    }, Some(Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) }))));
 
     vm.makeNative(
         String::from("appendChar"),
         Box::new([
-            VariableMetadata { name: "str".to_string().into(), typ: DataType::str() },
-            VariableMetadata { name: "chr".to_string().into(), typ: DataType::Char }
+            VariableMetadata { name: MyStr::Static("str"), typ: DataType::str() },
+            VariableMetadata { name: MyStr::Static("chr"), typ: DataType::Char }
         ]), |_a, b| {
             let chr = match b.localVariables.get(1).unwrap() {
                 Chr(c) => *c,
@@ -134,7 +134,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             }
         }, None);
 
-    vm.makeNative("arrayLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::arr(Generic::Any) }]), |vm, locals| {
+    vm.makeNative("arrayLen".to_string(), Box::new([VariableMetadata { name: MyStr::Static(""), typ: DataType::arr(Generic::Any) }]), |vm, locals| {
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
@@ -153,7 +153,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Int));
 
-    vm.makeNative("strLen".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
+    vm.makeNative("strLen".to_string(), Box::new([VariableMetadata { name: MyStr::Static(""), typ: DataType::str() }]), |vm, locals| {
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
                 match instance {
@@ -172,7 +172,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Int));
 
-    vm.makeNative("getChar".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::Int }]), |vm, locals| {
+    vm.makeNative("getChar".to_string(), Box::new([VariableMetadata { name: MyStr::Static(""), typ: DataType::str() }, VariableMetadata { name: MyStr::Static(""), typ: DataType::Int }]), |vm, locals| {
         let index = locals.localVariables.get(1).unwrap().getNum();
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {
@@ -192,7 +192,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Char));
 
-    vm.makeNative("endsWith".to_string(), Box::new([VariableMetadata { name: "".to_string().into(), typ: DataType::str() }, VariableMetadata { name: "".to_string().into(), typ: DataType::str() }]), |vm, locals| {
+    vm.makeNative("endsWith".to_string(), Box::new([VariableMetadata { name: MyStr::Static(""), typ: DataType::str() }, VariableMetadata { name: MyStr::Static(""), typ: DataType::str() }]), |vm, locals| {
         let sec = locals.localVariables.get(1).unwrap().clone();
         match locals.localVariables.get_mut(0).unwrap() {
             Reference { instance } => {

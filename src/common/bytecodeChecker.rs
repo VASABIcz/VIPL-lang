@@ -79,7 +79,7 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
         abstractLocals.push(var.typ.clone())
     }
 
-    let genName = genFunNameMeta(name, vars, *argCount);
+    let genName = genFunNameMeta(name.as_str(), vars, *argCount);
     checkedFunctions.insert(genName.clone().into_boxed_str());
     opCodes.index += index as isize;
 
@@ -307,7 +307,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 }
             }
             Call { encoded } => {
-                if checkedFunctions.contains(encoded) {
+                if checkedFunctions.contains(encoded.as_str()) {
                     continue
                 }
 
@@ -388,16 +388,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             SetField { .. } => panic!(),
             ArrayNew(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))
+                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))
             },
             ArrayStore(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(t)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))?;
             },
             ArrayLoad(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: "Array".to_string().into(), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))?;
                 abstractStack.push(t.clone())
             },
             ArrayLength => panic!(),

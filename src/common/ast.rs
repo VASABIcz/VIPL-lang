@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::vm::{DataType, Generic, genFunName, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 
 #[derive(Debug)]
@@ -67,8 +67,8 @@ pub struct FunctionCall {
 impl Expression {
     pub fn toDataType(
         &self,
-        typesMapping: &HashMap<Box<str>, (DataType, usize)>,
-        functionReturns: &HashMap<Box<str>, Option<DataType>>,
+        typesMapping: &HashMap<MyStr, (DataType, usize)>,
+        functionReturns: &HashMap<MyStr, Option<DataType>>,
     ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
             Expression::ArithmeticOp { left, right: _, op: o } => {
@@ -106,11 +106,11 @@ impl Expression {
                 // FIXME
                 Ok(Some(DataType::Float))
             }
-            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: "String".to_string().into_boxed_str(), generics: Box::new([]) })))),
+            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })))),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types);
-                match functionReturns.get(&enc.clone().into_boxed_str()) {
+                match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
                     None => {
                         // panic!();
                         println!("{functionReturns:?}");
@@ -120,7 +120,7 @@ impl Expression {
                 }
             }
             Expression::Variable(name) => {
-                match typesMapping.get(&name.clone().into_boxed_str()) {
+                match typesMapping.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
                     None => Err(Box::new(TypeNotFound { typ: format!("variable {name} not found") })),
                     Some(v) => {
                         Ok(Some(v.0.clone()))
@@ -131,13 +131,13 @@ impl Expression {
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
-                Ok(Some(Object(Box::new(ObjectMeta { name: "Array".to_string().into_boxed_str(), generics: Box::new([Generic::Type(t)]) }))))
+                Ok(Some(Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t)]) }))))
             }
             Expression::ArrayIndexing(i) => {
                 let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;
                 match e {
                     Object(o) => {
-                        if &*o.name == "String" {
+                        if o.name.as_str() == "String" {
                             return Ok(Some(Char));
                         }
                         Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone().ok_or("")?))

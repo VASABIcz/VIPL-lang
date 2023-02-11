@@ -9,7 +9,7 @@ use crate::ast::Expression::IntLiteral;
 use crate::lexer::{Token, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, ORB, OSB, Return, StringLiteral};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
-use crate::vm::{DataType, Generic, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 
 #[derive(Debug)]
 struct NoSuchParsingUnit {
@@ -398,7 +398,7 @@ impl ParsingUnit for FunctionParsingUnit {
             let t = parseDataType(tokens)?;
 
             args.push(VariableMetadata {
-                name: argName.into_boxed_str(),
+                name: MyStr::Runtime(argName.into_boxed_str()),
                 typ: t,
             });
             argCount += 1;
@@ -1049,7 +1049,7 @@ pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Err
         }
         tokens.getAssert(TokenType::Less)?;
     }
-    Ok(DataType::Object(Box::new(ObjectMeta { name: t.into_boxed_str(), generics: generics.into_boxed_slice() })))
+    Ok(DataType::Object(Box::new(ObjectMeta { name: MyStr::Runtime(t.into_boxed_str()), generics: generics.into_boxed_slice() })))
 }
 
 struct ArrayLiteralParsingUnit;
