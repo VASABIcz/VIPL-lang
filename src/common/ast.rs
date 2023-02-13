@@ -201,8 +201,15 @@ pub struct If {
 }
 
 #[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: HashMap<String, DataType>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     FunctionDef(FunctionDef),
+    StructDef(StructDef),
 }
 
 #[derive(Debug, Clone)]

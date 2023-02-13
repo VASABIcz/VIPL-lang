@@ -19,6 +19,24 @@ pub enum MyStr {
     Runtime(Box<str>),
 }
 
+impl From<Box<str>> for MyStr {
+    fn from(value: Box<str>) -> Self {
+        Self::Runtime(value)
+    }
+}
+
+impl From<String> for MyStr {
+    fn from(value: String) -> Self {
+        Self::Runtime(value.into_boxed_str())
+    }
+}
+
+impl From<&'static str> for MyStr {
+    fn from(value: &'static str) -> Self {
+        Self::Static(value)
+    }
+}
+
 impl Display for MyStr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -815,6 +833,9 @@ pub enum FuncType {
     Native {
         callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
     },
+    Extern {
+        callback: extern fn(&mut VirtualMachine, &mut StackFrame) -> ()
+    },
 }
 
 pub enum CachedOpCode {
@@ -1129,6 +1150,13 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 // FIXME
                 // let enc = &String::from(encoded);
                 // println!("frame {:?}", &ee);
+
+                let mut stack = StackFrame {
+                    previous: Some(stackFrame),
+                    localVariables: ee,
+                    name: None,
+                };
+
                 match cached.1 {
                     Runtime {
                         rangeStart: s,
@@ -1136,25 +1164,17 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     } => {
                         let old = index + 1;
 
-                        let mut stack = StackFrame {
-                            previous: Some(stackFrame),
-                            localVariables: ee,
-                            name: None,
-                        };
-
                         opCodes.index = *s as isize;
 
                         run(opCodes, vm, &mut stack);
                         opCodes.index = old as isize;
                     }
                     Native { callback } => {
-                        let mut stack = StackFrame {
-                            previous: Some(stackFrame),
-                            localVariables: ee,
-                            name: None,
-                        };
                         callback(vm, &mut stack)
                     },
+                    Extern { callback } => {
+                        callback(vm, &mut stack)
+                    }
                 }
             }
             Return => return,
@@ -1338,3 +1358,26 @@ pub fn evaluateBytecode2(bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut 
         &mut StackFrame::new(&mut vals),
     );
 }
+
+/*
+clossure:
+
+new closssure value type -
+clossure object - slowest
+bytecode hack
+    - new generic None
+
+
+fn registerRoute(route: String, method: String, callback: Lambda<HttpRequest, HttpResponse, None>) {
+    req = newRequest()
+    res = newResponse()
+    call(callback, req, res)
+}
+
+fn myGet(req: HttpRequest, res: HttpResponse) {
+
+}
+
+registerRoute("/", "GET", &myGet)
+
+ */

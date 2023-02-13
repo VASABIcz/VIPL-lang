@@ -1,13 +1,14 @@
 use core::fmt;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::usize;
 
-use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, VariableCreate, VariableMod, While};
+use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, StructDef, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, ORB, OSB, Return, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 
@@ -311,7 +312,7 @@ impl TokenProvider {
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    FunctionDef(Node),
+    Global(Node),
     Statement(Statement),
     Expression(Expression),
 }
@@ -415,7 +416,7 @@ impl ParsingUnit for FunctionParsingUnit {
 
         let statements = parseBody(tokens, parser)?;
 
-        Ok(Operation::FunctionDef(Node::FunctionDef(crate::ast::FunctionDef {
+        Ok(Operation::Global(Node::FunctionDef(crate::ast::FunctionDef {
             name,
             args,
             argCount,
@@ -1241,6 +1242,52 @@ impl ParsingUnit for NotParsingUnit {
     }
 }
 
+struct StructParsingUnit;
+
+impl ParsingUnit for StructParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Struct)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Struct)?;
+        let name = tokenProvider.getIdentifier()?;
+
+        let mut fields = HashMap::new();
+
+        tokenProvider.getAssert(OCB)?;
+
+
+        while !tokenProvider.isPeekType(CCB) {
+            let fieldName = tokenProvider.getIdentifier()?;
+            tokenProvider.getAssert(Colon)?;
+            let fieldType = parseDataType(tokenProvider)?;
+
+            if fields.contains_key(&fieldName) {
+                None.ok_or("struct cant have duplicate fields")?;
+            }
+
+            fields.insert(fieldName, fieldType);
+        }
+
+        tokenProvider.getAssert(CCB)?;
+
+        Ok(Operation::Global(Node::StructDef(StructDef { name, fields })))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(VarModParsingUnit),
@@ -1308,5 +1355,6 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(IfParsingUnit),
         Box::new(BoolParsingUnit),
         Box::new(ReturnParsingUnit),
+        Box::new(StructParsingUnit)
     ]
 }

@@ -360,7 +360,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 abstractStack.assertPop(v)?;
                 abstractStack.push(Bool)
             }
-            Less(v) => unsafe {
+            Less(v) => {
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
                 abstractStack.push(Bool)

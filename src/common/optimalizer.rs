@@ -75,7 +75,7 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
 
 fn optimizeOp(op: &mut Operation) {
     match op {
-        Operation::FunctionDef(_) => {}
+        Operation::Global(_) => {}
         Operation::Statement(_) => {}
         Operation::Expression(e) => {
             if canBeOptimized(e) {

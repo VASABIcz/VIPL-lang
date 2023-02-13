@@ -15,4 +15,4 @@ mod tests;
 pub mod fs;
 pub mod optimalizer;
 pub mod std;
-pub mod ffi;
+// pub mod ffi;

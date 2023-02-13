@@ -5,7 +5,7 @@ use std::io::Write;
 
 use Statement::VariableCreate;
 
-use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement};
+use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::lexer::*;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
@@ -359,19 +359,44 @@ fn genFunctionDef(
     Ok(())
 }
 
-pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataType>, functionReturns: &mut HashMap<MyStr, Option<DataType>>, mainLocals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<Vec<OpCode>, Box<dyn Error>> {
+pub fn genStructDef(
+    struc: StructDef,
+    ops: &mut Vec<OpCode>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+    structs: &HashMap<MyStr, HashMap<String, DataType>>,
+) -> Result<(), Box<dyn Error>> {
+    ops.push(ClassBegin);
+    ops.push(ClassName { name: MyStr::Runtime(struc.name.into_boxed_str()) });
+
+    for (n, typ) in struc.fields {
+        ops.push(ClassField { name: n.into(), typ })
+    }
+
+    ops.push(ClassEnd);
+    Ok(())
+}
+
+pub fn complexBytecodeGen(
+    operations: Vec<Operation>,
+    localTypes: &mut Vec<DataType>,
+    functionReturns: &mut HashMap<MyStr, Option<DataType>>,
+    mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
+    structs: &mut HashMap<MyStr, HashMap<String, DataType>>,
+) -> Result<Vec<OpCode>, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut ops = vec![];
-    let mut counter = localTypes.len();
 
     for op in &operations {
         match op {
-            Operation::FunctionDef(f) => match f {
+            Operation::Global(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
                         MyStr::Runtime(genFunNameMeta(v.name.as_str(), &v.args.clone(), v.argCount).into_boxed_str()),
                         v.returnType.clone(),
                     );
+                }
+                Node::StructDef(v) => {
+                    structs.insert(MyStr::Runtime(v.name.clone().into_boxed_str()), v.fields.clone());
                 }
             },
             Operation::Statement(v) => {
@@ -392,10 +417,13 @@ pub fn complexBytecodeGen(operations: Vec<Operation>, localTypes: &mut Vec<DataT
     }
 
     for op in &operations {
-        if let Operation::FunctionDef(f) = op {
+        if let Operation::Global(f) = op {
             match f {
                 Node::FunctionDef(v) => {
                     genFunctionDef(v.clone(), &mut ops, functionReturns)?;
+                }
+                Node::StructDef(v) => {
+                    genStructDef(v.clone(), &mut ops, functionReturns, structs)?;
                 }
             }
         }
@@ -423,15 +451,19 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     let mut functionReturns = HashMap::new();
     let mut counter = 0;
     let mut localTypes = vec![];
+    let mut structs = HashMap::new();
 
     for op in &operations {
         match op {
-            Operation::FunctionDef(f) => match f {
+            Operation::Global(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
                         MyStr::Runtime(genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str()),
                         v.returnType.clone(),
                     );
+                }
+                Node::StructDef(v) => {
+                    structs.insert(MyStr::Runtime(v.name.clone().into_boxed_str()), v.fields.clone());
                 }
             },
             Operation::Statement(v) => {
@@ -455,10 +487,13 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     }
 
     for op in &operations {
-        if let Operation::FunctionDef(f) = op {
+        if let Operation::Global(f) = op {
             match f {
                 Node::FunctionDef(v) => {
                     genFunctionDef(v.clone(), &mut ops, &functionReturns)?;
+                }
+                Node::StructDef(v) => {
+                    genStructDef(v.clone(), &mut ops, &functionReturns, &mut structs)?;
                 }
             }
         }
@@ -524,6 +559,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
     let mut mainLocals = HashMap::new();
     let mut ops = vec![];
     let mut localTypes = vec![];
+    let mut structs = HashMap::new();
 
     for op in &operations {
         if let Operation::Statement(stat) = op {
@@ -536,10 +572,13 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
     }
 
     for op in &operations {
-        if let Operation::FunctionDef(f) = op {
+        if let Operation::Global(f) = op {
             match f {
                 Node::FunctionDef(v) => {
                     genFunctionDef(v.clone(), &mut ops, functionReturns)?;
+                }
+                Node::StructDef(v) => {
+                    genStructDef(v.clone(), &mut ops, functionReturns, &mut structs)?;
                 }
             }
         }

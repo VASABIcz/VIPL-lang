@@ -2,30 +2,74 @@ use std::ffi::{c_char, CStr};
 use std::mem::forget;
 
 use crate::std::bootStrapVM;
-use crate::vm::{DataType, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
+use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 
 // unsafe rust is so interesting :D
+// FIXME
 
 #[no_mangle]
-pub extern "C" fn createVm() -> *mut VirtualMachine {
+pub extern fn createVm() -> *mut VirtualMachine {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
     forget(ptr);
     ptr
 }
 
-pub extern "C" fn registerNative(vm: *mut VirtualMachine, name: *const c_char, args: *const DataType, callback: extern fn(*mut VirtualMachine, *mut StackFrame) -> ()) {
-    todo!()
+pub extern fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
+    vm.stack.push(value.clone());
 }
 
-pub extern "C" fn pushStack(vm: *mut VirtualMachine) {
-    todo!()
+
+type rustFn = fn(&mut VirtualMachine, &mut StackFrame) -> ();
+type cFn = extern fn(&mut VirtualMachine, &mut StackFrame) -> ();
+
+enum FunctionWrapper {
+    Rust(fn(&mut VirtualMachine, &mut StackFrame) -> ()),
+    C(extern fn(&mut VirtualMachine, &mut StackFrame) -> ()),
+}
+
+impl From<cFn> for FunctionWrapper {
+    fn from(value: cFn) -> Self {
+        Self::C(value)
+    }
+}
+
+impl From<rustFn> for FunctionWrapper {
+    fn from(value: rustFn) -> Self {
+        Self::Rust(value)
+    }
+}
+
+impl FunctionWrapper {
+    pub fn call(&self, vm: &mut VirtualMachine, locals: &mut StackFrame) {
+        match self {
+            FunctionWrapper::Rust(f) => f(vm, locals),
+            FunctionWrapper::C(f) => f(vm, locals)
+        }
+    }
+}
+
+pub unsafe extern "C" fn registerNative(
+    vm: &mut VirtualMachine,
+    name: *const c_char,
+    nameLen: usize,
+    args: *const DataType,
+    argsLen: usize,
+    callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+) {
+    let clonName = CStr::from_ptr(name);
+    let clonArgs = Box::from([]);
+    vm.makeNative(clonName.clone()., clonArgs, callback, None);
+}
+
+pub extern fn popStack(vm: &mut VirtualMachine) -> Option<Value> {
+    vm.stack.pop()
 }
 
 #[no_mangle]
-pub extern "C" fn test(vm: *mut VirtualMachine) {
+pub extern fn test(vm: *mut VirtualMachine) {
     println!("i am here");
-    let ops = vec![OpCode::PushInt(69), OpCode::Call { encoded: String::from("print(int)").into_boxed_str() }];
+    let ops = vec![OpCode::PushInt(69), OpCode::Call { encoded: MyStr::Static("print(int)") }];
 
     unsafe {
         for _ in 0..ops.len() {

@@ -44,6 +44,7 @@ fn main() {
     let mut opcodeIndex: usize = 0;
     let mut opcodes = vec![];
     let parsingUnits = parsingUnits();
+    let mut structs = HashMap::new();
 
     for f in &vm.functions {
         functionReturns.insert(f.0.clone(), f.1.returnType.clone());
@@ -102,7 +103,7 @@ fn main() {
         };
         // println!("{:?}", &res);
 
-        let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals) {
+        let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("bytecode");
