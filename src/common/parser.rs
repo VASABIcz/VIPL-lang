@@ -7,7 +7,7 @@ use std::usize;
 use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, StructDef, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
-use crate::lexer::{Token, TokenType};
+use crate::lexer::{LexingUnit, lexingUnits, Token, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
@@ -166,7 +166,7 @@ pub fn parseTokens(
     toks: Vec<Token>,
 ) -> Result<Vec<Operation>, Box<dyn Error>> {
     let mut buf = vec![];
-    let parsingUnits = parsingUnits();
+    let parsingUnits = unsafe { &parsingUnits() };
     let mut tokens = TokenProvider::new(toks);
 
     'main: while !tokens.isDone() {

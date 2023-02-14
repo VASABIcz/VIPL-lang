@@ -1,11 +1,14 @@
-use std::ffi::{c_char, CStr};
+use std::any::Any;
+use std::error::Error;
 use std::mem::forget;
+use std::ptr;
 
+use crate::codegen::bytecodeGen;
+use crate::lexer::{LexingUnit, lexingUnits, SourceProvider, Token};
+use crate::parser::Operation;
 use crate::std::bootStrapVM;
-use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
-
-// unsafe rust is so interesting :D
-// FIXME
+use crate::vm;
+use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata, VirtualMachine};
 
 #[no_mangle]
 pub extern fn createVm() -> *mut VirtualMachine {
@@ -15,60 +18,89 @@ pub extern fn createVm() -> *mut VirtualMachine {
     ptr
 }
 
+#[no_mangle]
 pub extern fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
     vm.stack.push(value.clone());
 }
 
-
-type rustFn = fn(&mut VirtualMachine, &mut StackFrame) -> ();
-type cFn = extern fn(&mut VirtualMachine, &mut StackFrame) -> ();
-
-enum FunctionWrapper {
-    Rust(fn(&mut VirtualMachine, &mut StackFrame) -> ()),
-    C(extern fn(&mut VirtualMachine, &mut StackFrame) -> ()),
-}
-
-impl From<cFn> for FunctionWrapper {
-    fn from(value: cFn) -> Self {
-        Self::C(value)
-    }
-}
-
-impl From<rustFn> for FunctionWrapper {
-    fn from(value: rustFn) -> Self {
-        Self::Rust(value)
-    }
-}
-
-impl FunctionWrapper {
-    pub fn call(&self, vm: &mut VirtualMachine, locals: &mut StackFrame) {
-        match self {
-            FunctionWrapper::Rust(f) => f(vm, locals),
-            FunctionWrapper::C(f) => f(vm, locals)
-        }
-    }
-}
-
-pub unsafe extern "C" fn registerNative(
+#[no_mangle]
+pub extern fn registerNative(
     vm: &mut VirtualMachine,
     name: *const u8,
     nameLen: usize,
     args: *const DataType,
     argsLen: usize,
-    callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+    callback: extern fn(&mut VirtualMachine, &mut StackFrame) -> (),
 ) {
-    let mut nameCopy = String::with_capacity(nameLen);
-    name.copy_to(nameCopy.as_mut_ptr(), nameLen);
+    let mut buf = vec![0u8; nameLen];
+    unsafe { name.copy_to(buf.as_mut_ptr(), nameLen); }
+    let nameCopy = unsafe { String::from_utf8_unchecked(buf) };
 
     let mut argsCopy = Vec::with_capacity(argsLen);
-    args.copy_to(argsCopy.as_mut_ptr(), argsLen);
+    unsafe { args.copy_to(argsCopy.as_mut_ptr(), argsLen); }
 
-    // let clonArgs = Box::from([]);
-    vm.makeNative(nameCopy., argsCopy.iter().map().collect(), callback, None);
+    vm.makeExtern(nameCopy, argsCopy.into_iter().map(|it| { it.into() }).collect(), callback, None);
 }
 
+#[no_mangle]
 pub extern fn popStack(vm: &mut VirtualMachine) -> Option<Value> {
     vm.stack.pop()
+}
+
+#[no_mangle]
+pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
+    let mut buf = vec![0u8; len];
+    unsafe { d.copy_to(buf.as_mut_ptr(), len); }
+    let mut s = unsafe { String::from_utf8_unchecked(buf) };
+
+    unsafe { d.copy_to(s.as_mut_ptr(), len); }
+
+    println!("{:?}", &s);
+    println!("{:?} {:?}", d, len);
+
+    let res = match unsafe { crate::lexer::tokenize(&mut lexingUnits(), SourceProvider { data: &s, index: 0 }) } {
+        Ok(v) => v,
+        Err(_) => {
+            println!("lexer failed");
+            return;
+        }
+    };
+
+    println!("{:?}", &res);
+
+    let ast = match crate::parser::parseTokens(res) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("parser failed");
+            return;
+        }
+    };
+
+    println!("{:?}", &ast);
+
+    let opCodes = match bytecodeGen(ast) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("codegen failed");
+            return;
+        }
+    };
+
+    println!("{:?}", &opCodes);
+
+    for _ in 0..opCodes.0.len() {
+        vm.opCodeCache.push(None)
+    }
+
+    run(&mut SeekableOpcodes {
+        index: 0,
+        opCodes: &opCodes.0,
+        start: None,
+        end: None,
+    }, vm, &mut StackFrame::new(&mut opCodes.1.into_iter().map(|it| { it.into() }).collect::<Vec<Value>>()));
+
+
+    println!("finished");
 }
 
 #[no_mangle]
@@ -89,9 +121,14 @@ pub extern fn test(vm: *mut VirtualMachine) {
             start: None,
             end: None,
         }, &mut *vm as &mut VirtualMachine, &mut StackFrame {
-            previous: None,
+            // previous: None,
             localVariables: &mut [],
             name: None,
         })
     }
+}
+
+#[no_mangle]
+pub extern "C" fn dropVm(ptr: *mut VirtualMachine) {
+    unsafe { ptr::drop_in_place(ptr); }
 }

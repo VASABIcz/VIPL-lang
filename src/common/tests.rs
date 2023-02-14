@@ -1,5 +1,12 @@
+use std::ptr::null;
+
 #[cfg(test)]
 use crate::ast::Op;
+use crate::codegen::bytecodeGen;
+use crate::ffi::registerNative;
+use crate::lexer::{tokenizeSource, TokenType};
+use crate::parser::parseTokens;
+use crate::vm::{evaluateBytecode, StackFrame, VirtualMachine};
 
 #[test]
 fn testNumericLexingUnit() {
@@ -89,4 +96,33 @@ fn testFunctionReturn() {
     println!("{:?}", &bs.0);
 
     evaluateBytecode(bs.0, bs.1);
+}
+
+extern "C" fn externFn(v: &mut VirtualMachine, l: &mut StackFrame) {
+    println!("native :3")
+}
+
+#[test]
+fn testFFI() {
+    use crate::ffi::*;
+    let vm = createVm();
+    test(vm);
+
+    dropVm(vm)
+}
+
+#[test]
+fn testMakeNativeFFI() {
+    use crate::ffi::*;
+    let vm = createVm();
+
+    let name = "uwu";
+    unsafe { registerNative(&mut *vm, name.as_ptr(), name.len(), null(), 0, externFn); }
+
+    let sc = "uwu()";
+
+    unsafe { evaluate(&mut *vm, sc.as_ptr(), sc.len()) };
+
+
+    dropVm(vm)
 }

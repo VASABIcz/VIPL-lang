@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::intrinsics::transmute;
 use std::rc::Rc;
 
@@ -13,31 +14,49 @@ use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
 
-#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+#[derive(Debug, Clone, Eq)]
 pub enum MyStr {
     Static(&'static str),
     Runtime(Box<str>),
 }
 
+impl PartialEq for MyStr {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Hash for MyStr {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state)
+    }
+}
+
 impl From<Box<str>> for MyStr {
+    #[inline]
     fn from(value: Box<str>) -> Self {
         Self::Runtime(value)
     }
 }
 
 impl From<String> for MyStr {
+    #[inline]
     fn from(value: String) -> Self {
         Self::Runtime(value.into_boxed_str())
     }
 }
 
 impl From<&'static str> for MyStr {
+    #[inline]
     fn from(value: &'static str) -> Self {
         Self::Static(value)
     }
 }
 
 impl Display for MyStr {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MyStr::Static(v) => {
@@ -51,6 +70,7 @@ impl Display for MyStr {
 }
 
 impl MyStr {
+    #[inline]
     pub fn as_str(&self) -> &str {
         match self {
             MyStr::Static(s) => s,
@@ -67,6 +87,13 @@ pub enum DataType {
     Bool,
     Char,
     Object(Box<ObjectMeta>),
+}
+
+impl Into<Value> for DataType {
+    #[inline]
+    fn into(self) -> Value {
+        self.toDefaultValue()
+    }
 }
 
 impl DataType {
@@ -183,8 +210,11 @@ pub struct VariableMetadata {
 }
 
 impl From<DataType> for VariableMetadata {
-    fn from(value: T) -> Self {
-        todo!()
+    fn from(value: DataType) -> Self {
+        Self {
+            name: "unknown".into(),
+            typ: DataType::Int,
+        }
     }
 }
 
@@ -666,7 +696,7 @@ impl Value {
             Flo(_) => DataType::Float,
             Bol(_) => DataType::Bool,
             Chr(_) => DataType::Char,
-            Reference { instance: _ } => DataType::Object(Box::new(ObjectMeta { name: MyStr::Static(""), generics: Box::new([]) }))
+            Reference { instance: _ } => DataType::Object(box ObjectMeta { name: MyStr::Static(""), generics: Box::new([]) })
         }
     }
 }
@@ -806,7 +836,7 @@ impl Value {
 
 #[derive(Debug)]
 pub struct StackFrame<'a> {
-    pub previous: Option<&'a StackFrame<'a>>,
+    // pub previous: Option<&'a StackFrame<'a>>,
     pub localVariables: &'a mut [Value],
     pub name: Option<&'a str>,
 }
@@ -814,14 +844,14 @@ pub struct StackFrame<'a> {
 impl StackFrame<'_> {
     pub fn new(localVariables: &mut [Value]) -> StackFrame {
         StackFrame {
-            previous: None,
+            // previous: None,
             localVariables,
             name: Option::from("root"),
         }
     }
 }
 
-#[derive(Clone)]
+
 pub struct Func {
     pub name: String,
     pub returnType: Option<DataType>,
@@ -844,6 +874,7 @@ pub enum FuncType {
     },
 }
 
+
 pub enum CachedOpCode {
     CallCache {
         stack: Vec<Value>,
@@ -852,12 +883,19 @@ pub enum CachedOpCode {
     },
 }
 
+
 pub struct VirtualMachine {
     pub functions: HashMap<MyStr, Func>,
     pub stack: Vec<Value>,
     pub classes: HashMap<MyStr, ObjectDefinition>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
+}
+
+impl Drop for VirtualMachine {
+    fn drop(&mut self) {
+        println!("i am being freed")
+    }
 }
 
 impl VirtualMachine {
@@ -888,6 +926,27 @@ impl VirtualMachine {
                 varTable: args,
                 argAmount: l,
                 typ: Native { callback: fun },
+            },
+        );
+    }
+
+    pub fn makeExtern(
+        &mut self,
+        name: String,
+        args: Box<[VariableMetadata]>,
+        fun: extern fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        ret: Option<DataType>,
+    ) {
+        let genName = genFunNameMeta(&name, &args, args.len());
+        let l = args.len();
+        self.functions.insert(
+            MyStr::Runtime(genName.into_boxed_str()),
+            Func {
+                name,
+                returnType: ret,
+                varTable: args,
+                argAmount: l,
+                typ: Extern { callback: fun },
             },
         );
     }
@@ -1094,10 +1153,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 }
             },
-            Call { encoded } => {
+            Call { encoded } => unsafe {
                 // println!("function call {}", encoded);
                 // println!("stack size {}", vm.stack.len());
-                let cached = match &vm.opCodeCache[index] {
+                let cached = match &vm.opCodeCache.get_unchecked(index) {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
                             stack,
@@ -1106,6 +1165,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                         } => (stack, typ, argCount),
                     },
                     None => {
+                        println!("{:?}", &vm.functions.keys());
                         let f = vm.functions.get(encoded).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
@@ -1137,7 +1197,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 };
 
-                let ee = &mut cached.0.clone();
+                let mut ee = cached.0.clone();
                 let _argsLen = ee.len();
                 // println!("args len {} {}", argsLen, cached.2);
                 // println!("vm {:?} {}", vm.stack, encoded);
@@ -1158,8 +1218,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 // println!("frame {:?}", &ee);
 
                 let mut stack = StackFrame {
-                    previous: Some(stackFrame),
-                    localVariables: ee,
+                    // previous: Some(stackFrame),
+                    localVariables: &mut ee,
                     name: None,
                 };
 

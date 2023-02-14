@@ -9,7 +9,7 @@ use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDe
 use crate::lexer::*;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
+use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 

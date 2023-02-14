@@ -170,7 +170,7 @@ pub struct Token {
     pub str: String,
 }
 
-pub trait LexingUnit {
+pub trait LexingUnit: Send + Sync {
     fn getRequestSize(&self) -> usize;
 
     fn canParse(&self, data: &str) -> bool;
@@ -381,7 +381,7 @@ impl LexingUnit for KeywordLexingUnit {
 }
 
 pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
-    let buf = vec![
+    vec![
         WhitespaceLexingUnit::new(),
         NumericLexingUnit::new(),
         KeywordLexingUnit::new("fn", TokenType::Fn),
@@ -431,10 +431,9 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         IdentifierLexingUnit::new(),
         RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
         RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
-    ];
-
-    buf
+    ]
 }
+
 
 #[test]
 fn testLexer() {
