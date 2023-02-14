@@ -160,7 +160,7 @@ impl DataType {
 }
 
 impl DataType {
-    fn toString(&self) -> &str {
+    pub fn toString(&self) -> &str {
         match self {
             Int => "int",
             Float => "float",

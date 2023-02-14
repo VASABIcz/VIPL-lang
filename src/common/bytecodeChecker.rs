@@ -85,6 +85,8 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
 
     checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm, checkedFunctions)?;
 
+    println!("check f {}", genName.as_str());
+
     // FIXME
     opCodes.nextOpcode();
 
@@ -208,7 +210,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             }
             (Some(v), i) => (v, i),
         };
-        // println!("checking {:?}", op);
+        println!("checking {:?}", op);
         match op {
             FunBegin => {
                 checkFunction(opCodes, abstractStack, vm, checkedFunctions)?;
@@ -259,16 +261,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             }
             SetLocal { index, typ: _t } => {
                 let x = abstractStack.pop()?;
-                if *index >= abstractLocals.len() || *index < 0 {
+                if *index >= abstractLocals.len() {
                     return Err(Box::new(OutOfBoundsException {
-                        max: (abstractLocals.len() - 1) as isize,
+                        max: (abstractLocals.len().saturating_sub(1)) as isize,
                         index: *index as isize,
                         msg: "locals".to_string(),
                     }))
                 }
                 match abstractLocals.get(*index) {
                     None => {
-                        return Err(Box::new(OutOfBoundsException{
+                        return Err(Box::new(OutOfBoundsException {
                             max: (abstractLocals.len() - 1) as isize,
                             index: *index as isize,
                             msg: "locals".to_string(),

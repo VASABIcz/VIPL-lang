@@ -18,4 +18,5 @@ pub mod optimalizer;
 pub mod std;
 mod ffi;
 mod tests;
+pub mod cGen;
 // pub mod ffi;

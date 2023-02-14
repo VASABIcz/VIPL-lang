@@ -1,15 +1,14 @@
 extern crate rust_vm;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 
-use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
-use rust_vm::codegen::bytecodeGen2;
+use rust_vm::cGen::bytecodeGen2;
 use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{evaluateBytecode2, SeekableOpcodes};
+use rust_vm::vm::evaluateBytecode2;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
@@ -20,7 +19,7 @@ fn main() {
     let sourceFile = std::env::args().nth(1).expect("expected source field");
 
     let src = std::fs::read_to_string(sourceFile).expect("failed to read source");
-
+    // let src = "fn a() { print(1) }";
     let mut vm = bootStrapVM();
     // let mut localTypes = vec![];
     setupFs(&mut vm);
@@ -62,7 +61,9 @@ fn main() {
         rets.insert(f.0.clone(), f.1.returnType.clone());
     }
 
-    let mut bs = match bytecodeGen2(ast, &mut rets) {
+    println!("{:?}", rets);
+
+    let bs = match bytecodeGen2(ast, &mut rets) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("codegen");
@@ -70,24 +71,5 @@ fn main() {
             return;
         }
     };
-
-    // println!("{:?}", &bs);
-
-    /*
-    match checkBytecode(&mut SeekableOpcodes {
-        index: 0,
-        opCodes: &bs.0,
-        start: None,
-        end: None,
-    }, &mut bs.1, &mut AbstractStack { stack: vec![] }, &mut vm, &mut HashSet::new()) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("bytecode check");
-            handleError(e);
-            return;
-        }
-    }
-
-     */
-    evaluateBytecode2(bs.0, bs.1, &mut vm);
+    println!("{}", bs)
 }

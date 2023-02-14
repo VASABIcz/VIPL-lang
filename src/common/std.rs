@@ -225,7 +225,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             }
             _ => panic!()
         }
-    }, Some(DataType::Char));
+    }, Some(DataType::Bool));
 
     vm
 }
