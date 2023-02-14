@@ -7,7 +7,7 @@ use std::usize;
 use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, StructDef, VariableCreate, VariableMod, While};
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
-use crate::lexer::{LexingUnit, lexingUnits, Token, TokenType};
+use crate::lexer::{LexingUnit, Token, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
@@ -177,7 +177,7 @@ pub fn parseTokens(
 
             if canParse && unit.canParse(&tokens) {
                 // println!("sus parse");
-                let res = unit.parse(&mut tokens, None, &parsingUnits)?;
+                let res = unit.parse(&mut tokens, None, parsingUnits)?;
                 buf.push(res);
                 continue 'main;
             }
@@ -1253,7 +1253,7 @@ impl ParsingUnit for StructParsingUnit {
         tokenProvider.isPeekType(Struct)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider, _previous: Option<Operation>, _parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Struct)?;
         let name = tokenProvider.getIdentifier()?;
 
@@ -1283,7 +1283,7 @@ impl ParsingUnit for StructParsingUnit {
         todo!()
     }
 
-    fn setPriority(&mut self, priority: usize) {
+    fn setPriority(&mut self, _priority: usize) {
         todo!()
     }
 }

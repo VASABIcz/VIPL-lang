@@ -9,7 +9,7 @@ use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDe
 use crate::lexer::*;
 use crate::optimalizer::evalExpr;
 use crate::parser::{*};
-use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -362,8 +362,8 @@ fn genFunctionDef(
 pub fn genStructDef(
     struc: StructDef,
     ops: &mut Vec<OpCode>,
-    functionReturns: &HashMap<MyStr, Option<DataType>>,
-    structs: &HashMap<MyStr, HashMap<String, DataType>>,
+    _functionReturns: &HashMap<MyStr, Option<DataType>>,
+    _structs: &HashMap<MyStr, HashMap<String, DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     ops.push(ClassBegin);
     ops.push(ClassName { name: MyStr::Runtime(struc.name.into_boxed_str()) });
@@ -378,7 +378,7 @@ pub fn genStructDef(
 
 pub fn complexBytecodeGen(
     operations: Vec<Operation>,
-    localTypes: &mut Vec<DataType>,
+    _localTypes: &mut Vec<DataType>,
     functionReturns: &mut HashMap<MyStr, Option<DataType>>,
     mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
     structs: &mut HashMap<MyStr, HashMap<String, DataType>>,
@@ -406,7 +406,7 @@ pub fn complexBytecodeGen(
                             return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
                         }
                         Some(ref ex) => {
-                            let t = ex.clone().toDataType(mainLocals, functionReturns)?;
+                            let _t = ex.clone().toDataType(mainLocals, functionReturns)?;
                         }
                     }
                 }

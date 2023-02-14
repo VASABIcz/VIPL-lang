@@ -1,5 +1,5 @@
-use std::any::TypeId;
 use std::any::Any;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -114,7 +114,7 @@ fn cd(r: Box<dyn Any>) {
 
 #[test]
 fn xd() {
-    let mut x: Box<Str> = Box::new(Str { string: String::from("UwU") });
-    let mut e: Box<dyn Any> = x;
+    let x: Box<Str> = Box::new(Str { string: String::from("UwU") });
+    let e: Box<dyn Any> = x;
     cd(e);
 }

@@ -11,8 +11,8 @@ use rust_vm::std::bootStrapVM;
 use rust_vm::vm::evaluateBytecode2;
 
 fn handleError(err: Box<dyn Error>) {
-    eprintln!("ERROR: {}", err);
-    eprintln!("ERROR: {:?}", err);
+    eprintln!("ERROR: {err}");
+    eprintln!("ERROR: {err:?}");
 }
 
 fn main() {

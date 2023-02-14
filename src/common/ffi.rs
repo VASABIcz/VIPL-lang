@@ -1,14 +1,10 @@
-use std::any::Any;
-use std::error::Error;
 use std::mem::forget;
 use std::ptr;
 
 use crate::codegen::bytecodeGen;
-use crate::lexer::{LexingUnit, lexingUnits, SourceProvider, Token};
-use crate::parser::Operation;
+use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::bootStrapVM;
-use crate::vm;
-use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VariableMetadata, VirtualMachine};
+use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 
 #[no_mangle]
 pub extern fn createVm() -> *mut VirtualMachine {
@@ -56,7 +52,7 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
     unsafe { d.copy_to(s.as_mut_ptr(), len); }
 
     println!("{:?}", &s);
-    println!("{:?} {:?}", d, len);
+    println!("{d:?} {len:?}");
 
     let res = match unsafe { crate::lexer::tokenize(&mut lexingUnits(), SourceProvider { data: &s, index: 0 }) } {
         Ok(v) => v,

@@ -60,10 +60,10 @@ impl Display for MyStr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MyStr::Static(v) => {
-                write!(f, "{}", v)
+                write!(f, "{v}")
             }
             MyStr::Runtime(v) => {
-                write!(f, "{}", v)
+                write!(f, "{v}")
             }
         }
     }
@@ -89,10 +89,10 @@ pub enum DataType {
     Object(Box<ObjectMeta>),
 }
 
-impl Into<Value> for DataType {
+impl From<DataType> for Value {
     #[inline]
-    fn into(self) -> Value {
-        self.toDefaultValue()
+    fn from(val: DataType) -> Self {
+        val.toDefaultValue()
     }
 }
 
@@ -210,7 +210,7 @@ pub struct VariableMetadata {
 }
 
 impl From<DataType> for VariableMetadata {
-    fn from(value: DataType) -> Self {
+    fn from(_value: DataType) -> Self {
         Self {
             name: "unknown".into(),
             typ: DataType::Int,

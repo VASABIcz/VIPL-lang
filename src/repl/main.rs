@@ -25,12 +25,12 @@ fn readInput() -> String {
         exit(0);
     }
 
-    return buf;
+    buf
 }
 
 fn handleError(err: Box<dyn Error>) {
-    eprintln!("ERROR: {}", err);
-    eprintln!("ERROR: {:?}", err);
+    eprintln!("ERROR: {err}");
+    eprintln!("ERROR: {err:?}");
 }
 
 fn main() {

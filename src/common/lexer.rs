@@ -446,5 +446,5 @@ fn testLexer() {
     };
 
     let tokens = tokenize(&mut lexingUnits, src);
-    println!("{:?}", tokens);
+    println!("{tokens:?}");
 }

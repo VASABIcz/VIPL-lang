@@ -1,12 +1,4 @@
-use std::ptr::null;
-
-#[cfg(test)]
-use crate::ast::Op;
-use crate::codegen::bytecodeGen;
-use crate::ffi::registerNative;
-use crate::lexer::{tokenizeSource, TokenType};
-use crate::parser::parseTokens;
-use crate::vm::{evaluateBytecode, StackFrame, VirtualMachine};
+use crate::vm::{StackFrame, VirtualMachine};
 
 #[test]
 fn testNumericLexingUnit() {
@@ -98,7 +90,7 @@ fn testFunctionReturn() {
     evaluateBytecode(bs.0, bs.1);
 }
 
-extern "C" fn externFn(v: &mut VirtualMachine, l: &mut StackFrame) {
+extern "C" fn externFn(_v: &mut VirtualMachine, _l: &mut StackFrame) {
     println!("native :3")
 }
 
