@@ -51,15 +51,20 @@ impl FunctionWrapper {
 
 pub unsafe extern "C" fn registerNative(
     vm: &mut VirtualMachine,
-    name: *const c_char,
+    name: *const u8,
     nameLen: usize,
     args: *const DataType,
     argsLen: usize,
     callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
 ) {
-    let clonName = CStr::from_ptr(name);
-    let clonArgs = Box::from([]);
-    vm.makeNative(clonName.clone()., clonArgs, callback, None);
+    let mut nameCopy = String::with_capacity(nameLen);
+    name.copy_to(nameCopy.as_mut_ptr(), nameLen);
+
+    let mut argsCopy = Vec::with_capacity(argsLen);
+    args.copy_to(argsCopy.as_mut_ptr(), argsLen);
+
+    // let clonArgs = Box::from([]);
+    vm.makeNative(nameCopy., argsCopy.iter().map().collect(), callback, None);
 }
 
 pub extern fn popStack(vm: &mut VirtualMachine) -> Option<Value> {

@@ -4,7 +4,7 @@ fn fact(n: int): int {
 
 x = 0
 
-while true{
+while true {
     fact(20)
     x += 1
     print(x)

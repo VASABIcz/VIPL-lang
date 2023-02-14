@@ -53,7 +53,7 @@ fn countDir(path: String): int {
     return counter
 }
 
-directory = "/home/vasabi/Downloads"
+directory = "/home/vasabi/Downloads/vm-rust/src"
 dirType = fileType(directory)
 res = 0
 

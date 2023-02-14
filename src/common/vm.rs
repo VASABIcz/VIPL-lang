@@ -182,6 +182,12 @@ pub struct VariableMetadata {
     pub typ: DataType,
 }
 
+impl From<DataType> for VariableMetadata {
+    fn from(value: T) -> Self {
+        todo!()
+    }
+}
+
 impl VariableMetadata {
     pub fn f(name: MyStr) -> Self {
         Self {
