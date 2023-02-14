@@ -144,7 +144,6 @@ fn main() {
         opcodes.extend(bs);
 
         let mut stack = StackFrame {
-            previous: None,
             localVariables: &mut localValues,
             name: None
         };

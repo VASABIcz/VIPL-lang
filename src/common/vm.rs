@@ -892,11 +892,13 @@ pub struct VirtualMachine {
     pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
 
+/*
 impl Drop for VirtualMachine {
     fn drop(&mut self) {
         println!("i am being freed")
     }
 }
+ */
 
 impl VirtualMachine {
     pub fn new() -> Self {
@@ -1165,7 +1167,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                         } => (stack, typ, argCount),
                     },
                     None => {
-                        println!("{:?}", &vm.functions.keys());
+                        // println!("{:?}", &vm.functions.keys());
                         let f = vm.functions.get(encoded).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
