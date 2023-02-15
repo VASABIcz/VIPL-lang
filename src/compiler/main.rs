@@ -62,7 +62,7 @@ fn main() {
         rets.insert(f.0.clone(), f.1.returnType.clone());
     }
 
-    let mut bs = match bytecodeGen2(ast, &mut rets) {
+    let bs = match bytecodeGen2(ast, &mut rets) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("codegen");

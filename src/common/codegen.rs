@@ -266,37 +266,21 @@ fn genStatement(
                 None => {
                     return Err(Box::new(VariableNotFound { name: m.varName }));
                 }
-                Some(v) => {
-                    let op = match m.modType {
-                        ModType::Add => OpCode::Add(v.0.clone()),
-                        ModType::Sub => OpCode::Sub(v.0.clone()),
-                        ModType::Div => OpCode::Div(v.0.clone()),
-                        ModType::Mul => OpCode::Mul(v.0.clone())
-                    };
-                    match evalExpr(&m.expr) {
-                        None => {
-                            ops.push(OpCode::PushLocal { index: v.1 });
-                            genExpression(m.expr, ops, functionReturns, vTable)?;
-                            ops.push(op);
-                            ops.push(OpCode::SetLocal { index: v.1, typ: v.0.clone() });
-                        }
-                        Some(e) => {
-                            if e.isType(&Int) && e.getNum() == 1 {
-                                // panic!("this is good panic");
-                                match m.modType {
-                                    ModType::Add => {
-                                        ops.push(Inc { typ: DataType::Int, index: v.1 });
-                                        return Ok(())
-                                    }
-                                    ModType::Sub => {
-                                        ops.push(Inc { typ: DataType::Int, index: v.1 });
-                                        return Ok(())
-                                    }
-                                    ModType::Div => {}
-                                    ModType::Mul => {}
-                                }
-                            }
-                        }
+                Some(local) => {
+                    if let Some(v) = evalExpr(&m.expr) && let Some(f) = v.tryValueAsFloat() && f == 1f32 {
+                        ops.push(Inc { typ: v.toDataType(), index: local.1 })
+                    } else {
+                        let dataType = m.expr.toDataType(vTable, functionReturns)?.expect("expected return value");
+                        ops.push(PushLocal { index: local.1 });
+                        genExpression(m.expr, ops, functionReturns, vTable)?;
+                        let op = match m.modType {
+                            ModType::Add => Add(dataType.clone()),
+                            ModType::Sub => Sub(dataType.clone()),
+                            ModType::Div => Div(dataType.clone()),
+                            ModType::Mul => Mul(dataType.clone())
+                        };
+                        ops.push(op);
+                        ops.push(SetLocal { index: local.1, typ: dataType })
                     }
                 }
             }
@@ -381,6 +365,46 @@ pub fn genStructDef(
     Ok(())
 }
 
+pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<MyStr, Option<DataType>>) -> Result<(), Box<dyn Error>> {
+    match statement {
+        VariableCreate(c) => {
+            let res = c.init.clone().ok_or("variable expected initializer")?;
+            let t = res.toDataType(mainLocals, functionReturns)?;
+            // println!("creating variable {} type {:?}", &c.name, &t);
+            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), localTypes.len()));
+            localTypes.push(VariableMetadata { name: MyStr::Runtime(c.name.clone().into_boxed_str()), typ: t.unwrap() });
+        }
+        Statement::While(w) => {
+            for s in &w.body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+        }
+        Statement::If(i) => {
+            for s in &i.body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+            if let Some(body) = &i.elseBody {
+                for s in body {
+                    buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+                }
+            }
+        }
+        Statement::Loop(body) => {
+            for s in body {
+                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
+            }
+        }
+        Statement::FunctionExpr(_) => {}
+        Statement::VariableMod(_) => {}
+        Statement::Return(_) => {}
+        Statement::ArrayAssign { .. } => {}
+        Statement::Continue => {}
+        Statement::Break => {}
+    }
+
+    Ok(())
+}
+
 pub fn complexBytecodeGen(
     operations: Vec<Operation>,
     localTypes: &mut Vec<DataType>,
@@ -452,173 +476,22 @@ pub fn complexBytecodeGen(
 }
 
 pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
-    let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
-    let mut ops = vec![];
     let mut functionReturns = HashMap::new();
-    let mut counter = 0;
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    for op in &operations {
-        match op {
-            Operation::Global(f) => match f {
-                Node::FunctionDef(v) => {
-                    functionReturns.insert(
-                        MyStr::Runtime(genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str()),
-                        v.returnType.clone(),
-                    );
-                }
-                Node::StructDef(v) => {
-                    structs.insert(MyStr::Runtime(v.name.clone().into_boxed_str()), v.fields.clone());
-                }
-            },
-            Operation::Statement(v) => {
-                if let VariableCreate(c) = v {
-                    match c.init {
-                        None => {
-                            return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
-                        }
-                        Some(ref ex) => {
-                            let t = ex.clone().toDataType(&mainLocals, &functionReturns)?;
-                            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), counter));
-                            localTypes.push(t.unwrap().clone());
-                            counter += 1;
-                        }
-                    }
-                }
-                inlineMain.push(op.clone())
-            }
-            _ => inlineMain.push(op.clone()),
-        }
-    }
+    let res = complexBytecodeGen(operations, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs)?;
 
-    for op in &operations {
-        if let Operation::Global(f) = op {
-            match f {
-                Node::FunctionDef(v) => {
-                    genFunctionDef(v.clone(), &mut ops, &functionReturns)?;
-                }
-                Node::StructDef(v) => {
-                    genStructDef(v.clone(), &mut ops, &functionReturns, &mut structs)?;
-                }
-            }
-        }
-    }
-
-    for op in &inlineMain {
-        match op {
-            Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
-            }
-            Operation::Expr(e) => {
-                genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
-            }
-            _ => {}
-        }
-    }
-
-    Ok((ops, localTypes))
-}
-
-pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<MyStr, Option<DataType>>) -> Result<(), Box<dyn Error>> {
-    match statement {
-        VariableCreate(c) => {
-            let res = c.init.clone().ok_or("variable expected initializer")?;
-            let t = res.toDataType(mainLocals, functionReturns)?;
-            // println!("creating variable {} type {:?}", &c.name, &t);
-            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), localTypes.len()));
-            localTypes.push(VariableMetadata { name: MyStr::Runtime(c.name.clone().into_boxed_str()), typ: t.unwrap() });
-        }
-        Statement::While(w) => {
-            for s in &w.body {
-                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
-            }
-        }
-        Statement::If(i) => {
-            for s in &i.body {
-                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
-            }
-            if let Some(body) = &i.elseBody {
-                for s in body {
-                    buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
-                }
-            }
-        }
-        Statement::Loop(body) => {
-            for s in body {
-                buildLocalsTable(s, mainLocals, localTypes, functionReturns)?;
-            }
-        }
-        Statement::FunctionExpr(_) => {}
-        Statement::VariableMod(_) => {}
-        Statement::Return(_) => {}
-        Statement::ArrayAssign { .. } => {}
-        Statement::Continue => {}
-        Statement::Break => {}
-    }
-
-    Ok(())
+    Ok((res, localTypes))
 }
 
 pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<MyStr, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
-    let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
-    let mut ops = vec![];
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    for op in &operations {
-        if let Operation::Statement(stat) = op {
-            buildLocalsTable(stat, &mut mainLocals, &mut localTypes, functionReturns)?;
-            inlineMain.push(op);
-        } else if let Operation::Expr(Expression::FunctionCall(call)) = op {
-            buildLocalsTable(&Statement::FunctionExpr(call.clone()), &mut mainLocals, &mut localTypes, functionReturns)?;
-            inlineMain.push(op);
-        }
-    }
+    let res = complexBytecodeGen(operations, &mut localTypes, functionReturns, &mut mainLocals, &mut structs)?;
 
-    for op in &operations {
-        if let Operation::Global(f) = op {
-            match f {
-                Node::FunctionDef(v) => {
-                    genFunctionDef(v.clone(), &mut ops, functionReturns)?;
-                }
-                Node::StructDef(v) => {
-                    genStructDef(v.clone(), &mut ops, functionReturns, &mut structs)?;
-                }
-            }
-        }
-    }
-
-    for op in &inlineMain {
-        match op {
-            Operation::Statement(s) => {
-                genStatement(s.clone(), &mut ops, functionReturns, &mainLocals, None)?;
-            }
-            Operation::Expr(e) => {
-                genExpression(e.clone(), &mut ops, functionReturns, &mainLocals)?;
-            }
-            _ => {}
-        }
-    }
-
-    Ok((ops, localTypes.iter().map(|it| {
-        it.typ.clone()
-    }).collect()))
-}
-
-#[test]
-pub fn testLexingUnits() {
-    let input = "fn test(x: int): int { print( x ) } test ( 25 ) ";
-
-    let tokens = tokenizeSource(input).unwrap();
-    println!("tokens {:?}", &tokens);
-
-    let res = parseTokens(tokens).unwrap();
-    println!("{:?}", &res);
-
-    let bs = bytecodeGen(res).unwrap();
-
-    evaluateBytecode(bs.0, bs.1);
+    Ok((res, localTypes))
 }

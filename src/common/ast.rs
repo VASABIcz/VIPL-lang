@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 
 #[derive(Debug)]

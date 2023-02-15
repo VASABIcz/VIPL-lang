@@ -158,3 +158,18 @@ fn testOptimization() {
         }));
     }
 }
+
+#[test]
+pub fn testLexingUnits() {
+    let input = "fn test(x: int): int { print( x ) } test ( 25 ) ";
+
+    let tokens = tokenizeSource(input).unwrap();
+    println!("tokens {:?}", &tokens);
+
+    let res = parseTokens(tokens).unwrap();
+    println!("{:?}", &res);
+
+    let bs = bytecodeGen(res).unwrap();
+
+    evaluateBytecode(bs.0, bs.1);
+}

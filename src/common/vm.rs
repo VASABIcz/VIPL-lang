@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::intrinsics::transmute;
 use std::rc::Rc;
 
-use crate::ast::Expression;
+use crate::ast::{Expression, Op};
 use crate::objects::{ObjectDefinition, Str};
 use crate::parser::Operation::Expr;
 use crate::std::bootStrapVM;
@@ -435,6 +435,19 @@ pub enum Value {
     Reference {
         instance: Option<Rc<dyn crate::objects::Object>>,
     },
+}
+
+impl Value {
+    #[inline]
+    pub fn tryValueAsFloat(&self) -> Option<f32> {
+        match self {
+            Num(v) => Some(*v as f32),
+            Flo(v) => Some(*v),
+            Bol(v) => Some(*v as isize as f32),
+            Chr(v) => Some(*v as isize as f32),
+            Reference { .. } => None
+        }
+    }
 }
 
 impl Into<Expression> for Value {
