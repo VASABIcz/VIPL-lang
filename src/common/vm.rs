@@ -7,7 +7,9 @@ use std::hash::{Hash, Hasher};
 use std::intrinsics::transmute;
 use std::rc::Rc;
 
+use crate::ast::Expression;
 use crate::objects::{ObjectDefinition, Str};
+use crate::parser::Operation::Expr;
 use crate::std::bootStrapVM;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -433,6 +435,18 @@ pub enum Value {
     Reference {
         instance: Option<Rc<dyn crate::objects::Object>>,
     },
+}
+
+impl Into<Expression> for Value {
+    fn into(self) -> Expression {
+        match self {
+            Num(it) => Expression::IntLiteral(format!("{}", it)),
+            Flo(it) => Expression::FloatLiteral(format!("{}", it)),
+            Bol(it) => Expression::BoolLiteral(it),
+            Chr(it) => Expression::CharLiteral(it),
+            Reference { .. } => panic!()
+        }
+    }
 }
 
 impl Value {

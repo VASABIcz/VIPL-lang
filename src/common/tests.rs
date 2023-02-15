@@ -1,4 +1,11 @@
-use crate::vm::{StackFrame, VirtualMachine};
+use std::ptr::null;
+
+use crate::ast::{Expression, Op};
+use crate::codegen::bytecodeGen;
+use crate::lexer::{tokenizeSource, TokenType};
+use crate::lexer::TokenType::IntLiteral;
+use crate::parser::parseTokens;
+use crate::vm::{evaluateBytecode, StackFrame, VirtualMachine};
 
 #[test]
 fn testNumericLexingUnit() {
@@ -117,4 +124,37 @@ fn testMakeNativeFFI() {
 
 
     dropVm(vm)
+}
+
+#[test]
+fn testOptimization() {
+    {
+        let a = Expression::ArithmeticOp {
+            left: box Expression::IntLiteral(String::from("4")),
+            right: box Expression::IntLiteral(String::from("4")),
+            op: Op::Mul,
+        };
+        let res = crate::optimizer::evalE(&a);
+
+        assert_eq!(res, Some(Expression::IntLiteral(String::from("16"))));
+    }
+
+    {
+        let a = Expression::ArithmeticOp {
+            left: box Expression::Variable(String::from("abc")),
+            right: box Expression::ArithmeticOp {
+                left: box Expression::IntLiteral(String::from("4")),
+                right: box Expression::IntLiteral(String::from("4")),
+                op: Op::Mul,
+            },
+            op: Op::Add,
+        };
+        let res = crate::optimizer::evalE(&a);
+
+        assert_eq!(res, Some(Expression::ArithmeticOp {
+            left: box Expression::Variable(String::from("abc")),
+            right: box Expression::IntLiteral(String::from("16")),
+            op: Op::Add,
+        }));
+    }
 }

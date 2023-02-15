@@ -7,9 +7,9 @@ use Statement::VariableCreate;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::lexer::*;
-use crate::optimalizer::evalExpr;
+use crate::optimizer::{evalE, evalExpr};
 use crate::parser::{*};
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
+use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, Value, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -32,7 +32,12 @@ fn genExpression(
     functionReturns: &HashMap<MyStr, Option<DataType>>,
     vTable: &HashMap<MyStr, (DataType, usize)>,
 ) -> Result<(), Box<dyn Error>> {
-    match exp {
+    let e = match evalE(&exp) {
+        None => exp,
+        Some(v) => v
+    };
+
+    match e {
         Expression::ArithmeticOp { left, right, op } => {
             let dataType = left.toDataType(vTable, functionReturns)?;
             match dataType {
@@ -378,7 +383,7 @@ pub fn genStructDef(
 
 pub fn complexBytecodeGen(
     operations: Vec<Operation>,
-    _localTypes: &mut Vec<DataType>,
+    localTypes: &mut Vec<DataType>,
     functionReturns: &mut HashMap<MyStr, Option<DataType>>,
     mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
     structs: &mut HashMap<MyStr, HashMap<String, DataType>>,
@@ -406,7 +411,9 @@ pub fn complexBytecodeGen(
                             return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
                         }
                         Some(ref ex) => {
-                            let _t = ex.clone().toDataType(mainLocals, functionReturns)?;
+                            let t = ex.clone().toDataType(mainLocals, functionReturns)?;
+                            mainLocals.insert(c.name.clone().into_boxed_str().into(), (t.clone().unwrap(), mainLocals.len()));
+                            localTypes.push(t.unwrap());
                         }
                     }
                 }
@@ -434,7 +441,7 @@ pub fn complexBytecodeGen(
             Operation::Statement(s) => {
                 genStatement(s.clone(), &mut ops, functionReturns, mainLocals, None)?;
             }
-            Operation::Expression(e) => {
+            Operation::Expr(e) => {
                 genExpression(e.clone(), &mut ops, functionReturns, mainLocals)?;
             }
             _ => {}
@@ -504,7 +511,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
             Operation::Statement(s) => {
                 genStatement(s.clone(), &mut ops, &functionReturns, &mainLocals, None)?;
             }
-            Operation::Expression(e) => {
+            Operation::Expr(e) => {
                 genExpression(e.clone(), &mut ops, &functionReturns, &mainLocals)?;
             }
             _ => {}
@@ -565,7 +572,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
         if let Operation::Statement(stat) = op {
             buildLocalsTable(stat, &mut mainLocals, &mut localTypes, functionReturns)?;
             inlineMain.push(op);
-        } else if let Operation::Expression(Expression::FunctionCall(call)) = op {
+        } else if let Operation::Expr(Expression::FunctionCall(call)) = op {
             buildLocalsTable(&Statement::FunctionExpr(call.clone()), &mut mainLocals, &mut localTypes, functionReturns)?;
             inlineMain.push(op);
         }
@@ -589,7 +596,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
             Operation::Statement(s) => {
                 genStatement(s.clone(), &mut ops, functionReturns, &mainLocals, None)?;
             }
-            Operation::Expression(e) => {
+            Operation::Expr(e) => {
                 genExpression(e.clone(), &mut ops, functionReturns, &mainLocals)?;
             }
             _ => {}

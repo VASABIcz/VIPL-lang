@@ -18,7 +18,7 @@ impl Display for TypeNotFound {
 
 impl Error for TypeNotFound {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Add,
     Sub,
@@ -31,7 +31,7 @@ pub enum Op {
     Or
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     ArithmeticOp {
         left: Box<Expression>,
@@ -52,13 +52,13 @@ pub enum Expression {
     NotExpression(Box<Expression>)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ArrayAccess {
     pub expr: Expression,
     pub index: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
     pub name: String,
     pub arguments: Vec<Expression>,

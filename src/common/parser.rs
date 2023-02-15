@@ -314,13 +314,13 @@ impl TokenProvider {
 pub enum Operation {
     Global(Node),
     Statement(Statement),
-    Expression(Expression),
+    Expr(Expression),
 }
 
 impl Operation {
     fn asExpr(self) -> Result<Expression, Box<dyn Error>> {
         match self {
-            Operation::Expression(e) => Ok(e),
+            Operation::Expr(e) => Ok(e),
             _ => Err(Box::new(InvalidOperation { operation: self.clone(), expected: "Expression".to_string() })),
         }
     }
@@ -329,7 +329,7 @@ impl Operation {
         let clone = self.clone();
         match self {
             Operation::Statement(s) => Ok(s),
-            Operation::Expression(e) => match e {
+            Operation::Expr(e) => match e {
                 Expression::FunctionCall(f) => Ok(Statement::FunctionExpr(f)),
                 _ => Err(Box::new(InvalidOperation {
                     operation: clone,
@@ -513,7 +513,7 @@ impl ParsingUnit for CallParsingUnit {
 
         tokens.getAssert(TokenType::CRB)?;
 
-        Ok(Operation::Expression(Expression::FunctionCall(FunctionCall {
+        Ok(Operation::Expr(Expression::FunctionCall(FunctionCall {
             name,
             arguments: args,
         })))
@@ -552,7 +552,7 @@ impl ParsingUnit for ArithmeticParsingUnit {
         let par = getParsingUnit(tokens, Around, parser);
 
         match par {
-            None => Ok(Operation::Expression(Expression::ArithmeticOp {
+            None => Ok(Operation::Expr(Expression::ArithmeticOp {
                 // FIXME
                 left: Box::new(previous.unwrap().asExpr()?),
                 right: Box::new(res.asExpr()?),
@@ -560,13 +560,13 @@ impl ParsingUnit for ArithmeticParsingUnit {
             })),
             Some(p) => {
                 if self.priority < p.getPriority() {
-                    Ok(p.parse(tokens, Some(Operation::Expression(Expression::ArithmeticOp {
+                    Ok(p.parse(tokens, Some(Operation::Expr(Expression::ArithmeticOp {
                         left: Box::new(previous.unwrap().asExpr()?),
                         right: Box::new(res.asExpr()?),
                         op: self.op.clone(),
                     })), parser)?)
                 } else {
-                    Ok(Operation::Expression(Expression::ArithmeticOp {
+                    Ok(Operation::Expr(Expression::ArithmeticOp {
                         left: Box::new(previous.unwrap().asExpr()?),
                         right: Box::new(p.parse(tokens, Some(res), parser)?.asExpr()?),
                         op: self.op.clone(),
@@ -635,19 +635,19 @@ impl ParsingUnit for NumericParsingUnit {
         let res = match peek.typ {
             TokenType::IntLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expression(IntLiteral(buf))
+                Operation::Expr(IntLiteral(buf))
             },
             TokenType::LongLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expression(Expression::LongLiteral(buf))
+                Operation::Expr(Expression::LongLiteral(buf))
             }
             TokenType::FloatLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expression(Expression::FloatLiteral(buf))
+                Operation::Expr(Expression::FloatLiteral(buf))
             }
             TokenType::DoubleLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expression(Expression::DoubleLiteral(buf))
+                Operation::Expr(Expression::DoubleLiteral(buf))
             }
             _ => {
                 return Err(Box::new(InvalidToken { msg: format!("expected numeric token got {peek:?}") }))
@@ -683,10 +683,10 @@ impl ParsingUnit for BoolParsingUnit {
     ) -> Result<Operation, Box<dyn Error>> {
         if tokenProvider.isPeekType(TokenType::False) {
             tokenProvider.getAssert(TokenType::False)?;
-            return Ok(Operation::Expression(Expression::BoolLiteral(false)));
+            return Ok(Operation::Expr(Expression::BoolLiteral(false)));
         }
         tokenProvider.getAssert(TokenType::True)?;
-        Ok(Operation::Expression(Expression::BoolLiteral(true)))
+        Ok(Operation::Expr(Expression::BoolLiteral(true)))
     }
 
     fn getPriority(&self) -> usize {
@@ -713,7 +713,7 @@ impl ParsingUnit for VariableParsingUnit {
         _previous: Option<Operation>,
         _parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
-        Ok(Operation::Expression(Expression::Variable(tokenProvider.getIdentifier()?)))
+        Ok(Operation::Expr(Expression::Variable(tokenProvider.getIdentifier()?)))
     }
 
     fn getPriority(&self) -> usize {
@@ -873,7 +873,7 @@ impl ParsingUnit for BracketsParsingUnit {
 
     fn parse(&self, tokenProvider: &mut TokenProvider, _previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(ORB)?;
-        let expr = Ok(Operation::Expression(parseExpr(tokenProvider, parser)?));
+        let expr = Ok(Operation::Expr(parseExpr(tokenProvider, parser)?));
         tokenProvider.getAssert(CRB)?;
         expr
     }
@@ -955,11 +955,11 @@ impl ParsingUnit for CharParsingUnit {
                                 '\\' => '\\',
                                 _ => panic!()
                             };
-                            return Ok(Operation::Expression(Expression::CharLiteral(e)))
+                            return Ok(Operation::Expr(Expression::CharLiteral(e)))
                         }
                     }
                 }
-                Ok(Operation::Expression(Expression::CharLiteral(*c)))
+                Ok(Operation::Expr(Expression::CharLiteral(*c)))
             }
         }
     }
@@ -986,7 +986,7 @@ impl ParsingUnit for StringParsingUnit {
 
     fn parse(&self, tokenProvider: &mut TokenProvider, _previous: Option<Operation>, _parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
         let str = tokenProvider.getAssert(StringLiteral)?;
-        Ok(Operation::Expression(Expression::StringLiteral(str.str.clone())))
+        Ok(Operation::Expr(Expression::StringLiteral(str.str.clone())))
     }
 
     fn getPriority(&self) -> usize { usize::MAX }
@@ -1077,7 +1077,7 @@ impl ParsingUnit for ArrayLiteralParsingUnit {
         }
         tokenProvider.getAssert(CSB)?;
 
-        Ok(Operation::Expression(Expression::ArrayLiteral(buf)))
+        Ok(Operation::Expr(Expression::ArrayLiteral(buf)))
     }
 
     fn getPriority(&self) -> usize { usize::MAX }
@@ -1099,7 +1099,7 @@ impl ParsingUnit for ArrayIndexingParsingUnit {
         let expr = parseExpr(tokenProvider, parser)?;
         tokenProvider.getAssert(CSB)?;
 
-        Ok(Operation::Expression(Expression::ArrayIndexing(Box::new(ArrayAccess { expr: previous.ok_or("cannot index non existing item")?.asExpr()?, index: expr }))))
+        Ok(Operation::Expr(Expression::ArrayIndexing(Box::new(ArrayAccess { expr: previous.ok_or("cannot index non existing item")?.asExpr()?, index: expr }))))
     }
 
     fn getPriority(&self) -> usize { usize::MAX }
@@ -1230,7 +1230,7 @@ impl ParsingUnit for NotParsingUnit {
 
         let expr = parseExpr(tokenProvider, parser)?;
 
-        Ok(Operation::Expression(Expression::NotExpression(Box::new(expr))))
+        Ok(Operation::Expr(Expression::NotExpression(Box::new(expr))))
     }
 
     fn getPriority(&self) -> usize {

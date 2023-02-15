@@ -40,7 +40,7 @@ fn main() {
     let mut functionReturns = HashMap::new();
     let mut mainLocals = HashMap::new();
     let mut localValues = vec![];
-    let lastLocalSize: usize = 0;
+    let mut lastLocalSize: usize = 0;
     let mut opcodeIndex: usize = 0;
     let mut opcodes = vec![];
     let parsingUnits = parsingUnits();
@@ -116,9 +116,13 @@ fn main() {
             for x in &localTypes[lastLocalSize..localTypes.len()] {
                 localValues.push(x.toDefaultValue())
             }
+            lastLocalSize = localValues.len();
         }
 
-        // println!("{:?}", &bs);
+        println!("{:?}", &bs);
+        println!("{:?}", &localValues);
+        println!("{:?}", &localTypes);
+        println!("{:?}", &mainLocals);
 
         /*
         match checkBytecode(&mut SeekableOpcodes {
