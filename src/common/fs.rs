@@ -48,5 +48,5 @@ pub fn setupFs(vm: &mut VirtualMachine) {
         };
 
         vm.stack.push(Value::Num(val))
-    }, Some(DataType::str()));
+    }, Some(DataType::Int));
 }

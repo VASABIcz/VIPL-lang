@@ -119,10 +119,10 @@ fn main() {
             lastLocalSize = localValues.len();
         }
 
-        println!("{:?}", &bs);
-        println!("{:?}", &localValues);
-        println!("{:?}", &localTypes);
-        println!("{:?}", &mainLocals);
+        // println!("{:?}", &bs);
+        // println!("{:?}", &localValues);
+        // println!("{:?}", &localTypes);
+        // println!("{:?}", &mainLocals);
 
         /*
         match checkBytecode(&mut SeekableOpcodes {

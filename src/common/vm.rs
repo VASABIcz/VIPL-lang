@@ -689,7 +689,7 @@ impl Value {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
-            Object { .. } => panic!(),
+            Object(a) => panic!("{:?}", a),
             Char => self.getChar() == val.getChar()
         };
         *self = Bol(x)
