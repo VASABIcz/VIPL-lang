@@ -86,12 +86,8 @@ pub fn bootStrapVM() -> VirtualMachine {
                     Some(ee) => unsafe {
                         let mut clon = ee.clone();
                         let ne = Rc::get_mut_unchecked(&mut clon);
-                        match ne.downcast_ref::<Str>() {
-                            None => {}
-                            Some(ff) => {
-                                println!("{}", ff.string);
-                            }
-                        }
+                        let ff = ne.getStr();
+                        println!("{}", ff.string);
                     }
                 }
             }
@@ -99,7 +95,7 @@ pub fn bootStrapVM() -> VirtualMachine {
     }, None);
 
     vm.makeNative(String::from("makeString"), Box::new([]), |a, _b| {
-        a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
+        a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() }.into())) })
     }, Some(DataType::str()));
 
     vm.makeNative(
@@ -123,7 +119,7 @@ pub fn bootStrapVM() -> VirtualMachine {
                         }
                         Some(v) => unsafe {
                             let ne = Rc::get_mut_unchecked(v);
-                            let e = ne.downcast_mut::<Str>().unwrap();
+                            let e = ne.getMutStr();
                             e.string.push(chr);
                         }
                     }
@@ -140,12 +136,8 @@ pub fn bootStrapVM() -> VirtualMachine {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        match v.downcast_ref::<crate::objects::Array>() {
-                            None => panic!(),
-                            Some(v) => {
-                                vm.stack.push(Value::Num(v.internal.len() as isize))
-                            }
-                        }
+                        let v = v.getArr();
+                        vm.stack.push(Value::Num(v.internal.len() as isize))
                     }
                 }
             }
@@ -159,12 +151,8 @@ pub fn bootStrapVM() -> VirtualMachine {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        match v.downcast_ref::<Str>() {
-                            None => panic!(),
-                            Some(v) => {
-                                vm.stack.push(Value::Num(v.string.len() as isize))
-                            }
-                        }
+                        let a = v.getStr();
+                        vm.stack.push(Value::Num(a.string.len() as isize))
                     }
                 }
             }
@@ -179,12 +167,8 @@ pub fn bootStrapVM() -> VirtualMachine {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        match v.downcast_ref::<Str>() {
-                            None => panic!(),
-                            Some(v) => {
-                                vm.stack.push(Value::Chr(*v.string.as_bytes().get_unchecked(index as usize) as char))
-                            }
-                        }
+                        let a = v.getStr();
+                        vm.stack.push(Value::Chr(*a.string.as_bytes().get_unchecked(index as usize) as char))
                     }
                 }
             }
@@ -199,26 +183,18 @@ pub fn bootStrapVM() -> VirtualMachine {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        match v.downcast_ref::<Str>() {
-                            None => panic!(),
-                            Some(v) => {
-                                match sec {
-                                    Reference { instance } => {
-                                        match instance {
-                                            None => panic!(),
-                                            Some(k) => {
-                                                match k.downcast_ref::<Str>() {
-                                                    None => panic!(),
-                                                    Some(c) => {
-                                                        vm.stack.push(Value::Bol(v.string.ends_with(&c.string)))
-                                                    }
-                                                }
-                                            }
-                                        }
+                        let e = v.getStr();
+                        match sec {
+                            Reference { instance } => {
+                                match instance {
+                                    None => panic!(),
+                                    Some(k) => {
+                                        let c = k.getStr();
+                                        vm.stack.push(Value::Bol(e.string.ends_with(&c.string)))
                                     }
-                                    _ => panic!()
                                 }
                             }
+                            _ => panic!()
                         }
                     }
                 }

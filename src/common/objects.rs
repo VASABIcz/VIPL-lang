@@ -5,10 +5,49 @@ use std::fmt::Debug;
 
 use crate::vm::{DataType, Value};
 
-enum ViplObject {
+#[derive(Debug)]
+pub enum ViplObject {
     Arr(Array),
     Str(Str),
     Runtime(Box<dyn Object>),
+}
+
+impl ViplObject {
+    pub fn getArr(&self) -> &Array {
+        match self {
+            ViplObject::Arr(v) => v,
+            _ => panic!()
+        }
+    }
+
+    pub fn getMutArr(&mut self) -> &mut Array {
+        match self {
+            ViplObject::Arr(v) => v,
+            _ => panic!()
+        }
+    }
+
+    pub fn getStr(&self) -> &Str {
+        match self {
+            ViplObject::Str(v) => v,
+            _ => panic!()
+        }
+    }
+
+    pub fn getMutStr(&mut self) -> &mut Str {
+        match self {
+            ViplObject::Str(v) => v,
+            _ => panic!()
+        }
+    }
+
+    pub fn asObj(&self) -> &dyn Object {
+        match self {
+            ViplObject::Arr(a) => a,
+            ViplObject::Str(a) => a,
+            ViplObject::Runtime(v) => &**v
+        }
+    }
 }
 
 pub trait Object: Debug + Any {
@@ -66,6 +105,18 @@ pub struct ObjectDefinition {
 #[derive(Debug)]
 pub struct Str {
     pub string: String,
+}
+
+impl Into<ViplObject> for Str {
+    fn into(self) -> ViplObject {
+        ViplObject::Str(self)
+    }
+}
+
+impl Into<ViplObject> for Array {
+    fn into(self) -> ViplObject {
+        ViplObject::Arr(self)
+    }
 }
 
 /*
