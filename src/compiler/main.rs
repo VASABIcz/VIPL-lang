@@ -2,6 +2,7 @@ extern crate rust_vm;
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::time::Instant;
 
 use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::bytecodeGen2;
@@ -10,6 +11,7 @@ use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
 use rust_vm::vm::{evaluateBytecode2, SeekableOpcodes};
+use rust_vm::vm::DataType::Int;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
@@ -17,6 +19,7 @@ fn handleError(err: Box<dyn Error>) {
 }
 
 fn main() {
+    let now = Instant::now();
     let sourceFile = std::env::args().nth(1).expect("expected source field");
 
     let src = std::fs::read_to_string(sourceFile).expect("failed to read source");
@@ -89,5 +92,13 @@ fn main() {
     }
 
      */
+    let e = now.elapsed();
+    println!("compiled in: {:.2?}", e);
+
+    let a = Instant::now();
+
     evaluateBytecode2(bs.0, bs.1, &mut vm);
+
+    let elapsed = a.elapsed();
+    println!("finished in: {:.2?}", elapsed);
 }

@@ -1050,7 +1050,7 @@ pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Err
         }
         tokens.getAssert(TokenType::Less)?;
     }
-    Ok(DataType::Object(Box::new(ObjectMeta { name: MyStr::Runtime(t.into_boxed_str()), generics: generics.into_boxed_slice() })))
+    Ok(DataType::Object(ObjectMeta { name: MyStr::Runtime(t.into_boxed_str()), generics: generics.into_boxed_slice() }))
 }
 
 struct ArrayLiteralParsingUnit;

@@ -52,7 +52,7 @@ pub fn bootStrapVM() -> VirtualMachine {
                 Some(v) => v
             };
              */
-            let genOps = [
+            let mut genOps = [
                 PushInt(1),
                 Pop,
                 PushInt(69),
@@ -63,7 +63,7 @@ pub fn bootStrapVM() -> VirtualMachine {
 
             let mut seek = SeekableOpcodes {
                 index: 0,
-                opCodes: &genOps,
+                opCodes: &mut genOps,
                 start: None,
                 end: None,
             };
@@ -73,7 +73,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         None,
     );
 
-    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: MyStr::Static(""), typ: Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })) }]), |_a, b| {
+    vm.makeNative(String::from("print"), Box::new([VariableMetadata { name: MyStr::Static(""), typ: DataType::str() }]), |_a, b| {
         let c = b.localVariables.get(0).unwrap();
         match c {
             Num(_) => {}
@@ -100,7 +100,7 @@ pub fn bootStrapVM() -> VirtualMachine {
 
     vm.makeNative(String::from("makeString"), Box::new([]), |a, _b| {
         a.stack.push(Value::Reference { instance: Some(Rc::new(Str { string: "".to_string() })) })
-    }, Some(Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) }))));
+    }, Some(DataType::str()));
 
     vm.makeNative(
         String::from("appendChar"),

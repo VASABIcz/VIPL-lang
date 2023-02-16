@@ -390,16 +390,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             SetField { .. } => panic!(),
             ArrayNew(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.push(DataType::Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))
+                abstractStack.push(DataType::arr(Generic::Type(t.clone())))
             },
             ArrayStore(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(t)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&DataType::arr(Generic::Type(t.clone())))?;
             },
             ArrayLoad(t) => {
                 abstractStack.assertPop(&Int)?;
-                abstractStack.assertPop(&Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t.clone())]) })))?;
+                abstractStack.assertPop(&DataType::arr(Generic::Type(t.clone())))?;
                 abstractStack.push(t.clone())
             },
             ArrayLength => panic!(),

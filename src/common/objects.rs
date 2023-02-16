@@ -5,6 +5,12 @@ use std::fmt::Debug;
 
 use crate::vm::{DataType, Value};
 
+enum ViplObject {
+    Arr(Array),
+    Str(Str),
+    Runtime(Box<dyn Object>),
+}
+
 pub trait Object: Debug + Any {
     fn getName(&self) -> String;
     fn getFields(&self) -> &[DataType];

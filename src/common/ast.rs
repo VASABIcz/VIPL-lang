@@ -106,7 +106,7 @@ impl Expression {
                 // FIXME
                 Ok(Some(DataType::Float))
             }
-            Expression::StringLiteral(_) => Ok(Some(DataType::Object(Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })))),
+            Expression::StringLiteral(_) => Ok(Some(DataType::str())),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns).ok()? }).collect::<Vec<DataType>>();
                 let enc = genFunName(&f.name, &types);
@@ -131,7 +131,7 @@ impl Expression {
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
                 let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns)?.ok_or("array item must have tyoe")?;
-                Ok(Some(Object(Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([Generic::Type(t)]) }))))
+                Ok(Some(DataType::arr(Generic::Type(t))))
             }
             Expression::ArrayIndexing(i) => {
                 let e = i.expr.toDataType(typesMapping, functionReturns)?.ok_or("cannot array index none")?;

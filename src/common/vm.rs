@@ -1,6 +1,7 @@
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -88,7 +89,7 @@ pub enum DataType {
     Float,
     Bool,
     Char,
-    Object(Box<ObjectMeta>),
+    Object(ObjectMeta),
 }
 
 impl From<DataType> for Value {
@@ -101,12 +102,12 @@ impl From<DataType> for Value {
 impl DataType {
     pub fn str() -> Self {
         Object(
-            Box::new(ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) })
+            ObjectMeta { name: MyStr::Static("String"), generics: Box::new([]) }
         )
     }
     pub fn arr(inner: Generic) -> Self {
         Object(
-            Box::new(ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([inner]) })
+            ObjectMeta { name: MyStr::Static("Array"), generics: Box::new([inner]) }
         )
     }
 }
@@ -145,7 +146,7 @@ pub enum RawDataType {
 
 impl DataType {
     pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 16] = unsafe { transmute((*self).clone()) };
+        let opId: [u8; 48] = unsafe { transmute((*self).clone()) };
         bytes.push(opId[0]);
         match self {
             Int => {}
@@ -723,7 +724,9 @@ impl Value {
             Flo(_) => DataType::Float,
             Bol(_) => DataType::Bool,
             Chr(_) => DataType::Char,
-            Reference { instance: _ } => DataType::Object(box ObjectMeta { name: MyStr::Static(""), generics: Box::new([]) })
+            Reference { instance: v } => {
+                DataType::Object(ObjectMeta { name: MyStr::Runtime(v.clone().unwrap().getName().clone().into_boxed_str()), generics: Box::new([]) })
+            }
         }
     }
 }
@@ -997,7 +1000,7 @@ impl VirtualMachine {
 
 pub struct SeekableOpcodes<'a> {
     pub index: isize,
-    pub opCodes: &'a [OpCode],
+    pub opCodes: &'a mut [OpCode],
     pub start: Option<usize>,
     pub end: Option<usize>,
 }
@@ -1010,8 +1013,8 @@ impl SeekableOpcodes<'_> {
     }
 
     #[inline]
-    pub fn nextOpcode(&mut self) -> (Option<&OpCode>, usize) {
-        let n = self.opCodes.get(self.index as usize);
+    pub fn nextOpcode(&mut self) -> (Option<&mut OpCode>, usize) {
+        let n = self.opCodes.get_mut(self.index as usize);
         self.index += 1;
 
         (n, (self.index - 1) as usize)
@@ -1183,8 +1186,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 }
             },
             Call { encoded } => unsafe {
-                // println!("function call {}", encoded);
-                // println!("stack size {}", vm.stack.len());
+                let cl = encoded.clone();
+
+                println!("function call {}", encoded);
+                println!("stack size {}", vm.stack.len());
                 let cached = match &vm.opCodeCache.get_unchecked(index) {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
@@ -1195,7 +1200,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     },
                     None => {
                         // println!("{:?}", &vm.functions.keys());
-                        let f = vm.functions.get(encoded).unwrap();
+                        let f = vm.functions.get(&encoded.clone()).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
 
@@ -1211,7 +1216,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                             typ: f.typ.clone(),
                             argCount: f.argAmount,
                         });
-                        match unsafe{ vm.opCodeCache.get_unchecked(index) } {
+                        match vm.opCodeCache.get_unchecked(index) {
                             None => panic!(),
                             Some(v) => {
                                 match v {
@@ -1227,27 +1232,13 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 };
 
                 let mut ee = cached.0.clone();
-                let _argsLen = ee.len();
-                // println!("args len {} {}", argsLen, cached.2);
-                // println!("vm {:?} {}", vm.stack, encoded);
 
                 for i in 0..(*cached.2) {
-                    let arg = match vm.stack.pop() {
-                        None => {
-                            return;
-                        }
-                        Some(v) => v
-                    };
-                    // println!("seting {:?} {:?}", i, &arg);
+                    let arg = vm.stack.pop().unwrap();
                     ee[(cached.2 - 1) - i] = arg;
                 }
 
-                // FIXME
-                // let enc = &String::from(encoded);
-                // println!("frame {:?}", &ee);
-
                 let mut stack = StackFrame {
-                    // previous: Some(stackFrame),
                     localVariables: &mut ee,
                     name: None,
                 };
@@ -1260,16 +1251,11 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                         let old = index + 1;
 
                         opCodes.index = *s as isize;
-
                         run(opCodes, vm, &mut stack);
                         opCodes.index = old as isize;
                     }
-                    Native { callback } => {
-                        callback(vm, &mut stack)
-                    },
-                    Extern { callback } => {
-                        callback(vm, &mut stack)
-                    }
+                    Native { callback } => callback(vm, &mut stack),
+                    Extern { callback } => callback(vm, &mut stack)
                 }
             }
             Return => return,
@@ -1291,8 +1277,8 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             Mul(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
                 let l = vm.stack.len() - 1;
+                // println!("aaa {:?}", vm.stack.get(l));
                 vm.stack.get_unchecked_mut(l).mul(&a, v);
-                // println!("{:?}", vm.stack.get(l));
             }
             Equals(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
@@ -1411,7 +1397,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
     }
 }
 
-pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine {
+pub fn evaluateBytecode(mut bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine {
     let mut vals = vec![];
     for b in &locals {
         vals.push(b.toDefaultValue())
@@ -1423,7 +1409,7 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Virtual
     run(
         &mut SeekableOpcodes {
             index: 0,
-            opCodes: &bytecode,
+            opCodes: &mut bytecode,
             start: None,
             end: None,
         },
@@ -1434,7 +1420,7 @@ pub fn evaluateBytecode(bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Virtual
     vm
 }
 
-pub fn evaluateBytecode2(bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut VirtualMachine) {
+pub fn evaluateBytecode2(mut bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut VirtualMachine) {
     let mut vals = vec![];
     for b in &locals {
         vals.push(b.toDefaultValue())
@@ -1445,7 +1431,7 @@ pub fn evaluateBytecode2(bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut 
     run(
         &mut SeekableOpcodes {
             index: 0,
-            opCodes: &bytecode,
+            opCodes: &mut bytecode,
             start: None,
             end: None,
         },
@@ -1453,26 +1439,3 @@ pub fn evaluateBytecode2(bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &mut 
         &mut StackFrame::new(&mut vals),
     );
 }
-
-/*
-clossure:
-
-new closssure value type -
-clossure object - slowest
-bytecode hack
-    - new generic None
-
-
-fn registerRoute(route: String, method: String, callback: Lambda<HttpRequest, HttpResponse, None>) {
-    req = newRequest()
-    res = newResponse()
-    call(callback, req, res)
-}
-
-fn myGet(req: HttpRequest, res: HttpResponse) {
-
-}
-
-registerRoute("/", "GET", &myGet)
-
- */

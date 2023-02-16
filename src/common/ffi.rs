@@ -74,7 +74,7 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
 
     println!("{:?}", &ast);
 
-    let opCodes = match bytecodeGen(ast) {
+    let mut opCodes = match bytecodeGen(ast) {
         Ok(v) => v,
         Err(_) => {
             println!("codegen failed");
@@ -90,7 +90,7 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
 
     run(&mut SeekableOpcodes {
         index: 0,
-        opCodes: &opCodes.0,
+        opCodes: &mut opCodes.0,
         start: None,
         end: None,
     }, vm, &mut StackFrame::new(&mut opCodes.1.into_iter().map(|it| { it.into() }).collect::<Vec<Value>>()));
@@ -102,7 +102,7 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
 #[no_mangle]
 pub extern fn test(vm: *mut VirtualMachine) {
     println!("i am here");
-    let ops = vec![OpCode::PushInt(69), OpCode::Call { encoded: MyStr::Static("print(int)") }];
+    let mut ops = vec![OpCode::PushInt(69), OpCode::Call { encoded: MyStr::Static("print(int)") }];
 
     unsafe {
         for _ in 0..ops.len() {
@@ -113,7 +113,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
     unsafe {
         run(&mut SeekableOpcodes {
             index: 0,
-            opCodes: &ops,
+            opCodes: &mut ops,
             start: None,
             end: None,
         }, &mut *vm as &mut VirtualMachine, &mut StackFrame {
