@@ -132,8 +132,8 @@ pub struct AbstractStack {
 
 #[derive(Debug)]
 pub struct InvalidTypeException {
-    expected: DataType,
-    actual: Option<DataType>
+    pub(crate) expected: DataType,
+    pub(crate) actual: Option<DataType>,
 }
 
 impl Display for InvalidTypeException {

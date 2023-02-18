@@ -23,14 +23,14 @@ impl ViplObject {
     pub fn getMutArr(&mut self) -> &mut Array {
         match self {
             ViplObject::Arr(v) => v,
-            _ => panic!()
+            v => panic!("{:?}", v)
         }
     }
 
     pub fn getStr(&self) -> &Str {
         match self {
             ViplObject::Str(v) => v,
-            _ => panic!()
+            v => panic!("{:?}", v)
         }
     }
 

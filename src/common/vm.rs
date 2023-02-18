@@ -504,9 +504,18 @@ impl Value {
             Reference { instance } => {
                 match instance {
                     None => String::from("null"),
-                    Some(v) => unsafe {
-                        let e = v.getStr();
-                        format!("{:?}", e.string)
+                    Some(v) => {
+                        match &**v {
+                            ViplObject::Arr(a) => {
+                                format!("{:?}", a.internal)
+                            }
+                            ViplObject::Str(v) => {
+                                format!("{:?}", v.string)
+                            }
+                            ViplObject::Runtime(r) => {
+                                format!("{:?}", r)
+                            }
+                        }
                     }
                 }
             }
@@ -519,32 +528,23 @@ impl Value {
     pub fn getNum(&self) -> isize {
         match self {
             Num(v) => *v,
-            Flo(_) => panic!(),
-            Bol(_) => panic!(),
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 
     #[inline]
     pub fn getFlo(&self) -> f32 {
         match self {
-            Num(_) => panic!(),
             Flo(v) => *v,
-            Bol(_) => panic!(),
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 
     #[inline]
     pub fn getRefFlo(&mut self) -> &mut f32 {
         match self {
-            Num(_) => panic!(),
             Flo(v) => v,
-            Bol(_) => panic!(),
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 
@@ -552,32 +552,23 @@ impl Value {
     pub fn getRefNum(&mut self) -> &mut isize {
         match self {
             Num(v) => v,
-            Flo(_) => panic!(),
-            Bol(_) => panic!(),
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 
     #[inline]
     pub fn getRefBol(&mut self) -> &mut bool {
         match self {
-            Num(_) => panic!(),
-            Flo(_) => panic!(),
             Bol(v) => v,
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 
     #[inline]
     pub fn getBool(&self) -> bool {
         match self {
-            Num(_) => panic!(),
-            Flo(_) => panic!(),
             Bol(v) => *v,
-            Reference { .. } => panic!(),
-            Chr(_) => panic!()
+            _ => panic!()
         }
     }
 }

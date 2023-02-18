@@ -432,16 +432,16 @@ impl ParsingUnit for FunctionParsingUnit {
     fn setPriority(&mut self, _priority: usize) {}
 }
 
-pub struct StatementVarCreateParsingUnit;
+pub struct StatementVarParsingUnit;
 
-impl ParsingUnit for StatementVarCreateParsingUnit {
+impl ParsingUnit for StatementVarParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         ParsingUnitSearchType::Ahead
     }
 
     fn canParse(&self, tokens: &TokenProvider) -> bool {
         // tokens.isPeekType(TokenType::Semicolon)
-        tokens.isPeekType(TokenType::Identifier) && tokens.isPeekIndexType(TokenType::Equals, 1)
+        tokens.isPeekType(TokenType::Identifier) && (tokens.isPeekIndexType(TokenType::Equals, 1) || tokens.isPeekIndexType(TokenType::Colon, 1))
     }
 
     fn parse(
@@ -451,6 +451,13 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
         let name = tokens.getIdentifier()?;
+        let mut typeHint = None;
+
+
+        if tokens.isPeekType(Colon) {
+            tokens.getAssert(Colon)?;
+            typeHint = Some(parseDataType(tokens)?);
+        }
 
         tokens.getAssert(TokenType::Equals)?;
 
@@ -464,7 +471,7 @@ impl ParsingUnit for StatementVarCreateParsingUnit {
         };
 
 
-        Ok(Operation::Statement(Statement::VariableCreate(VariableCreate { name, init: Some(op) })))
+        Ok(Operation::Statement(Statement::Variable(VariableCreate { name, init: Some(op), typeHint })))
     }
 
     fn getPriority(&self) -> usize {
@@ -1294,7 +1301,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(WhileParsingUnit),
         Box::new(LoopParsingUnit),
         Box::new(FunctionParsingUnit),
-        Box::new(StatementVarCreateParsingUnit),
+        Box::new(StatementVarParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
         Box::new(ArrayIndexingParsingUnit),
