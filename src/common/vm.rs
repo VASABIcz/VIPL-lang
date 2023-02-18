@@ -614,9 +614,7 @@ impl Value {
             Float => {
                 *self.getRefFlo() += 1.;
             }
-            Bool => panic!(),
-            Object { .. } => panic!(),
-            Char => panic!()
+            _ => panic!()
         }
     }
 
@@ -629,9 +627,7 @@ impl Value {
             Float => {
                 *self.getRefFlo() -= 1.;
             }
-            Bool => panic!(),
-            Object { .. } => panic!(),
-            Char => panic!()
+            _ => panic!()
         }
     }
 
@@ -1164,8 +1160,6 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 }
             },
             Call { encoded } => unsafe {
-                let cl = encoded.clone();
-
                 // println!("function call {}", encoded);
                 // println!("stack size {}", vm.stack.len());
                 let cached = match &vm.opCodeCache.get_unchecked(index) {
@@ -1350,9 +1344,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let index = vm.stack.pop().unwrap().getNum();
                 let s = vm.stack.pop().unwrap();
                 match s {
-                    Reference { instance } => unsafe {
+                    Reference { instance } => {
                         let u = instance.unwrap();
                         let s = u.getStr();
+                        println!("{} {}", index, s.string.len());
                         let char = s.string.as_bytes().get(index as usize).unwrap();
                         vm.stack.push(Value::Chr(*char as char))
                     }

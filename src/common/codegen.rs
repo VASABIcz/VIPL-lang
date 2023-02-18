@@ -26,8 +26,8 @@ impl Display for NoValue {
 
 impl Error for NoValue {}
 
-pub struct ExpressionCtx<'a, 'b> {
-    pub exp: &'b Expression,
+pub struct ExpressionCtx<'a> {
+    pub exp: &'a Expression,
     pub ops: &'a mut Vec<OpCode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
@@ -43,7 +43,6 @@ pub struct PartialExprCtx<'a> {
 
 impl PartialExprCtx<'_> {
     pub fn constructCtx<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
-        println!("inflating ctx");
         ExpressionCtx {
             exp,
             ops: self.ops,
@@ -54,7 +53,7 @@ impl PartialExprCtx<'_> {
     }
 }
 
-impl ExpressionCtx<'_, '_> {
+impl ExpressionCtx<'_> {
     pub fn reduce<'a>(&'a mut self) -> (&Expression, PartialExprCtx<'a>) {
         let p = PartialExprCtx {
             ops: self.ops,
@@ -68,15 +67,15 @@ impl ExpressionCtx<'_, '_> {
     }
 }
 
-pub struct StatementCtx<'a, 'b> {
-    pub statement: &'b Statement,
+pub struct StatementCtx<'a> {
+    pub statement: &'a Statement,
     pub ops: &'a mut Vec<OpCode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
 }
 
-impl ExpressionCtx<'_, '_> {
+impl ExpressionCtx<'_> {
     pub fn copy<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
         ExpressionCtx {
             exp,
@@ -88,7 +87,7 @@ impl ExpressionCtx<'_, '_> {
     }
 }
 
-impl StatementCtx<'_, '_> {
+impl StatementCtx<'_> {
     pub fn makeExpressionCtx<'a>(&'a mut self, exp: &'a Expression, typeHint: Option<DataType>) -> ExpressionCtx {
         ExpressionCtx {
             exp,
@@ -105,7 +104,7 @@ impl StatementCtx<'_, '_> {
             ops: self.ops,
             functionReturns: self.functionReturns,
             vTable: self.vTable,
-            loopContext: None,
+            loopContext: self.loopContext,
         }
     }
 }
@@ -294,7 +293,6 @@ fn genStatement(
                         return Err(Box::new(NoValue { msg: String::from("idk") }));
                     }
                     Some(ve) => {
-                        println!("before");
                         genExpression(ctx.makeExpressionCtx(&e, Some(ve.clone())))?;
                         // println!("{}", &v.name);
                         ctx.ops.push(OpCode::SetLocal {
@@ -319,7 +317,10 @@ fn genStatement(
                     genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
                     let mut bodyBuf = vec![];
                     for s in &w.body {
-                        genStatement(ctx.copy(&s))?;
+                        let mut ctx2 = ctx.copy(&s);
+                        ctx2.ops = &mut bodyBuf;
+                        ctx2.loopContext = Some(size - 2);
+                        genStatement(ctx2)?;
                     }
                     let len = bodyBuf.len();
                     ctx.ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::False });
@@ -331,7 +332,9 @@ fn genStatement(
         Statement::If(flow) => {
             let mut buf = vec![];
             for s in &flow.body {
-                genStatement(ctx.copy(&s))?;
+                let mut cop = ctx.copy(&s);
+                cop.ops = &mut buf;
+                genStatement(cop)?;
             }
 
             genExpression(ctx.makeExpressionCtx(&flow.condition, None))?;
@@ -339,7 +342,7 @@ fn genStatement(
             if flow.elseBody.is_some() {
                 jumpDist += 1;
             }
-            ctx.ops.push(OpCode::Jmp { offset: jumpDist, jmpType: JmpType::False });
+            ctx.ops.push(Jmp { offset: jumpDist, jmpType: JmpType::False });
             ctx.ops.extend(buf);
 
             match &flow.elseBody {
@@ -347,7 +350,9 @@ fn genStatement(
                 Some(els) => {
                     buf = vec![];
                     for s in els {
-                        genStatement(ctx.copy(&s))?;
+                        let mut ctx1 = ctx.copy(&s);
+                        ctx1.ops = &mut buf;
+                        genStatement(ctx1)?;
                     }
 
                     ctx.ops.push(OpCode::Jmp { offset: buf.len() as isize, jmpType: JmpType::Jmp });
@@ -399,11 +404,14 @@ fn genStatement(
             let mut buf = vec![];
             let context = ctx.ops.len();
             for s in body {
-                genStatement(ctx.copy(s))?;
+                let mut cop = ctx.copy(s);
+                cop.ops = &mut buf;
+                cop.loopContext = Some(context);
+                genStatement(cop)?;
             }
             let bufLen = buf.len() as isize;
             ctx.ops.extend(buf);
-            ctx.ops.push(OpCode::Jmp { offset: -(bufLen + 1), jmpType: JmpType::Jmp });
+            ctx.ops.push(Jmp { offset: -(bufLen + 1), jmpType: JmpType::Jmp });
         }
     }
     Ok(())

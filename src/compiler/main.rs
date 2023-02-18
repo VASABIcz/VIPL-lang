@@ -74,7 +74,7 @@ fn main() {
         }
     };
 
-    // println!("{:?}", &bs);
+    println!("{:?}", &bs);
 
     /*
     match checkBytecode(&mut SeekableOpcodes {

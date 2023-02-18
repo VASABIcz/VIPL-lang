@@ -3,8 +3,8 @@ fn countFile(path: String): int {
         return 0
     }
 
-    // print("file")
-    // print(path)
+    print("file")
+    print(path)
 
     file = readFile(path)
     fileLen = strLen(file)
@@ -53,13 +53,12 @@ fn countDir(path: String): int {
     return counter
 }
 
-directory = "/home/vasabi/Downloads/vm-rust/src"
+directory = "/home/vasabi/Downloads/vm-rust/src/common"
 dirType = fileType(directory)
 res = 0
 
 if dirType == 0 {
     print("invalid path")
-    assert(1, 0)
 }
 else {
     if dirType == 1 {
