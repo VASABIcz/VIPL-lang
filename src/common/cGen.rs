@@ -46,8 +46,8 @@ fn genExpression(
                         Op::Sub => "-",
                         Op::Mul => "*",
                         Op::Div => "/",
-                        Op::Gt => ">",
-                        Op::Less => "<",
+                        Op::Gt => "<",
+                        Op::Less => ">",
                         Op::Eq => "==",
                         Op::And => "&&",
                         Op::Or => panic!()
@@ -68,7 +68,7 @@ fn genExpression(
         }
         Expression::BoolLiteral(i) => if i { out.push_str("true") } else { out.push_str("false") },
         Expression::FunctionCall(e) => {
-            out.push_str(&e.name);
+            out.push_str(e.name.as_str());
             out.push_str("(");
 
             let argsLen = e.arguments.len();
@@ -93,8 +93,10 @@ fn genExpression(
             out.push_str(&v)
         }
         Expression::CharLiteral(c) => {
-            panic!();
-            out.push('c')
+            //panic!();
+            out.push('\'');
+            out.push(c);
+            out.push('\'');
         }
         Expression::ArrayLiteral(i) => {
             out.push('{');
@@ -146,7 +148,7 @@ fn genStatement(
 ) -> Result<(), Box<dyn Error>> {
     match statement {
         Statement::FunctionExpr(e) => {
-            out.push_str(&e.name);
+            out.push_str(e.name.as_str());
             out.push_str("(");
 
             let argsLen = e.arguments.len();
@@ -225,7 +227,16 @@ fn genStatement(
             out.push_str(";");
         }
         Statement::VariableMod(m) => {
-            panic!()
+            let s = match m.modType {
+                ModType::Add => "+=",
+                ModType::Sub => "-=",
+                ModType::Div => "/=",
+                ModType::Mul => "*="
+            };
+            out.push_str(&m.varName);
+            out.push_str(s);
+            genExpression(m.expr, out, functionReturns, vTable)?;
+            out.push(';');
         }
         Statement::ArrayAssign { left, right } => {
             genExpression(left.expr, out, functionReturns, vTable)?;
@@ -438,7 +449,14 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
         }
     }
 
-    println!("a");
+    out.push_str("int main() { ");
+
+    for local in &mainLocals {
+        out.push_str(local.1.0.toString());
+        out.push(' ');
+        out.push_str(local.0.as_str());
+        out.push(';');
+    }
 
     for op in &operations {
         if let Operation::Global(f) = op {
@@ -468,5 +486,28 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
         }
     }
 
+    out.push_str(" }");
+
     Ok(out)
 }
+
+
+/*
+function = black box that takes locals context and optionally returns value
+
+
+call("calculate()")
+** function lookup
+** native call
+void callable(void* vm, void* locals) {
+    int x;
+    x = getLocals(locals, 0);
+    while (x < 10000000) {
+        internalCall(vm, "fact", 20);
+        popStackInt(vm);
+        x+=1;
+    }
+}
+**
+
+ */

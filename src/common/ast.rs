@@ -63,7 +63,7 @@ pub struct ArrayAccess {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
-    pub name: String,
+    pub name: MyStr,
     pub arguments: Vec<Expression>,
 }
 
@@ -113,7 +113,7 @@ impl Expression {
             Expression::StringLiteral(_) => Ok(Some(DataType::str())),
             Expression::FunctionCall(f) => {
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns, None).ok()? }).collect::<Vec<DataType>>();
-                let enc = genFunName(&f.name, &types);
+                let enc = genFunName(f.name.as_str(), &types);
                 match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
                     None => {
                         // panic!();

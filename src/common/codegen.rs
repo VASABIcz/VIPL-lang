@@ -73,6 +73,7 @@ pub struct StatementCtx<'a> {
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
+    pub clearStack: bool
 }
 
 impl ExpressionCtx<'_> {
@@ -105,6 +106,7 @@ impl StatementCtx<'_> {
             functionReturns: self.functionReturns,
             vTable: self.vTable,
             loopContext: self.loopContext,
+            clearStack: self.clearStack,
         }
     }
 }
@@ -167,7 +169,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             }
 
             r.ops.push(Call {
-                encoded: MyStr::Runtime(genFunName(&e.name, &argTypes).into_boxed_str()),
+                encoded: MyStr::Runtime(genFunName(e.name.as_str(), &argTypes).into_boxed_str()),
             })
         }
         Expression::Variable(v) => {
@@ -280,9 +282,31 @@ fn genStatement(
                 }
             }
 
+            let funName = genFunName(e.name.as_str(), &argTypes).into_boxed_str();
+            let s = MyStr::from(funName);
+
+            let mut shouldPop = false;
+
+            if ctx.clearStack {
+                match ctx.functionReturns.get(&s) {
+                    None => {}
+                    Some(v) => {
+                        match v {
+                            None => {}
+                            Some(_) => {
+                                shouldPop = true;
+                            }
+                        }
+                    }
+                }
+            }
+
             ctx.ops.push(Call {
-                encoded: MyStr::Runtime(genFunName(&e.name, &argTypes).into_boxed_str()),
+                encoded: s,
             });
+            if shouldPop {
+                ctx.ops.push(Pop)
+            }
         }
         Variable(v) => match &v.init {
             None => {}
@@ -453,6 +477,7 @@ fn genFunctionDef(
             functionReturns,
             vTable: &idk1,
             loopContext: None,
+            clearStack: true,
         };
         genStatement(ctx)?;
     }
@@ -524,6 +549,7 @@ pub fn complexBytecodeGen(
     functionReturns: &mut HashMap<MyStr, Option<DataType>>,
     mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
     structs: &mut HashMap<MyStr, HashMap<String, DataType>>,
+    clearStack: bool
 ) -> Result<Vec<OpCode>, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut ops = vec![];
@@ -582,6 +608,7 @@ pub fn complexBytecodeGen(
                     functionReturns,
                     vTable: mainLocals,
                     loopContext: None,
+                    clearStack,
                 };
                 genStatement(ctx)?;
             }
@@ -608,7 +635,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataT
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    let res = complexBytecodeGen(operations, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs)?;
+    let res = complexBytecodeGen(operations, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs, true)?;
 
     Ok((res, localTypes))
 }
@@ -618,7 +645,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    let res = complexBytecodeGen(operations, &mut localTypes, functionReturns, &mut mainLocals, &mut structs)?;
+    let res = complexBytecodeGen(operations, &mut localTypes, functionReturns, &mut mainLocals, &mut structs, true)?;
 
     Ok((res, localTypes))
 }

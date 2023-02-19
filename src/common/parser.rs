@@ -521,7 +521,7 @@ impl ParsingUnit for CallParsingUnit {
         tokens.getAssert(TokenType::CRB)?;
 
         Ok(Operation::Expr(Expression::FunctionCall(FunctionCall {
-            name,
+            name: name.into(),
             arguments: args,
         })))
     }

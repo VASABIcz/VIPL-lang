@@ -103,7 +103,7 @@ fn main() {
         };
         println!("{:?}", &res);
 
-        let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs) {
+        let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs, false) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("bytecode");
