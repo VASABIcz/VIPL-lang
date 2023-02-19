@@ -63,9 +63,7 @@ pub fn bootStrapVM() -> VirtualMachine {
 
             let mut seek = SeekableOpcodes {
                 index: 0,
-                opCodes: &mut genOps,
-                start: None,
-                end: None,
+                opCodes: &mut genOps
             };
 
             run(&mut seek, a, b);

@@ -181,7 +181,7 @@ impl DataType {
             Int => Num(0),
             Float => Flo(0.),
             Bool => Bol(false),
-            Object { .. } => Value::Reference { instance: None },
+            Object { .. } => Reference { instance: None },
             Char => Chr(0u8 as char)
         }
     }
@@ -426,6 +426,8 @@ pub struct MyClass {
     pub fields: HashMap<String, MyClassField>,
 }
 
+
+// TODO maybe null still retains object info
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub enum Value {
@@ -434,7 +436,7 @@ pub enum Value {
     Bol(bool),
     Chr(char),
     Reference {
-        instance: Option<Rc<crate::objects::ViplObject>>,
+        instance: Option<Rc<ViplObject>>,
     },
 }
 
@@ -465,13 +467,13 @@ impl Into<Expression> for Value {
 
 impl Value {
     #[inline]
-    pub fn getString(&self) -> String {
+    pub fn getString(&self) -> &String {
         match self {
             Reference { instance } => {
                 match instance {
                     None => panic!(),
                     Some(v) => unsafe {
-                        Rc::get_mut_unchecked(&mut v.clone()).getStr().string.clone()
+                        &v.getStr().string
                     }
                 }
             }
@@ -481,17 +483,17 @@ impl Value {
 
     #[inline]
     pub fn makeString(str: String) -> Value {
-        Value::Reference { instance: Some(Rc::new(Str { string: str }.into())) }
+        Reference { instance: Some(Rc::new(Str { string: str }.into())) }
     }
 
     #[inline]
     pub fn makeObject(obj: Box<dyn crate::objects::Object>) -> Value {
-        Value::Reference { instance: Some(Rc::from(ViplObject::Runtime(obj))) }
+        Reference { instance: Some(Rc::from(ViplObject::Runtime(obj))) }
     }
 
     #[inline]
     pub fn makeArray(arr: Vec<Value>, typ: DataType) -> Value {
-        Value::Reference { instance: Some(Rc::new(crate::objects::Array { internal: arr, typ }.into())) }
+        Reference { instance: Some(Rc::new(crate::objects::Array { internal: arr, typ }.into())) }
     }
 
     #[inline]
@@ -568,6 +570,22 @@ impl Value {
     pub fn getBool(&self) -> bool {
         match self {
             Bol(v) => *v,
+            _ => panic!()
+        }
+    }
+
+    #[inline]
+    pub fn getReference(&self) -> &Option<Rc<ViplObject>> {
+        match self {
+            Reference { instance } => instance,
+            _ => panic!()
+        }
+    }
+
+    #[inline]
+    pub fn getReferenceValue(self) -> Option<Rc<ViplObject>> {
+        match self {
+            Reference { instance } => instance,
             _ => panic!()
         }
     }
@@ -674,8 +692,8 @@ impl Value {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
+            Char => self.getChar() == val.getChar(),
             Object { .. } => panic!(),
-            Char => panic!()
         }
     }
 
@@ -685,8 +703,8 @@ impl Value {
             Int => self.getNum() == val.getNum(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
+            Char => self.getChar() == val.getChar(),
             Object(a) => panic!("{:?}", a),
-            Char => self.getChar() == val.getChar()
         };
         *self = Bol(x)
     }
@@ -702,12 +720,17 @@ impl Value {
     #[inline]
     pub fn toDataType(&self) -> DataType {
         match self {
-            Num(_) => DataType::Int,
-            Flo(_) => DataType::Float,
-            Bol(_) => DataType::Bool,
-            Chr(_) => DataType::Char,
+            Num(_) => Int,
+            Flo(_) => Float,
+            Bol(_) => Bool,
+            Chr(_) => Char,
             Reference { instance: v } => {
-                DataType::Object(ObjectMeta { name: MyStr::Runtime(v.clone().unwrap().asObj().getName().clone().into_boxed_str()), generics: Box::new([]) })
+                match v {
+                    None => panic!(),
+                    Some(v) => {
+                        Object(ObjectMeta { name: MyStr::Runtime(v.asObj().getName().into_boxed_str()), generics: Box::new([]) })
+                    }
+                }
             }
         }
     }
@@ -881,7 +904,7 @@ pub enum FuncType {
 
 pub enum CachedOpCode {
     CallCache {
-        stack: Vec<Value>,
+        locals: Box<[Value]>,
         typ: FuncType,
         argCount: usize,
     },
@@ -890,8 +913,8 @@ pub enum CachedOpCode {
 
 pub struct VirtualMachine {
     pub functions: HashMap<MyStr, Func>,
-    pub stack: Vec<Value>,
     pub classes: HashMap<MyStr, ObjectDefinition>,
+    pub stack: Vec<Value>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
 }
@@ -974,9 +997,7 @@ impl VirtualMachine {
 
 pub struct SeekableOpcodes<'a> {
     pub index: isize,
-    pub opCodes: &'a mut [OpCode],
-    pub start: Option<usize>,
-    pub end: Option<usize>,
+    pub opCodes: &'a mut [OpCode]
 }
 
 impl SeekableOpcodes<'_> {
@@ -989,9 +1010,10 @@ impl SeekableOpcodes<'_> {
     #[inline]
     pub fn nextOpcode(&mut self) -> (Option<&mut OpCode>, usize) {
         let n = self.opCodes.get_mut(self.index as usize);
+        let i = self.index;
         self.index += 1;
 
-        (n, (self.index - 1) as usize)
+        (n, i as usize)
     }
 
     #[inline]
@@ -1098,13 +1120,10 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             PushInt(v) => vm.stack.push(Num(*v)),
             PushFloat(v) => vm.stack.push(Flo(*v)),
             PushBool(v) => vm.stack.push(Bol(*v)),
-            Pop => {
-                vm.stack.pop();
-            }
-            Dup => {
-                let x = vm.stack.pop().unwrap();
-                vm.stack.push(x.clone());
-                vm.stack.push(x);
+            Pop => { vm.stack.pop(); }
+            Dup => unsafe {
+                let val = vm.stack.get_unchecked(vm.stack.len() - 1);
+                vm.stack.push(val.clone());
             }
             PushLocal { index } => {
                 // println!("{:?}", stackFrame.localVariables.get(*index));
@@ -1165,14 +1184,14 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let cached = match &vm.opCodeCache.get_unchecked(index) {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
-                            stack,
+                            locals: stack,
                             typ,
                             argCount,
                         } => (stack, typ, argCount),
                     },
                     None => {
                         // println!("{:?}", &vm.functions.keys());
-                        let f = vm.functions.get(&encoded.clone()).unwrap();
+                        let f = vm.functions.get(&encoded).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
 
@@ -1184,7 +1203,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                          */
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
-                            stack: localVars,
+                            locals: localVars.into(),
                             typ: f.typ.clone(),
                             argCount: f.argAmount,
                         });
@@ -1193,7 +1212,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                             Some(v) => {
                                 match v {
                                     CachedOpCode::CallCache {
-                                        ref stack,
+                                        locals: ref stack,
                                         ref typ,
                                         ref argCount,
                                     } => (stack, typ, argCount)
@@ -1203,15 +1222,15 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 };
 
-                let mut ee = cached.0.clone();
+                let mut cahedLocals = cached.0.clone();
 
                 for i in 0..(*cached.2) {
                     let arg = vm.stack.pop().unwrap();
-                    ee[(cached.2 - 1) - i] = arg;
+                    cahedLocals[(cached.2 - 1) - i] = arg;
                 }
 
                 let mut stack = StackFrame {
-                    localVariables: &mut ee,
+                    localVariables: &mut cahedLocals,
                     name: None,
                 };
 
@@ -1260,7 +1279,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
             Greater(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
                 let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).refGt(&a, v);
+                vm.stack.get_unchecked_mut(l).refGt(&a, &v);
             }
             Less(v) => unsafe {
                 let a = vm.stack.pop().unwrap();
@@ -1300,7 +1319,7 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     Reference { instance } => unsafe {
                         let mut clon = instance.unwrap();
                         let ne = Rc::get_mut_unchecked(&mut clon);
-                        let mut v = ne.getMutArr();
+                        let v = ne.getMutArr();
                         if index as usize == v.internal.len() {
                             v.internal.push(val)
                         } else {
@@ -1323,35 +1342,28 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 };
             },
             ArrayLength => {
-                match vm.stack.pop().unwrap() {
-                    Reference { instance } => unsafe {
-                        let clon = instance.unwrap();
-                        let v = clon.getArr();
-                        vm.stack.push(Value::Num(v.internal.len() as isize))
+                match vm.stack.pop().unwrap().getReference() {
+                    None => {}
+                    Some(v) => {
+                        vm.stack.push(Num(v.getArr().internal.len() as isize));
                     }
-                    _ => panic!()
-                };
+                }
             },
             Inc { typ, index } => unsafe { stackFrame.localVariables.get_unchecked_mut(*index).inc(typ) },
             Dec { typ, index } => unsafe { stackFrame.localVariables.get_unchecked_mut(*index).dec(typ) },
             PushChar(c) => {
-                vm.stack.push(Value::Chr(*c))
+                vm.stack.push(Chr(*c))
             }
             StrNew(s) => {
                 vm.stack.push(Value::makeString(s.clone().to_string()))
             }
             GetChar => {
                 let index = vm.stack.pop().unwrap().getNum();
-                let s = vm.stack.pop().unwrap();
-                match s {
-                    Reference { instance } => {
-                        let u = instance.unwrap();
-                        let s = u.getStr();
-                        println!("{} {}", index, s.string.len());
-                        let char = s.string.as_bytes().get(index as usize).unwrap();
-                        vm.stack.push(Value::Chr(*char as char))
+                match vm.stack.pop().unwrap().getReference() {
+                    None => panic!(),
+                    Some(v) => {
+                        vm.stack.push(Chr(*v.getStr().string.as_bytes().get(index as usize).unwrap() as char));
                     }
-                    _ => panic!()
                 }
             }
         }
@@ -1370,9 +1382,7 @@ pub fn evaluateBytecode(mut bytecode: Vec<OpCode>, locals: Vec<DataType>) -> Vir
     run(
         &mut SeekableOpcodes {
             index: 0,
-            opCodes: &mut bytecode,
-            start: None,
-            end: None,
+            opCodes: &mut bytecode
         },
         &mut vm,
         &mut StackFrame::new(&mut vals),
@@ -1392,9 +1402,7 @@ pub fn evaluateBytecode2(mut bytecode: Vec<OpCode>, locals: Vec<DataType>, vm: &
     run(
         &mut SeekableOpcodes {
             index: 0,
-            opCodes: &mut bytecode,
-            start: None,
-            end: None,
+            opCodes: &mut bytecode
         },
         vm,
         &mut StackFrame::new(&mut vals),

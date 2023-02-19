@@ -3,8 +3,8 @@ fn countFile(path: String): int {
         return 0
     }
 
-    print("file")
-    print(path)
+    // print("file")
+    // print(path)
 
     file = readFile(path)
     fileLen = strLen(file)
@@ -58,7 +58,7 @@ dirType = fileType(directory)
 res = 0
 
 if dirType == 0 {
-    print("invalid path")
+    // print("invalid path")
 }
 else {
     if dirType == 1 {

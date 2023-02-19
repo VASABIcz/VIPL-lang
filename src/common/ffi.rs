@@ -90,9 +90,7 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
 
     run(&mut SeekableOpcodes {
         index: 0,
-        opCodes: &mut opCodes.0,
-        start: None,
-        end: None,
+        opCodes: &mut opCodes.0
     }, vm, &mut StackFrame::new(&mut opCodes.1.into_iter().map(|it| { it.into() }).collect::<Vec<Value>>()));
 
 
@@ -113,9 +111,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
     unsafe {
         run(&mut SeekableOpcodes {
             index: 0,
-            opCodes: &mut ops,
-            start: None,
-            end: None,
+            opCodes: &mut ops
         }, &mut *vm as &mut VirtualMachine, &mut StackFrame {
             // previous: None,
             localVariables: &mut [],
