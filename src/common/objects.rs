@@ -13,6 +13,7 @@ pub enum ViplObject {
 }
 
 impl ViplObject {
+    #[inline]
     pub fn getArr(&self) -> &Array {
         match self {
             ViplObject::Arr(v) => v,
@@ -20,6 +21,7 @@ impl ViplObject {
         }
     }
 
+    #[inline]
     pub fn getMutArr(&mut self) -> &mut Array {
         match self {
             ViplObject::Arr(v) => v,
@@ -27,6 +29,7 @@ impl ViplObject {
         }
     }
 
+    #[inline]
     pub fn getStr(&self) -> &Str {
         match self {
             ViplObject::Str(v) => v,
@@ -34,6 +37,7 @@ impl ViplObject {
         }
     }
 
+    #[inline]
     pub fn getMutStr(&mut self) -> &mut Str {
         match self {
             ViplObject::Str(v) => v,
@@ -41,6 +45,7 @@ impl ViplObject {
         }
     }
 
+    #[inline]
     pub fn asObj(&self) -> &dyn Object {
         match self {
             ViplObject::Arr(a) => a,
@@ -108,12 +113,14 @@ pub struct Str {
 }
 
 impl Into<ViplObject> for Str {
+    #[inline]
     fn into(self) -> ViplObject {
         ViplObject::Str(self)
     }
 }
 
 impl Into<ViplObject> for Array {
+    #[inline]
     fn into(self) -> ViplObject {
         ViplObject::Arr(self)
     }

@@ -213,10 +213,10 @@ pub struct VariableMetadata {
 }
 
 impl From<DataType> for VariableMetadata {
-    fn from(_value: DataType) -> Self {
+    fn from(value: DataType) -> Self {
         Self {
             name: "unknown".into(),
-            typ: DataType::Int,
+            typ: value,
         }
     }
 }
@@ -1059,7 +1059,7 @@ pub fn genFunNameMeta(name: &str, args: &[VariableMetadata], argsLen: usize) -> 
 }
 
 #[inline]
-pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
+pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
     loop {
         let (op, index) = match opCodes.nextOpcode() {
             (None, _) => {
@@ -1105,10 +1105,6 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 vm.makeRuntime(name.to_string(), vars.clone(), startIndex, *argCount, ret.clone(), 0);
                 opCodes.index = index as isize;
             },
-            FunName { .. } => panic!(),
-            FunReturn { .. } => panic!(),
-            LocalVarTable { .. } => panic!(),
-            FunEnd => panic!(),
             F2I => {
                 let mut x = vm.stack.pop().unwrap();
                 vm.stack.push(x.f2i())
@@ -1300,13 +1296,6 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).not();
             }
-            ClassBegin => panic!(),
-            ClassName { .. } => panic!(),
-            ClassField { .. } => panic!(),
-            ClassEnd => panic!(),
-            New { .. } => panic!(),
-            GetField { .. } => panic!(),
-            SetField { .. } => panic!(),
             ArrayNew(d) => {
                 // println!("{}", vm.stack.len());
                 let _size = vm.stack.pop().unwrap();
@@ -1366,6 +1355,20 @@ pub fn run<'a>(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFram
                     }
                 }
             }
+            o => panic!("unimplemented opcode or error {:?}", o)
+            /*
+            FunName { .. } => panic!(),
+            FunReturn { .. } => panic!(),
+            LocalVarTable { .. } => panic!(),
+            FunEnd => panic!(),
+            ClassBegin => panic!(),
+            ClassName { .. } => panic!(),
+            ClassField { .. } => panic!(),
+            ClassEnd => panic!(),
+            New { .. } => panic!(),
+            GetField { .. } => panic!(),
+            SetField { .. } => panic!(),
+             */
         }
     }
 }
