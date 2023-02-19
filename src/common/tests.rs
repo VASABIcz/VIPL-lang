@@ -5,7 +5,8 @@ use crate::codegen::bytecodeGen;
 use crate::lexer::{tokenizeSource, TokenType};
 use crate::lexer::TokenType::IntLiteral;
 use crate::parser::parseTokens;
-use crate::vm::{evaluateBytecode, StackFrame, VirtualMachine};
+use crate::std::bootStrapVM;
+use crate::vm::{DataType, evaluateBytecode, MyStr, StackFrame, Value, VariableMetadata, VirtualMachine};
 
 #[test]
 fn testNumericLexingUnit() {
@@ -172,4 +173,13 @@ pub fn testLexingUnits() {
     let bs = bytecodeGen(res).unwrap();
 
     evaluateBytecode(bs.0, bs.1);
+}
+
+#[test]
+pub fn testLibLoading() {
+    let mut vm = bootStrapVM();
+    vm.stack.push(Value::Num(69));
+    unsafe { vm.loadNative("/home/vasabi/CLionProjects/viplNative/cmake-build-debug/libviplNative.so", String::from("test123"), None, Box::new([VariableMetadata::i(MyStr::Static(""))])); }
+    vm.call(MyStr::Static("test123(int)"));
+    println!("{}", vm.stack.pop().unwrap().valueStr());
 }

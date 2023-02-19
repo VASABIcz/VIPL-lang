@@ -5,10 +5,14 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::intrinsics::transmute;
+use std::mem::{forget, transmute};
+use std::ptr;
 use std::rc::Rc;
 
+use libloading::Symbol;
+
 use crate::ast::{Expression, Op};
+use crate::ffi::NativeWrapper;
 use crate::objects::{ObjectDefinition, Str, ViplObject};
 use crate::parser::Operation::Expr;
 use crate::std::bootStrapVM;
@@ -99,6 +103,35 @@ impl From<DataType> for Value {
     }
 }
 
+impl From<isize> for Value {
+    #[inline]
+    fn from(val: isize) -> Self {
+        Num(val)
+    }
+}
+
+impl From<char> for Value {
+    #[inline]
+    fn from(val: char) -> Self {
+        Chr(val)
+    }
+}
+
+impl From<f32> for Value {
+    #[inline]
+    fn from(val: f32) -> Self {
+        Flo(val)
+    }
+}
+
+impl From<bool> for Value {
+    #[inline]
+    fn from(val: bool) -> Self {
+        Bol(val)
+    }
+}
+
+
 impl DataType {
     pub fn str() -> Self {
         Object(
@@ -169,6 +202,16 @@ impl DataType {
             Float => "float",
             Bool => "bool",
             Object(x) => x.name.as_str(),
+            Char => "char"
+        }
+    }
+
+    pub fn toCString(&self) -> &str {
+        match self {
+            Int => "long",
+            Float => "float",
+            Bool => "bool",
+            Object(_) => "ViplObject*",
             Char => "char"
         }
     }
@@ -862,6 +905,7 @@ impl Value {
 }
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct StackFrame<'a> {
     // pub previous: Option<&'a StackFrame<'a>>,
     pub localVariables: &'a mut [Value],
@@ -879,6 +923,23 @@ impl StackFrame<'_> {
 }
 
 
+impl VirtualMachine {
+    pub unsafe fn loadNative(&mut self, path: &str, name: String, returnType: Option<DataType>, args: Box<[VariableMetadata]>) {
+        let enc = genFunNameMeta(&name, &args, args.len());
+        let l = libloading::Library::new(path).unwrap();
+        let b = Box::leak(Box::new(l));
+        let a: Symbol<extern fn(&mut VirtualMachine, &mut StackFrame) -> ()> = b.get(b"call\0").unwrap();
+        self.functions.insert(MyStr::from(enc.clone().into_boxed_str()), Func {
+            name: enc,
+            returnType,
+            argAmount: args.len(),
+            varTable: args,
+            typ: Extern { callback: *a.into_raw() },
+        });
+    }
+}
+
+#[derive(Debug)]
 pub struct Func {
     pub name: String,
     pub returnType: Option<DataType>,
@@ -901,7 +962,14 @@ pub enum FuncType {
     },
 }
 
+impl Debug for FuncType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
 
+
+#[derive(Debug)]
 pub enum CachedOpCode {
     CallCache {
         locals: Box<[Value]>,
@@ -911,12 +979,54 @@ pub enum CachedOpCode {
 }
 
 
+#[repr(C)]
+#[derive(Debug)]
 pub struct VirtualMachine {
+    pub nativeWrapper: NativeWrapper,
     pub functions: HashMap<MyStr, Func>,
     pub classes: HashMap<MyStr, ObjectDefinition>,
     pub stack: Vec<Value>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
+}
+
+impl VirtualMachine {
+    pub fn call(&mut self, name: MyStr) {
+        let f = self.functions.get(&name).unwrap();
+        let mut locals = vec![Num(-1); f.varTable.len()];
+
+        for i in 0..(f.argAmount) {
+            let arg = self.stack.pop().unwrap();
+            locals[(f.argAmount - 1) - i] = arg;
+        }
+
+        let mut stack = StackFrame {
+            localVariables: &mut locals,
+            name: None,
+        };
+
+        let t = f.typ.clone();
+
+        // FIXME this is so much cursed
+        // FIXME i am bypassing all rust safe guaranis :)
+
+        let ptr = self as *mut VirtualMachine;
+
+        match t {
+            Runtime {
+                rangeStart: s,
+                rangeStop: _e,
+            } => unsafe {
+                let mut seekable = SeekableOpcodes {
+                    index: s as isize,
+                    opCodes: &mut (*ptr).opCodes,
+                };
+                run(&mut seekable, &mut *ptr, &mut stack);
+            }
+            Native { callback } => callback(self, &mut stack),
+            Extern { callback } => callback(self, &mut stack)
+        }
+    }
 }
 
 /*
@@ -935,6 +1045,7 @@ impl VirtualMachine {
             classes: Default::default(),
             opCodes: vec![],
             opCodeCache: vec![],
+            nativeWrapper: NativeWrapper::new(),
         }
     }
 
@@ -1017,9 +1128,7 @@ impl SeekableOpcodes<'_> {
     }
 
     #[inline]
-    pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
-        self.opCodes.get(index)
-    }
+    pub fn getOpcode(&self, index: usize) -> Option<&OpCode> { self.opCodes.get(index) }
 }
 
 #[inline]
@@ -1195,8 +1304,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         for i in &*f.varTable {
                             localVars.push(i.typ.toDefaultValue())
                         }
-
-                         */
+                        */
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
                             locals: localVars.into(),

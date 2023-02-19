@@ -2,8 +2,9 @@ extern crate rust_vm;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 
-use rust_vm::cGen::bytecodeGen2;
+use rust_vm::cGen::{bytecodeGen2, statementFi};
 use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
@@ -53,6 +54,8 @@ fn main() {
         }
     };
 
+    println!("{:?}", ast);
+
     // println!("{:?}", &vm.functions.keys());
 
     let mut rets = HashMap::new();
@@ -63,7 +66,7 @@ fn main() {
 
     println!("{:?}", rets);
 
-    let bs = match bytecodeGen2(ast, &mut rets) {
+    let bs = match bytecodeGen2(statementFi(ast), &mut rets) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("codegen");
@@ -71,5 +74,7 @@ fn main() {
             return;
         }
     };
-    println!("{:?}", bs)
+    println!("{:?}", bs);
+
+    fs::write("gen.c", bs);
 }

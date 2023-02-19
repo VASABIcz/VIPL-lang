@@ -9,7 +9,7 @@ use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDe
 use crate::lexer::*;
 use crate::optimizer::evalExpr;
 use crate::parser::{*};
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode, VariableMetadata};
 use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::{*};
 
@@ -62,12 +62,51 @@ fn genExpression(
         Expression::FloatLiteral(i) => out.push_str(&i),
         Expression::DoubleLiteral(i) => out.push_str(&i),
         Expression::StringLiteral(i) => {
-            out.push('"');
+            out.push_str("vm->nativeWrapper.stringNew(vm,\"");
             out.push_str(&i);
-            out.push('"');
+            out.push_str("\")");
         }
         Expression::BoolLiteral(i) => if i { out.push_str("true") } else { out.push_str("false") },
         Expression::FunctionCall(e) => {
+            let fName: MyStr = genFunName(e.name.as_str(), &e.arguments.iter().map(|it| { it.toDataType(vTable, functionReturns, None).unwrap().unwrap() }).collect::<Vec<DataType>>()).into_boxed_str().into();
+            println!("{:?}", fName);
+            println!("{:?}", functionReturns);
+            let ret = functionReturns.get(&fName).unwrap().clone();
+
+            let argsLen = e.arguments.len();
+
+            out.push_str("({");
+
+            for arg in e.arguments {
+                let t = match arg.toDataType(vTable, functionReturns, None)?.unwrap() {
+                    Int => "vm->nativeWrapper.pushInt(vm,",
+                    DataType::Float => "vm->nativeWrapper.pushFloat(vm,",
+                    Bool => "vm->nativeWrapper.pushBool(vm,",
+                    DataType::Char => "vm->nativeWrapper.pushChar(vm,",
+                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,"
+                };
+                out.push_str(t);
+                genExpression(arg, out, functionReturns, vTable)?;
+                out.push_str(");");
+            }
+            out.push_str("vm->nativeWrapper.call(vm,\"");
+            out.push_str(fName.as_str());
+            out.push_str("\");");
+            if let Some(v) = ret {
+                let s = match v {
+                    Int => "vm->nativeWrapper.popInt(vm);",
+                    DataType::Float => "vm->nativeWrapper.popFloat(vm);",
+                    Bool => "vm->nativeWrapper.popBool(vm);",
+                    DataType::Char => "vm->nativeWrapper.popChar(vm);",
+                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm);",
+                };
+                out.push_str(s)
+            }
+
+
+            out.push_str("})");
+
+            /*
             out.push_str(e.name.as_str());
             out.push_str("(");
 
@@ -88,6 +127,8 @@ fn genExpression(
                 }
             }
             out.push_str(")");
+
+             */
         }
         Expression::Variable(v) => {
             out.push_str(&v)
@@ -113,10 +154,25 @@ fn genExpression(
             out.push('}');
         }
         Expression::ArrayIndexing(i) => {
-            genExpression(i.expr, out, functionReturns, vTable)?;
-            out.push('[');
-            genExpression(i.index, out, functionReturns, vTable)?;
-            out.push(']');
+            let t = i.expr.toDataType(vTable, functionReturns, None)?.unwrap();
+            match t {
+                DataType::Object(o) => {
+                    match o.name.as_str() {
+                        "String" => {
+                            out.push_str("vm->nativeWrapper.stringGetChar(vm,");
+                            genExpression(i.expr, out, functionReturns, vTable)?;
+                            out.push(',');
+                            genExpression(i.index, out, functionReturns, vTable)?;
+                            out.push_str(")")
+                        }
+                        "Array" => {
+                            panic!()
+                        }
+                        _ => panic!()
+                    }
+                }
+                _ => panic!()
+            }
         }
         Expression::NotExpression(e) => {
             out.push('!');
@@ -148,6 +204,36 @@ fn genStatement(
 ) -> Result<(), Box<dyn Error>> {
     match statement {
         Statement::FunctionExpr(e) => {
+            let fName: MyStr = genFunName(e.name.as_str(), &e.arguments.iter().map(|it| { it.toDataType(vTable, functionReturns, None).unwrap().unwrap() }).collect::<Vec<DataType>>()).into_boxed_str().into();
+            let ret = functionReturns.get(&fName).unwrap().clone();
+
+            for arg in e.arguments {
+                let t = match arg.toDataType(vTable, functionReturns, None)?.unwrap() {
+                    Int => "vm->nativeWrapper.pushInt(vm,",
+                    DataType::Float => "vm->nativeWrapper.pushFloat(vm,",
+                    Bool => "vm->nativeWrapper.pushBool(vm,",
+                    DataType::Char => "vm->nativeWrapper.pushChar(vm,",
+                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,"
+                };
+                out.push_str(t);
+                genExpression(arg, out, functionReturns, vTable)?;
+                out.push_str(");");
+            }
+            out.push_str("vm->nativeWrapper.call(vm,\"");
+            out.push_str(fName.as_str());
+            out.push_str("\");");
+            if let Some(v) = ret {
+                let s = match v {
+                    Int => "vm->nativeWrapper.popInt(vm);",
+                    DataType::Float => "vm->nativeWrapper.popFloat(vm);",
+                    Bool => "vm->nativeWrapper.popBool(vm);",
+                    DataType::Char => "vm->nativeWrapper.popChar(vm);",
+                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm);",
+                };
+                out.push_str(s)
+            }
+
+            /*
             out.push_str(e.name.as_str());
             out.push_str("(");
 
@@ -169,10 +255,13 @@ fn genStatement(
             }
             out.push_str(")");
             out.push(';');
+
+             */
         }
         Variable(v) => match v.init {
             None => panic!(),
             Some(e) => {
+                println!("{:?}", e);
                 let t = &e.toDataType(vTable, functionReturns, None)?;
                 match t {
                     None => {
@@ -188,43 +277,63 @@ fn genStatement(
             }
         },
         Statement::While(w) => {
-            out.push_str("while (");
+            out.push_str("while(");
             genExpression(w.exp, out, functionReturns, vTable)?;
-            out.push_str(") { ");
+            out.push_str("){ ");
 
             for s in w.body {
                 genStatement(s, out, functionReturns, vTable, None)?;
             }
-            out.push_str(" }");
+            out.push_str("}");
         }
         Statement::If(flow) => {
-            out.push_str("if (");
+            out.push_str("if(");
             genExpression(flow.condition, out, functionReturns, vTable)?;
-            out.push_str(") {");
+            out.push_str("){");
 
             for s in flow.body {
                 genStatement(s, out, functionReturns, vTable, None)?;
             }
 
-            out.push_str(" }");
+            out.push_str("}");
 
             match flow.elseBody {
                 None => {}
                 Some(v) => {
-                    out.push_str(" else { ");
+                    out.push_str("else{");
 
                     for s in v {
                         genStatement(s, out, functionReturns, vTable, None)?;
                     }
 
-                    out.push_str(" }");
+                    out.push_str("}");
                 }
             }
         }
         Statement::Return(ret) => {
+            let d = ret.exp.toDataType(vTable, functionReturns, None)?;
+            match d {
+                None => {}
+                Some(v) => {
+                    let v = match v {
+                        Int => "vm->nativeWrapper.pushInt(vm,",
+                        DataType::Float => "vm->nativeWrapper.pushFloat(vm,",
+                        Bool => "vm->nativeWrapper.pushBool(vm,",
+                        DataType::Char => "vm->nativeWrapper.pushChar(vm,",
+                        DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
+                    };
+                    out.push_str(v);
+                    genExpression(ret.exp, out, functionReturns, vTable)?;
+                    out.push_str(");")
+                }
+            }
+            out.push_str("return;");
+            /*
             out.push_str("return ");
             genExpression(ret.exp, out, functionReturns, vTable)?;
             out.push_str(";");
+
+             */
         }
         Statement::VariableMod(m) => {
             let s = match m.modType {
@@ -271,36 +380,54 @@ fn genFunctionDef(
             out.push_str("void");
         }
         Some(v) => {
-            out.push_str(&v.toString());
+            out.push_str("void");
+            // out.push_str(&v.toString());
         }
     };
     out.push(' ');
-    out.push_str(&fun.name);
-    out.push('(');
-
-    for i in 0..fun.argCount {
-        let a = fun.args.get(i).unwrap();
-        out.push_str(a.typ.toString());
-        out.push(' ');
-        out.push_str(a.name.as_str());
-        if i != fun.argCount {
-            out.push(',');
-        }
-    }
-
-    out.push_str(") { ");
+    out.push_str("call"); //out.push_str(&fun.name);
+    out.push_str("(VirtualMachine* vm, StackFrame* frame){");
 
     let mut e = HashMap::new();
 
-    for arg in fun.args {
+    let mut idk2 = vec![];
+    for (it, arg) in fun.args.iter().enumerate() {
+        out.push_str(arg.typ.toCString());
+        out.push(' ');
+        out.push_str(arg.name.as_str());
+        out.push('=');
+        let ee = match arg.typ {
+            Int => "vm->nativeWrapper.getLocalsInt(frame,",
+            DataType::Float => "vm->nativeWrapper.getLocalsFloat(frame,",
+            Bool => "vm->nativeWrapper.getLocalsBool(frame,",
+            DataType::Char => "vm->nativeWrapper.getLocalsChar(frame,",
+            DataType::Object(_) => "vm->nativeWrapper.getLocalsRef(frame,"
+        };
+        out.push_str(ee);
+
+        out.push_str(&it.to_string());
+
+        out.push_str(");");
         e.insert(arg.name.clone(), (arg.typ.clone(), 0usize));
+    }
+
+
+    for s in &fun.body {
+        buildLocalsTable(s, &mut e, &mut idk2, functionReturns)?;
+    }
+
+    for local in &idk2 {
+        out.push_str(local.typ.toCString());
+        out.push(' ');
+        out.push_str(local.name.as_str());
+        out.push(';');
     }
 
     for a in fun.body {
         genStatement(a, out, functionReturns, &e, None)?;
     }
 
-    out.push_str(" }");
+    out.push_str("}");
 
     Ok(())
 }
@@ -433,6 +560,24 @@ pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (
     Ok(())
 }
 
+pub fn statementFi(operations: Vec<Operation>) -> Vec<Operation> {
+    let mut buf = vec![];
+    for op in operations {
+        match op {
+            Operation::Expr(e) => {
+                match e {
+                    Expression::FunctionCall(c) => {
+                        buf.push(Operation::Statement(Statement::FunctionExpr(c)))
+                    }
+                    _ => {}
+                }
+            }
+            a => buf.push(a)
+        }
+    }
+    buf
+}
+
 pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<MyStr, Option<DataType>>) -> Result<String, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
@@ -446,16 +591,9 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
         } else if let Operation::Expr(Expression::FunctionCall(call)) = op {
             buildLocalsTable(&Statement::FunctionExpr(call.clone()), &mut mainLocals, &mut localTypes, functionReturns)?;
             inlineMain.push(op);
+        } else if let Operation::Global(Node::FunctionDef(d)) = op {
+            functionReturns.insert(genFunNameMeta(d.name.as_str(), &d.args, d.argCount).into(), d.returnType.clone());
         }
-    }
-
-    out.push_str("int main() { ");
-
-    for local in &mainLocals {
-        out.push_str(local.1.0.toString());
-        out.push(' ');
-        out.push_str(local.0.as_str());
-        out.push(';');
     }
 
     for op in &operations {
@@ -474,6 +612,15 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
 
     println!("b");
 
+    out.push_str("void call(VirtualMachine* vm,StackFrame* frame){");
+
+    for local in &mainLocals {
+        out.push_str(local.1.0.toCString());
+        out.push(' ');
+        out.push_str(local.0.as_str());
+        out.push(';');
+    }
+
     for op in &inlineMain {
         match op {
             Operation::Statement(s) => {
@@ -486,7 +633,7 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
         }
     }
 
-    out.push_str(" }");
+    out.push_str("}");
 
     Ok(out)
 }
@@ -503,7 +650,8 @@ void callable(void* vm, void* locals) {
     int x;
     x = getLocals(locals, 0);
     while (x < 10000000) {
-        internalCall(vm, "fact", 20);
+        pushStackInt(20);
+        internalCall(vm, "fact");
         popStackInt(vm);
         x+=1;
     }

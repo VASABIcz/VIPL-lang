@@ -1,6 +1,10 @@
 
-x = 0
+fn calc(max: int): int {
+    x = 0
 
-while x < 1_000_000_000 {
-    x += 1
+    while x < max {
+        x += 1
+    }
+
+    return x
 }

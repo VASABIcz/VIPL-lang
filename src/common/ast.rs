@@ -112,11 +112,14 @@ impl Expression {
             }
             Expression::StringLiteral(_) => Ok(Some(DataType::str())),
             Expression::FunctionCall(f) => {
+                println!("{:?}", &f.arguments);
+                println!("{:?}", typesMapping);
                 let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns, None).ok()? }).collect::<Vec<DataType>>();
+                println!("{:?}", &types);
                 let enc = genFunName(f.name.as_str(), &types);
                 match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
                     None => {
-                        // panic!();
+                        panic!();
                         println!("{functionReturns:?}");
                         Err(Box::new(TypeNotFound { typ: enc }))
                     },
