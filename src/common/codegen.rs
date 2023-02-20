@@ -446,6 +446,15 @@ fn genFunctionDef(
     ops: &mut Vec<OpCode>,
     functionReturns: &HashMap<MyStr, Option<DataType>>,
 ) -> Result<(), Box<dyn Error>> {
+    if fun.isNative {
+        let mut buf = String::new();
+        crate::cGen::genFunctionDef(fun, &mut buf, functionReturns)?;
+        println!("{}", buf);
+        let resPath = crate::gccWrapper::compile(&buf)?;
+
+        return Ok(())
+    }
+
     ops.push(OpCode::FunBegin);
     ops.push(FunName {
         name: MyStr::Runtime(fun.name.clone().into_boxed_str()),

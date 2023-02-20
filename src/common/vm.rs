@@ -1008,7 +1008,7 @@ impl VirtualMachine {
         let t = f.typ.clone();
 
         // FIXME this is so much cursed
-        // FIXME i am bypassing all rust safe guaranis :)
+        // FIXME i am bypassing all rust safe guaranties :)
 
         let ptr = self as *mut VirtualMachine;
 

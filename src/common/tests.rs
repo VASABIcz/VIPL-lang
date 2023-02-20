@@ -1,4 +1,5 @@
 use std::ptr::null;
+use std::time::Instant;
 
 use crate::ast::{Expression, Op};
 use crate::codegen::bytecodeGen;
@@ -178,8 +179,32 @@ pub fn testLexingUnits() {
 #[test]
 pub fn testLibLoading() {
     let mut vm = bootStrapVM();
-    vm.stack.push(Value::Num(69));
-    unsafe { vm.loadNative("/home/vasabi/CLionProjects/viplNative/cmake-build-debug/libviplNative.so", String::from("test123"), None, Box::new([VariableMetadata::i(MyStr::Static(""))])); }
+    vm.stack.push(Value::Num(1_000_000_000));
+    unsafe { vm.loadNative("/home/vasabi/CLionProjects/viplNative/cmake-build-release/libviplNative.so", String::from("test123"), None, Box::new([VariableMetadata::i(MyStr::Static(""))])); }
+
+    let a = Instant::now();
+
     vm.call(MyStr::Static("test123(int)"));
+
+    let elapsed = a.elapsed();
+    println!("finished in: {:.2?}", elapsed);
+
     println!("{}", vm.stack.pop().unwrap().valueStr());
+}
+
+#[test]
+pub fn testComiple() {
+    let sc = "void call(VirtualMachine* vm, StackFrame* frame){
+    long max = vm->nativeWrapper.getLocalsInt(frame, 0);
+    long x;
+    x=0;
+    while(x < max){
+        x+=1;
+    }
+    vm->nativeWrapper.pushInt(vm, x);
+    return;
+}";
+
+    let res = crate::gccWrapper::compile(sc).unwrap();
+    println!("{}", res);
 }

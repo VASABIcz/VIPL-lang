@@ -1,3 +1,4 @@
+use std::env::args;
 use std::rc::Rc;
 
 use crate::objects::Str;
@@ -200,6 +201,10 @@ pub fn bootStrapVM() -> VirtualMachine {
             _ => panic!()
         }
     }, Some(DataType::Bool));
+
+    vm.makeNative(String::from("loadNative"), box [VariableMetadata::from(DataType::str())], |vm, locals| {
+        let path = locals.localVariables.get(0).unwrap().getString();
+    }, None);
 
     vm
 }

@@ -140,6 +140,7 @@ fn genExpression(
             out.push('\'');
         }
         Expression::ArrayLiteral(i) => {
+            panic!();
             out.push('{');
 
             let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
@@ -166,7 +167,7 @@ fn genExpression(
                             out.push_str(")")
                         }
                         "Array" => {
-                            panic!()
+                            out.push_str("NULL")
                         }
                         _ => panic!()
                     }
@@ -348,6 +349,7 @@ fn genStatement(
             out.push(';');
         }
         Statement::ArrayAssign { left, right } => {
+            panic!();
             genExpression(left.expr, out, functionReturns, vTable)?;
             out.push('[');
             genExpression(left.index, out, functionReturns, vTable)?;
@@ -370,7 +372,7 @@ fn genStatement(
     Ok(())
 }
 
-fn genFunctionDef(
+pub fn genFunctionDef(
     fun: FunctionDef,
     out: &mut String,
     functionReturns: &HashMap<MyStr, Option<DataType>>,

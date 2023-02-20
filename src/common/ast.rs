@@ -240,6 +240,7 @@ pub struct FunctionDef {
     pub argCount: usize,
     pub body: Vec<Statement>,
     pub returnType: Option<DataType>,
+    pub isNative: bool
 }
 
 #[derive(Debug, Clone)]

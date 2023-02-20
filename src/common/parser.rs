@@ -8,7 +8,7 @@ use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, Op, State
 use crate::ast;
 use crate::ast::Expression::IntLiteral;
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 
@@ -385,7 +385,16 @@ impl ParsingUnit for FunctionParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit>],
     ) -> Result<Operation, Box<dyn Error>> {
+        let mut isNative = false;
+
         tokens.getAssert(TokenType::Fn)?;
+
+        if tokens.isPeekType(Native) {
+            tokens.getAssert(Native)?;
+
+            isNative = true;
+        }
+
         let name = tokens.getIdentifier()?;
         let mut args = vec![];
         let mut argCount = 0;
@@ -422,6 +431,7 @@ impl ParsingUnit for FunctionParsingUnit {
             argCount,
             body: statements,
             returnType,
+            isNative,
         })))
     }
 

@@ -1,5 +1,3 @@
-#include "library.h"
-
 void call(VirtualMachine* vm, StackFrame* frame){
     long max = vm->nativeWrapper.getLocalsInt(frame, 0);
     long x;

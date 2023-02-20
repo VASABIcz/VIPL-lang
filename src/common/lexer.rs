@@ -137,6 +137,7 @@ pub enum TokenType {
     Return,
     New,
     Struct,
+    Native,
 
     ORB,
     CRB,
@@ -398,6 +399,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("true", TokenType::True),
         KeywordLexingUnit::new("new", TokenType::New),
         KeywordLexingUnit::new("struct", TokenType::Struct),
+        KeywordLexingUnit::new("native", TokenType::Native),
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
