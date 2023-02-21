@@ -451,7 +451,7 @@ fn genFunctionDef(
         let c = fun.argCount;
         let mut buf = String::new();
         crate::cGen::genFunctionDef(fun.clone(), &mut buf, functionReturns)?;
-        println!("{}", buf);
+        println!("kys {}", buf);
         let resPath = crate::gccWrapper::compile(&buf)?;
 
         ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));

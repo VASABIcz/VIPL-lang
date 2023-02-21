@@ -1320,8 +1320,8 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         } => (stack, typ, argCount),
                     },
                     None => {
-                        println!("{:?}", &vm.functions.keys());
-                        println!("{}", encoded);
+                        // println!("{:?}", &vm.functions.keys());
+                        // println!("{}", encoded);
                         let f = vm.functions.get(&encoded).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
@@ -1354,7 +1354,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 
                 let mut cahedLocals = cached.0.clone();
 
-                println!("{}", encoded);
+                // println!("{}", encoded);
                 for i in 0..(*cached.2) {
                     let arg = vm.stack.pop().unwrap();
                     cahedLocals[(cached.2 - 1) - i] = arg;

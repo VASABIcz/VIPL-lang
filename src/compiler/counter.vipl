@@ -1,4 +1,4 @@
-fn countFile(path: String): int {
+fn native countFile(path: String): int {
     if !endsWith(path, ".rs") {
         return 0
     }
@@ -24,7 +24,7 @@ fn countFile(path: String): int {
     return counter
 }
 
-fn native countDir(path: String): int {
+fn countDir(path: String): int {
     // print("dir")
     // print(path)
 
@@ -53,7 +53,7 @@ fn native countDir(path: String): int {
     return counter
 }
 
-directory = "/home/vasabi/Downloads/bot/vm-rust/src/common"
+directory = "/home/vasabi/Downloads/vm-rust/src/common"
 dirType = fileType(directory)
 res = 0
 

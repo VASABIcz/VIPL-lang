@@ -83,8 +83,8 @@ fn genExpression(
         Expression::BoolLiteral(i) => if i { out.push_str("true") } else { out.push_str("false") },
         Expression::FunctionCall(e) => {
             let fName: MyStr = genFunName(e.name.as_str(), &e.arguments.iter().map(|it| { it.toDataType(vTable, functionReturns, None).unwrap().unwrap() }).collect::<Vec<DataType>>()).into_boxed_str().into();
-            println!("{:?}", fName);
-            println!("{:?}", functionReturns);
+            // println!("{:?}", fName);
+            // println!("{:?}", functionReturns);
             let ret = functionReturns.get(&fName).unwrap().clone();
 
             let argsLen = e.arguments.len();
@@ -289,7 +289,7 @@ fn genStatement(
         Variable(v) => match v.init {
             None => panic!(),
             Some(e) => {
-                println!("{:?}", e);
+                // println!("{:?}", e);
                 let t = &e.toDataType(vTable, functionReturns, None)?;
                 match t {
                     None => {

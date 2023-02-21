@@ -76,10 +76,10 @@ fn basicPrint() {
     println!("tokens {:?}", &tokens);
 
     let res = parseTokens(tokens).unwrap();
-    println!("{:?}", &res);
+    // println!("{:?}", &res);
 
     let bs = bytecodeGen(res).unwrap();
-    println!("{:?}", &bs.0);
+    // println!("{:?}", &bs.0);
 
     evaluateBytecode(bs.0, bs.1);
 }
@@ -92,7 +92,7 @@ fn testFunctionReturn() {
     println!("tokens {:?}", &tokens);
 
     let res = parseTokens(tokens).unwrap();
-    println!("{:?}", &res);
+    // println!("{:?}", &res);
 
     let bs = bytecodeGen(res).unwrap();
     println!("{:?}", &bs.0);

@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::time::Instant;
 
+use jemallocator::Jemalloc;
+
 use rust_vm::bytecodeChecker::{AbstractStack, checkBytecode};
 use rust_vm::codegen::bytecodeGen2;
 use rust_vm::fs::setupFs;
@@ -12,6 +14,9 @@ use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
 use rust_vm::vm::{evaluateBytecode2, SeekableOpcodes};
 use rust_vm::vm::DataType::Int;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
@@ -74,7 +79,7 @@ fn main() {
         }
     };
 
-    println!("{:?}", &bs.0);
+    // println!("{:?}", &bs.0);
 
     /*
     match checkBytecode(&mut SeekableOpcodes {

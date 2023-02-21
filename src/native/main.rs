@@ -54,7 +54,7 @@ fn main() {
         }
     };
 
-    println!("{:?}", ast);
+    // println!("{:?}", ast);
 
     // println!("{:?}", &vm.functions.keys());
 
@@ -64,7 +64,7 @@ fn main() {
         rets.insert(f.0.clone(), f.1.returnType.clone());
     }
 
-    println!("{:?}", rets);
+    // println!("{:?}", rets);
 
     let bs = match bytecodeGen2(statementFi(ast), &mut rets) {
         Ok(v) => v,
@@ -74,7 +74,7 @@ fn main() {
             return;
         }
     };
-    println!("{:?}", bs);
+    // println!("{:?}", bs);
 
     fs::write("gen.c", bs);
 }

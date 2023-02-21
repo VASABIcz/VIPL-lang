@@ -4,7 +4,8 @@ use std::fs;
 use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-static LIBRARY: &str = "#include <stdbool.h>
+static LIBRARY: &str =
+    "#include <stdbool.h>
 #include <stdint.h>
 
 typedef struct StackFrame StackFrame;
@@ -60,7 +61,8 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
 
     fs::write(&cPath, buf)?;
 
-    let cmd = format!("gcc -O3 -shared -o {} -fPIC {}", soPath, cPath);
+    // -O3
+    let cmd = format!("clang -ggdb -shared -o {} -fPIC {}", soPath, cPath);
 
     let e: Vec<&str> = cmd.split(" ").collect();
 
