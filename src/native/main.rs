@@ -9,7 +9,6 @@ use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::evaluateBytecode2;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
