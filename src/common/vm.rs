@@ -15,6 +15,7 @@ use crate::ast::{Expression, Op};
 use crate::ffi::NativeWrapper;
 use crate::objects::{ObjectDefinition, Str, ViplObject};
 use crate::parser::Operation::Expr;
+use crate::parser::parseDataType;
 use crate::std::bootStrapVM;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -922,6 +923,15 @@ impl StackFrame<'_> {
     }
 }
 
+pub fn parseDataTypeFromStr(s: &str) {
+    // Array<Array<Array<int>>>
+    // Array<Array<Array
+    panic!()
+}
+
+pub fn decodeFunctionString(s: &str) {
+    panic!()
+}
 
 impl VirtualMachine {
     pub unsafe fn loadNative(&mut self, path: &str, name: String, returnType: Option<DataType>, args: Box<[VariableMetadata]>) {
@@ -934,6 +944,20 @@ impl VirtualMachine {
             returnType,
             argAmount: args.len(),
             varTable: args,
+            typ: Extern { callback: *a.into_raw() },
+        });
+    }
+
+    pub unsafe fn loadRawNative(&mut self, path: &str, name: &str, returnType: Option<DataType>, argCount: usize) {
+        let l = libloading::Library::new(path).unwrap();
+        let b = Box::leak(Box::new(l));
+        let a: Symbol<extern fn(&mut VirtualMachine, &mut StackFrame) -> ()> = b.get(b"call\0").unwrap();
+
+        self.functions.insert(MyStr::from(name.to_owned().into_boxed_str()), Func {
+            name: name.to_owned(),
+            returnType,
+            argAmount: argCount,
+            varTable: vec![VariableMetadata::b(MyStr::Static("")); argCount].into_boxed_slice(),
             typ: Extern { callback: *a.into_raw() },
         });
     }
@@ -1008,7 +1032,7 @@ impl VirtualMachine {
         let t = f.typ.clone();
 
         // FIXME this is so much cursed
-        // FIXME i am bypassing all rust safe guaranties :)
+        // FIXME i am bypassing all rust safety guaranties :)
 
         let ptr = self as *mut VirtualMachine;
 
@@ -1295,7 +1319,8 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         } => (stack, typ, argCount),
                     },
                     None => {
-                        // println!("{:?}", &vm.functions.keys());
+                        println!("{:?}", &vm.functions.keys());
+                        println!("{}", encoded);
                         let f = vm.functions.get(&encoded).unwrap();
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
@@ -1328,6 +1353,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 
                 let mut cahedLocals = cached.0.clone();
 
+                println!("{}", encoded);
                 for i in 0..(*cached.2) {
                     let arg = vm.stack.pop().unwrap();
                     cahedLocals[(cached.2 - 1) - i] = arg;

@@ -7,7 +7,8 @@ use crate::lexer::{tokenizeSource, TokenType};
 use crate::lexer::TokenType::IntLiteral;
 use crate::parser::parseTokens;
 use crate::std::bootStrapVM;
-use crate::vm::{DataType, evaluateBytecode, MyStr, StackFrame, Value, VariableMetadata, VirtualMachine};
+use crate::vm::{DataType, evaluateBytecode, MyStr, OpCode, StackFrame, Value, VariableMetadata, VirtualMachine};
+use crate::vm::RawOpCode::PushInt;
 
 #[test]
 fn testNumericLexingUnit() {
@@ -201,10 +202,23 @@ pub fn testComiple() {
     while(x < max){
         x+=1;
     }
-    vm->nativeWrapper.pushInt(vm, x);
+    vm->nativeWrapper.pushInt(vm, 6969);
     return;
 }";
 
+    let vm = bootStrapVM();
+
     let res = crate::gccWrapper::compile(sc).unwrap();
-    println!("{}", res);
+
+    let ops = vec![
+        OpCode::StrNew(MyStr::Runtime(res.into_boxed_str())),
+        OpCode::StrNew(MyStr::Static("lool(int)")),
+        OpCode::PushInt(1),
+        OpCode::Call { encoded: MyStr::Static("loadNative(String, String, int)") },
+        OpCode::PushInt(69),
+        OpCode::Call { encoded: MyStr::Static("lool(int)") },
+        OpCode::Call { encoded: MyStr::Static("print(int)") }
+    ];
+    crate::vm::evaluateBytecode(ops, vec![]);
+    println!("{}", vm.stack.len());
 }

@@ -74,7 +74,7 @@ fn main() {
         }
     };
 
-    // println!("{:?}", &bs);
+    println!("{:?}", &bs.0);
 
     /*
     match checkBytecode(&mut SeekableOpcodes {
@@ -94,6 +94,7 @@ fn main() {
      */
     let e = now.elapsed();
     println!("compiled in: {:.2?}", e);
+    println!("bich {:?}", bs.0);
 
     let a = Instant::now();
 

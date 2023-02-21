@@ -36,8 +36,6 @@ typedef struct NativeWrapper {
 typedef struct VirtualMachine {
     struct NativeWrapper nativeWrapper;
 } VirtualMachine;
-
-void call(VirtualMachine* vm, StackFrame* frame);
 ";
 
 pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {

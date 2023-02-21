@@ -1,5 +1,6 @@
 use std::env::args;
 use std::rc::Rc;
+use crate::lexer::TokenType::Var;
 
 use crate::objects::Str;
 use crate::vm::*;
@@ -202,8 +203,17 @@ pub fn bootStrapVM() -> VirtualMachine {
         }
     }, Some(DataType::Bool));
 
-    vm.makeNative(String::from("loadNative"), box [VariableMetadata::from(DataType::str())], |vm, locals| {
+    vm.makeNative(String::from("loadNative"), box [
+        VariableMetadata::from(DataType::str()), // path
+        VariableMetadata::from(DataType::str()), // name
+        VariableMetadata::from(DataType::Int) // arg count
+    ], |vm, locals| unsafe {
         let path = locals.localVariables.get(0).unwrap().getString();
+        let name = locals.localVariables.get(1).unwrap().getString();
+        let argCount = locals.localVariables.get(2).unwrap().getNum();
+
+        vm.loadRawNative(path, name, None, argCount as usize)
+
     }, None);
 
     vm

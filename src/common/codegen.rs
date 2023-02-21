@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::args;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
@@ -447,10 +448,16 @@ fn genFunctionDef(
     functionReturns: &HashMap<MyStr, Option<DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     if fun.isNative {
+        let c = fun.argCount;
         let mut buf = String::new();
-        crate::cGen::genFunctionDef(fun, &mut buf, functionReturns)?;
+        crate::cGen::genFunctionDef(fun.clone(), &mut buf, functionReturns)?;
         println!("{}", buf);
         let resPath = crate::gccWrapper::compile(&buf)?;
+
+        ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));
+        ops.push(StrNew(MyStr::Runtime(genFunNameMeta(&fun.name, &fun.args, c).into_boxed_str())));
+        ops.push(OpCode::PushInt(fun.argCount as isize));
+        ops.push(OpCode::Call { encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")) });
 
         return Ok(())
     }

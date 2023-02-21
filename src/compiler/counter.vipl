@@ -1,10 +1,10 @@
-fn countFile(path: String): int {
+fn native countFile(path: String): int {
     if !endsWith(path, ".rs") {
         return 0
     }
 
-    // print("file")
-    // print(path)
+    print("file")
+    print(path)
 
     file = readFile(path)
     fileLen = strLen(file)
@@ -14,7 +14,7 @@ fn countFile(path: String): int {
     while i < fileLen {
         c = file[i]
 
-        if c == '\n' {
+        if c == 'a' {
             counter += 1
         }
 
@@ -43,17 +43,17 @@ fn countDir(path: String): int {
             if ft == 1 {
                 counter += countFile(buf)
             }
-            else {
+            // else {
                 // print(ft)
                 // print("ERROR")
-            }
+            // }
         }
         i += 1
     }
     return counter
 }
 
-directory = "/home/vasabi/Downloads/vm-rust/src/common"
+directory = "/home/vasabi/Downloads/bot/vm-rust/src/common"
 dirType = fileType(directory)
 res = 0
 
