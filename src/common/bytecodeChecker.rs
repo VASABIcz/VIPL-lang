@@ -8,7 +8,7 @@ use crate::vm::OpCode::*;
 
 #[derive(Debug)]
 struct InvalidOpcode {
-    msg: String
+    msg: String,
 }
 
 impl Display for InvalidOpcode {
@@ -21,7 +21,7 @@ impl Error for InvalidOpcode {}
 
 #[derive(Debug)]
 struct GenericException {
-    msg: String
+    msg: String,
 }
 
 impl Display for GenericException {
@@ -36,37 +36,52 @@ impl Error for GenericException {}
 struct OutOfBoundsException {
     max: isize,
     index: isize,
-    msg: String
+    msg: String,
 }
 
 impl Display for OutOfBoundsException {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "tried to index {} out of bounds index {} bounds 0-{}", self.msg, self.index, self.index)
+        write!(
+            f,
+            "tried to index {} out of bounds index {} bounds 0-{}",
+            self.msg, self.index, self.index
+        )
     }
 }
 
 impl Error for OutOfBoundsException {}
 
-pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<Box<str>>) -> Result<(), Box<dyn Error>> {
+pub fn checkFunction(
+    opCodes: &mut SeekableOpcodes,
+    abstractStack: &mut AbstractStack,
+    vm: &mut VirtualMachine,
+    checkedFunctions: &mut HashSet<Box<str>>,
+) -> Result<(), Box<dyn Error>> {
     let mut index = opCodes.index as usize;
     let name = match opCodes.getOpcode(index).unwrap() {
         FunName { name } => name,
         _v => {
-            return Err(Box::new(InvalidOpcode { msg: "FunName".to_string() }))
+            return Err(Box::new(InvalidOpcode {
+                msg: "FunName".to_string(),
+            }))
         }
     };
     index += 1;
     let (vars, argCount) = match opCodes.getOpcode(index).unwrap() {
         LocalVarTable { typ, argsCount } => (typ, argsCount),
         _v => {
-            return Err(Box::new(InvalidOpcode { msg: "LocalVarTable".to_string() }))
+            return Err(Box::new(InvalidOpcode {
+                msg: "LocalVarTable".to_string(),
+            }))
         }
     };
     index += 1;
     let ret = match opCodes.getOpcode(index).unwrap() {
         FunReturn { typ } => typ,
         _v => {
-            return Err(Box::new(InvalidOpcode { msg: "FunReturn".to_string() }))
+            return Err(Box::new(InvalidOpcode {
+                msg: "FunReturn".to_string(),
+            }))
         }
     };
     let retClone = ret.clone();
@@ -83,7 +98,13 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
     checkedFunctions.insert(genName.clone().into_boxed_str());
     opCodes.index += index as isize;
 
-    checkBytecode(opCodes, &mut abstractLocals, abstractStack, vm, checkedFunctions)?;
+    checkBytecode(
+        opCodes,
+        &mut abstractLocals,
+        abstractStack,
+        vm,
+        checkedFunctions,
+    )?;
 
     println!("check f {}", genName.as_str());
 
@@ -93,32 +114,41 @@ pub fn checkFunction(opCodes: &mut SeekableOpcodes, abstractStack: &mut Abstract
     let last = match abstractStack.stack.last() {
         None => {
             if retClone.is_some() {
-                return Err(Box::new(InvalidOpcode { msg: format!("expected function {genName} to return {retClone:?}") }))
+                return Err(Box::new(InvalidOpcode {
+                    msg: format!("expected function {genName} to return {retClone:?}"),
+                }));
             } else if size != abstractStack.len() {
                 // println!("{}", abstractStack.len());
-                return Err(Box::new(InvalidOpcode { msg: format!("function {genName} corrupted stack a") }))
+                return Err(Box::new(InvalidOpcode {
+                    msg: format!("function {genName} corrupted stack a"),
+                }));
             }
-            return Ok(())
+            return Ok(());
         }
-        Some(v) => v
+        Some(v) => v,
     };
 
     match retClone {
         None => {
             if size == abstractStack.len() {
                 Ok(())
-            }
-            else {
+            } else {
                 // println!("{}", abstractStack.len());
-                Err(Box::new(InvalidOpcode { msg: format!("function {genName} corrupted stack b") }))
+                Err(Box::new(InvalidOpcode {
+                    msg: format!("function {genName} corrupted stack b"),
+                }))
             }
-        },
+        }
         Some(v) => {
             if *last != v {
-                Err(Box::new(InvalidOpcode { msg: format!("function returned wrong type {:?} expected {:?}", *last, v) }))
+                Err(Box::new(InvalidOpcode {
+                    msg: format!("function returned wrong type {:?} expected {:?}", *last, v),
+                }))
             } else if size + 1 != abstractStack.len() {
                 // println!("{}", abstractStack.len());
-                Err(Box::new(InvalidOpcode { msg: format!("function {genName} corrupted stack c") }))
+                Err(Box::new(InvalidOpcode {
+                    msg: format!("function {genName} corrupted stack c"),
+                }))
             } else {
                 Ok(())
             }
@@ -154,31 +184,32 @@ impl Error for InvalidTypeException {}
 impl AbstractStack {
     fn assertPop(&mut self, typ: &DataType) -> Result<(), Box<dyn Error>> {
         match self.stack.pop() {
-            None => Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: None })),
+            None => Err(Box::new(InvalidTypeException {
+                expected: typ.clone(),
+                actual: None,
+            })),
             Some(v) => {
                 if v != *typ {
                     match typ {
-                        Object(o) => {
-                            match o.generics.first() {
-                                None => {}
-                                Some(g) => {
-                                    if *g == Generic::Any {
-                                        match v {
-                                            Object(_) => {
-                                                return Ok(())
-                                            }
-                                            _ => {}
-                                        }
+                        Object(o) => match o.generics.first() {
+                            None => {}
+                            Some(g) => {
+                                if *g == Generic::Any {
+                                    match v {
+                                        Object(_) => return Ok(()),
+                                        _ => {}
                                     }
                                 }
                             }
-                        }
+                        },
                         _ => {}
                     }
 
-                    Err(Box::new(InvalidTypeException { expected: typ.clone(), actual: Some(v) }))
-                }
-                else {
+                    Err(Box::new(InvalidTypeException {
+                        expected: typ.clone(),
+                        actual: Some(v),
+                    }))
+                } else {
                     Ok(())
                 }
             }
@@ -195,14 +226,22 @@ impl AbstractStack {
 
     fn pop(&mut self) -> Result<DataType, Box<dyn Error>> {
         match self.stack.pop() {
-            None => Err(Box::new(GenericException { msg: "empty stack".to_string() })),
-            Some(v) => Ok(v)
+            None => Err(Box::new(GenericException {
+                msg: "empty stack".to_string(),
+            })),
+            Some(v) => Ok(v),
         }
     }
 }
 
 #[inline(always)]
-pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec<DataType>, abstractStack: &mut AbstractStack, vm: &mut VirtualMachine, checkedFunctions: &mut HashSet<Box<str>>) -> Result<(), Box<dyn Error>> {
+pub fn checkBytecode<'a>(
+    opCodes: &mut SeekableOpcodes,
+    abstractLocals: &mut Vec<DataType>,
+    abstractStack: &mut AbstractStack,
+    vm: &mut VirtualMachine,
+    checkedFunctions: &mut HashSet<Box<str>>,
+) -> Result<(), Box<dyn Error>> {
     loop {
         let (op, _index) = match opCodes.nextOpcode() {
             (None, _) => {
@@ -245,20 +284,16 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 abstractStack.push(v.clone());
                 abstractStack.push(v);
             }
-            PushLocal { index } => {
-                match abstractLocals.get(*index) {
-                    None => {
-                        return Err(Box::new(OutOfBoundsException{
-                            max: (abstractLocals.len() - 1) as isize,
-                            index: *index as isize,
-                            msg: "locals".to_string(),
-                        }))
-                    }
-                    Some(v) => {
-                        abstractStack.push(v.clone())
-                    }
+            PushLocal { index } => match abstractLocals.get(*index) {
+                None => {
+                    return Err(Box::new(OutOfBoundsException {
+                        max: (abstractLocals.len() - 1) as isize,
+                        index: *index as isize,
+                        msg: "locals".to_string(),
+                    }))
                 }
-            }
+                Some(v) => abstractStack.push(v.clone()),
+            },
             SetLocal { index, typ: _t } => {
                 let x = abstractStack.pop()?;
                 if *index >= abstractLocals.len() {
@@ -266,7 +301,7 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                         max: (abstractLocals.len().saturating_sub(1)) as isize,
                         index: *index as isize,
                         msg: "locals".to_string(),
-                    }))
+                    }));
                 }
                 match abstractLocals.get(*index) {
                     None => {
@@ -278,48 +313,43 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                     }
                     Some(v) => {
                         if *v != x {
-                            return Err(Box::new(InvalidTypeException { expected: x, actual: Some(v.clone()) }))
+                            return Err(Box::new(InvalidTypeException {
+                                expected: x,
+                                actual: Some(v.clone()),
+                            }));
                         }
                     }
                 }
             }
-            Jmp { offset: _, jmpType } => {
-                match jmpType {
-                    JmpType::One => {
-                        abstractStack.assertPop(&Int)?
-                    }
-                    JmpType::Zero => {
-                        abstractStack.assertPop(&Int)?
-                    }
-                    JmpType::Jmp => {}
-                    JmpType::Gt => {
-                        abstractStack.assertPop(&Int)?;
-                        abstractStack.assertPop(&Int)?
-                    }
-                    JmpType::Less => {
-                        abstractStack.assertPop(&Int)?;
-                        abstractStack.assertPop(&Int)?
-                    }
-                    JmpType::True => {
-                        abstractStack.assertPop(&Bool)?
-                    }
-                    JmpType::False => {
-                        abstractStack.assertPop(&Bool)?
-                    }
+            Jmp { offset: _, jmpType } => match jmpType {
+                JmpType::One => abstractStack.assertPop(&Int)?,
+                JmpType::Zero => abstractStack.assertPop(&Int)?,
+                JmpType::Jmp => {}
+                JmpType::Gt => {
+                    abstractStack.assertPop(&Int)?;
+                    abstractStack.assertPop(&Int)?
                 }
-            }
+                JmpType::Less => {
+                    abstractStack.assertPop(&Int)?;
+                    abstractStack.assertPop(&Int)?
+                }
+                JmpType::True => abstractStack.assertPop(&Bool)?,
+                JmpType::False => abstractStack.assertPop(&Bool)?,
+            },
             Call { encoded } => {
                 if checkedFunctions.contains(encoded.as_str()) {
-                    continue
+                    continue;
                 }
 
                 match vm.functions.get(encoded) {
                     None => {
-                        return Err(Box::new(GenericException { msg: format!("function {encoded} not found") }));
+                        return Err(Box::new(GenericException {
+                            msg: format!("function {encoded} not found"),
+                        }));
                     }
                     Some(fun) => {
                         for x in 0..fun.argAmount {
-                            abstractStack.assertPop(&fun.varTable[fun.argAmount-x-1].typ)?;
+                            abstractStack.assertPop(&fun.varTable[fun.argAmount - x - 1].typ)?;
                         }
                         match &fun.returnType {
                             None => {}
@@ -336,22 +366,22 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
                 abstractStack.push(v.clone())
-            }
+            },
             Sub(v) => unsafe {
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
                 abstractStack.push(v.clone())
-            }
+            },
             Div(v) => unsafe {
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
                 abstractStack.push(Float)
-            }
+            },
             Mul(v) => unsafe {
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
                 abstractStack.push(v.clone())
-            }
+            },
             Equals(v) => {
                 abstractStack.assertPop(v)?;
                 abstractStack.assertPop(v)?;
@@ -391,17 +421,17 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
             ArrayNew(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.push(DataType::arr(Generic::Type(t.clone())))
-            },
+            }
             ArrayStore(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(t)?;
                 abstractStack.assertPop(&DataType::arr(Generic::Type(t.clone())))?;
-            },
+            }
             ArrayLoad(t) => {
                 abstractStack.assertPop(&Int)?;
                 abstractStack.assertPop(&DataType::arr(Generic::Type(t.clone())))?;
                 abstractStack.push(t.clone())
-            },
+            }
             ArrayLength => panic!(),
             Inc { typ, index } => {
                 if *index >= abstractLocals.len() {
@@ -409,12 +439,12 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                         max: (abstractLocals.len() - 1) as isize,
                         index: *index as isize,
                         msg: "locals".to_string(),
-                    }))
+                    }));
                 }
 
                 match abstractLocals.get(*index) {
                     None => {
-                        return Err(Box::new(OutOfBoundsException{
+                        return Err(Box::new(OutOfBoundsException {
                             max: (abstractLocals.len() - 1) as isize,
                             index: *index as isize,
                             msg: "locals".to_string(),
@@ -422,23 +452,26 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                     }
                     Some(v) => {
                         if *v != *typ {
-                            return Err(Box::new(InvalidTypeException{ expected: typ.clone(), actual: Some(v.clone()) }))
+                            return Err(Box::new(InvalidTypeException {
+                                expected: typ.clone(),
+                                actual: Some(v.clone()),
+                            }));
                         }
                     }
                 }
             }
             Dec { typ, index } => {
                 if *index >= abstractLocals.len() || *index < 0 {
-                    return Err(Box::new(OutOfBoundsException{
+                    return Err(Box::new(OutOfBoundsException {
                         max: (abstractLocals.len() - 1) as isize,
                         index: *index as isize,
                         msg: "locals".to_string(),
-                    }))
+                    }));
                 }
 
                 match abstractLocals.get(*index) {
                     None => {
-                        return Err(Box::new(OutOfBoundsException{
+                        return Err(Box::new(OutOfBoundsException {
                             max: (abstractLocals.len() - 1) as isize,
                             index: *index as isize,
                             msg: "locals".to_string(),
@@ -446,21 +479,17 @@ pub fn checkBytecode<'a>(opCodes: &mut SeekableOpcodes, abstractLocals: &mut Vec
                     }
                     Some(v) => {
                         if *v != *typ {
-                            return Err(Box::new(OutOfBoundsException{
+                            return Err(Box::new(OutOfBoundsException {
                                 max: (abstractLocals.len() - 1) as isize,
                                 index: *index as isize,
                                 msg: "locals".to_string(),
-                            }))
+                            }));
                         }
                     }
                 }
             }
-            PushChar(_) => {
-                abstractStack.push(Char)
-            }
-            StrNew(_) => {
-                abstractStack.push(DataType::str())
-            }
+            PushChar(_) => abstractStack.push(Char),
+            StrNew(_) => abstractStack.push(DataType::str()),
             GetChar => {
                 abstractStack.assertPop(&DataType::Int)?;
                 abstractStack.assertPop(&DataType::str())?;

@@ -31,7 +31,7 @@ pub enum Op {
     Less,
     Eq,
     And,
-    Or
+    Or,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,7 +52,7 @@ pub enum Expression {
     CharLiteral(char),
     ArrayLiteral(Vec<Expression>),
     ArrayIndexing(Box<ArrayAccess>),
-    NotExpression(Box<Expression>)
+    NotExpression(Box<Expression>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,26 +72,20 @@ impl Expression {
         &self,
         typesMapping: &HashMap<MyStr, (DataType, usize)>,
         functionReturns: &HashMap<MyStr, Option<DataType>>,
-        typeHint: Option<DataType>
+        typeHint: Option<DataType>,
     ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
-            Expression::ArithmeticOp { left, right: _, op: o } => {
+            Expression::ArithmeticOp {
+                left,
+                right: _,
+                op: o,
+            } => {
                 match o {
-                    Op::Gt => {
-                        return Ok(Some(Bool))
-                    }
-                    Op::Less => {
-                        return Ok(Some(Bool))
-                    }
-                    Op::Eq => {
-                        return Ok(Some(Bool))
-                    }
-                    Op::And => {
-                        return Ok(Some(Bool))
-                    }
-                    Op::Or => {
-                        return Ok(Some(Bool))
-                    }
+                    Op::Gt => return Ok(Some(Bool)),
+                    Op::Less => return Ok(Some(Bool)),
+                    Op::Eq => return Ok(Some(Bool)),
+                    Op::And => return Ok(Some(Bool)),
+                    Op::Or => return Ok(Some(Bool)),
                     _ => {}
                 }
 
@@ -114,7 +108,11 @@ impl Expression {
             Expression::FunctionCall(f) => {
                 // println!("{:?}", &f.arguments);
                 // println!("{:?}", typesMapping);
-                let types = f.arguments.iter().filter_map(|x| { x.toDataType(typesMapping, functionReturns, None).ok()? }).collect::<Vec<DataType>>();
+                let types = f
+                    .arguments
+                    .iter()
+                    .filter_map(|x| x.toDataType(typesMapping, functionReturns, None).ok()?)
+                    .collect::<Vec<DataType>>();
                 // println!("{:?}", &types);
                 let enc = genFunName(f.name.as_str(), &types);
                 match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
@@ -122,48 +120,75 @@ impl Expression {
                         panic!();
                         println!("{functionReturns:?}");
                         Err(Box::new(TypeNotFound { typ: enc }))
-                    },
-                    Some(v) => Ok(v.clone())
+                    }
+                    Some(v) => Ok(v.clone()),
                 }
             }
             Expression::Variable(name) => {
                 match typesMapping.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
-                    None => Err(Box::new(TypeNotFound { typ: format!("variable {name} not found") })),
-                    Some(v) => {
-                        Ok(Some(v.0.clone()))
-                    }
+                    None => Err(Box::new(TypeNotFound {
+                        typ: format!("variable {name} not found"),
+                    })),
+                    Some(v) => Ok(Some(v.0.clone())),
                 }
             }
             Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
                 if e.is_empty() {
-                    match typeHint.ok_or("cannot infer type of empty array consider adding type hint")? {
+                    match typeHint
+                        .ok_or("cannot infer type of empty array consider adding type hint")?
+                    {
                         Object(o) => {
                             if o.name.as_str() == "Array" {
-                                let e = o.generics.first().ok_or("array type must have genneric type")?;
+                                let e = o
+                                    .generics
+                                    .first()
+                                    .ok_or("array type must have genneric type")?;
                                 Ok(Some(DataType::arr(e.clone())))
                             } else {
-                                Err(box InvalidTypeException { expected: DataType::Object(ObjectMeta { name: MyStr::from("Array"), generics: Box::new([Any]) }), actual: Some(Object(o.clone())) })
+                                Err(box InvalidTypeException {
+                                    expected: DataType::Object(ObjectMeta {
+                                        name: MyStr::from("Array"),
+                                        generics: Box::new([Any]),
+                                    }),
+                                    actual: Some(Object(o.clone())),
+                                })
                             }
                         }
-                        v => Err(box InvalidTypeException { expected: DataType::arr(Any), actual: Some(v) })
+                        v => Err(box InvalidTypeException {
+                            expected: DataType::arr(Any),
+                            actual: Some(v),
+                        }),
                     }
                 } else {
-                    let t = e.get(0).ok_or("array must have least one value")?.toDataType(typesMapping, functionReturns, None)?.ok_or("array item must have tyoe")?;
+                    let t = e
+                        .get(0)
+                        .ok_or("array must have least one value")?
+                        .toDataType(typesMapping, functionReturns, None)?
+                        .ok_or("array item must have tyoe")?;
                     Ok(Some(DataType::arr(Generic::Type(t))))
                 }
             }
             Expression::ArrayIndexing(i) => {
-                let e = i.expr.toDataType(typesMapping, functionReturns, None)?.ok_or("cannot array index none")?;
+                let e = i
+                    .expr
+                    .toDataType(typesMapping, functionReturns, None)?
+                    .ok_or("cannot array index none")?;
                 match e {
                     Object(o) => {
                         if o.name.as_str() == "String" {
                             return Ok(Some(Char));
                         }
-                        Ok(Some(o.generics.first().ok_or("array must have one generic parameter")?.clone().ok_or("")?))
+                        Ok(Some(
+                            o.generics
+                                .first()
+                                .ok_or("array must have one generic parameter")?
+                                .clone()
+                                .ok_or("")?,
+                        ))
                     }
-                    _ => panic!()
+                    _ => panic!(),
                 }
             }
             Expression::NotExpression(i) => {
@@ -188,7 +213,10 @@ pub enum Statement {
     VariableMod(VariableMod),
     If(If),
     Return(Return),
-    ArrayAssign { left: ArrayAccess, right: Expression },
+    ArrayAssign {
+        left: ArrayAccess,
+        right: Expression,
+    },
     Continue,
     Break,
     Loop(Vec<Statement>),
@@ -240,7 +268,7 @@ pub struct FunctionDef {
     pub argCount: usize,
     pub body: Vec<Statement>,
     pub returnType: Option<DataType>,
-    pub isNative: bool
+    pub isNative: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -253,5 +281,5 @@ pub struct While {
 pub struct VariableCreate {
     pub name: String,
     pub init: Option<Expression>,
-    pub typeHint: Option<DataType>
+    pub typeHint: Option<DataType>,
 }

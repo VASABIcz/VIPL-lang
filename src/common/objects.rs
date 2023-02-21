@@ -17,7 +17,7 @@ impl ViplObject {
     pub fn getArr(&self) -> &Array {
         match self {
             ViplObject::Arr(v) => v,
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -25,7 +25,7 @@ impl ViplObject {
     pub fn getMutArr(&mut self) -> &mut Array {
         match self {
             ViplObject::Arr(v) => v,
-            v => panic!("{:?}", v)
+            v => panic!("{:?}", v),
         }
     }
 
@@ -33,7 +33,7 @@ impl ViplObject {
     pub fn getStr(&self) -> &Str {
         match self {
             ViplObject::Str(v) => v,
-            v => panic!("{:?}", v)
+            v => panic!("{:?}", v),
         }
     }
 
@@ -41,7 +41,7 @@ impl ViplObject {
     pub fn getMutStr(&mut self) -> &mut Str {
         match self {
             ViplObject::Str(v) => v,
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -50,7 +50,7 @@ impl ViplObject {
         match self {
             ViplObject::Arr(a) => a,
             ViplObject::Str(a) => a,
-            ViplObject::Runtime(v) => &**v
+            ViplObject::Runtime(v) => &**v,
         }
     }
 }
@@ -168,7 +168,9 @@ impl Object for Array {
 
     fn setField(&mut self, _field: usize, _value: Value) {}
 
-    fn getField(&self, _field: usize) -> Option<Value> { None }
+    fn getField(&self, _field: usize) -> Option<Value> {
+        None
+    }
 }
 
 fn cd(r: Box<dyn Any>) {
@@ -178,7 +180,9 @@ fn cd(r: Box<dyn Any>) {
 
 #[test]
 fn xd() {
-    let x: Box<Str> = Box::new(Str { string: String::from("UwU") });
+    let x: Box<Str> = Box::new(Str {
+        string: String::from("UwU"),
+    });
     let e: Box<dyn Any> = x;
     cd(e);
 }

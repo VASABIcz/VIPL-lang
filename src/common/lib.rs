@@ -8,18 +8,18 @@
 #![feature(let_chains)]
 
 pub mod ast;
-pub mod codegen;
-pub mod lexer;
-pub mod parser;
-pub mod vm;
-pub mod objects;
 pub mod bytecodeChecker;
-pub mod fs;
-pub mod std;
-mod ffi;
-pub mod optimizer;
-mod tests;
 pub mod cGen;
+pub mod codegen;
+mod ffi;
+pub mod fs;
 pub mod gccWrapper;
+pub mod lexer;
+pub mod objects;
+pub mod optimizer;
+pub mod parser;
+pub mod std;
+mod tests;
+pub mod vm;
 // pub mod cGen;
 // pub mod ffi;

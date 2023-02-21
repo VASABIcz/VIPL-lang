@@ -62,11 +62,11 @@ fn main() {
             Err(e) => {
                 eprintln!("tokenizer");
                 handleError(e);
-                continue
+                continue;
             }
         };
         if tokens.is_empty() {
-            continue
+            continue;
         }
 
         // println!("tokens {:?}", &tokens);
@@ -77,7 +77,7 @@ fn main() {
             Err(e) => {
                 eprintln!("first parser");
                 handleError(e);
-                continue
+                continue;
             }
         };
         let mut isPrevUsed = false;
@@ -85,17 +85,23 @@ fn main() {
         // println!("first {:?}", &first);
 
         let res = if !tokenProvider.isDone() {
-            match parse(&mut tokenProvider, Back, &parsingUnits, Some(first.clone()), &mut isPrevUsed) {
+            match parse(
+                &mut tokenProvider,
+                Back,
+                &parsingUnits,
+                Some(first.clone()),
+                &mut isPrevUsed,
+            ) {
                 Ok(mut v) => {
                     if !isPrevUsed {
                         v.insert(0, first);
                     }
                     v
-                },
+                }
                 Err(e) => {
                     eprintln!("parser");
                     handleError(e);
-                    continue
+                    continue;
                 }
             }
         } else {
@@ -103,7 +109,14 @@ fn main() {
         };
         // println!("{:?}", &res);
 
-        let bs = match complexBytecodeGen(res, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs, false) {
+        let bs = match complexBytecodeGen(
+            res,
+            &mut localTypes,
+            &mut functionReturns,
+            &mut mainLocals,
+            &mut structs,
+            false,
+        ) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("bytecode");
@@ -149,12 +162,12 @@ fn main() {
 
         let mut stack = StackFrame {
             localVariables: &mut localValues,
-            name: None
+            name: None,
         };
 
         let mut opCodes = SeekableOpcodes {
             index: opcodeIndex as isize,
-            opCodes: &mut opcodes
+            opCodes: &mut opcodes,
         };
 
         run(&mut opCodes, &mut vm, &mut stack);

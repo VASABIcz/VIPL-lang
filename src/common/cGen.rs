@@ -8,10 +8,13 @@ use Statement::Variable;
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::lexer::*;
 use crate::optimizer::evalExpr;
-use crate::parser::{*};
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode, VariableMetadata};
+use crate::parser::*;
+use crate::vm::{
+    DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode,
+    VariableMetadata,
+};
 use crate::vm::DataType::{Bool, Int};
-use crate::vm::OpCode::{*};
+use crate::vm::OpCode::*;
 
 #[derive(Debug)]
 struct NoValue {
@@ -37,7 +40,9 @@ fn genExpression(
             let dataType = left.toDataType(vTable, functionReturns, None)?;
             match dataType {
                 None => {
-                    return Err(Box::new(NoValue { msg: "expression must have return value".to_string() }));
+                    return Err(Box::new(NoValue {
+                        msg: "expression must have return value".to_string(),
+                    }));
                 }
                 Some(dat) => {
                     if let DataType::Object(v) = dat {
@@ -64,7 +69,7 @@ fn genExpression(
                         Op::Less => ">",
                         Op::Eq => "==",
                         Op::And => "&&",
-                        Op::Or => panic!()
+                        Op::Or => panic!(),
                     };
                     out.push_str(t);
                     genExpression(*right, out, functionReturns, vTable)?;
@@ -80,9 +85,27 @@ fn genExpression(
             out.push_str(&i);
             out.push_str("\")");
         }
-        Expression::BoolLiteral(i) => if i { out.push_str("true") } else { out.push_str("false") },
+        Expression::BoolLiteral(i) => {
+            if i {
+                out.push_str("true")
+            } else {
+                out.push_str("false")
+            }
+        }
         Expression::FunctionCall(e) => {
-            let fName: MyStr = genFunName(e.name.as_str(), &e.arguments.iter().map(|it| { it.toDataType(vTable, functionReturns, None).unwrap().unwrap() }).collect::<Vec<DataType>>()).into_boxed_str().into();
+            let fName: MyStr = genFunName(
+                e.name.as_str(),
+                &e.arguments
+                    .iter()
+                    .map(|it| {
+                        it.toDataType(vTable, functionReturns, None)
+                            .unwrap()
+                            .unwrap()
+                    })
+                    .collect::<Vec<DataType>>(),
+            )
+                .into_boxed_str()
+                .into();
             // println!("{:?}", fName);
             // println!("{:?}", functionReturns);
             let ret = functionReturns.get(&fName).unwrap().clone();
@@ -97,7 +120,7 @@ fn genExpression(
                     DataType::Float => "vm->nativeWrapper.pushFloat(vm,",
                     Bool => "vm->nativeWrapper.pushBool(vm,",
                     DataType::Char => "vm->nativeWrapper.pushChar(vm,",
-                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,"
+                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
                 };
                 out.push_str(t);
                 genExpression(arg, out, functionReturns, vTable)?;
@@ -116,7 +139,6 @@ fn genExpression(
                 };
                 out.push_str(s)
             }
-
 
             out.push_str("})");
 
@@ -144,9 +166,7 @@ fn genExpression(
 
              */
         }
-        Expression::Variable(v) => {
-            out.push_str(&v)
-        }
+        Expression::Variable(v) => out.push_str(&v),
         Expression::CharLiteral(c) => {
             //panic!();
             out.push('\'');
@@ -157,7 +177,11 @@ fn genExpression(
             panic!();
             out.push('{');
 
-            let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
+            let d = i
+                .get(0)
+                .ok_or("array must have at least one element")?
+                .toDataType(vTable, functionReturns, None)?
+                .ok_or("array elements must have type")?;
             for (ind, exp) in i.iter().enumerate() {
                 genExpression(exp.clone(), out, functionReturns, vTable)?;
 
@@ -171,35 +195,33 @@ fn genExpression(
         Expression::ArrayIndexing(i) => {
             let t = i.expr.toDataType(vTable, functionReturns, None)?.unwrap();
             match t {
-                DataType::Object(o) => {
-                    match o.name.as_str() {
-                        "String" => {
-                            out.push_str("vm->nativeWrapper.stringGetChar(vm,");
-                            genExpression(i.expr, out, functionReturns, vTable)?;
-                            out.push(',');
-                            genExpression(i.index, out, functionReturns, vTable)?;
-                            out.push_str(")")
-                        }
-                        "Array" => {
-                            let c = o.generics.first().unwrap();
-                            let t = c.clone().ok_or("expected generic type not any")?;
-                            let s = match t {
-                                Int => "vm->nativeWrapper.arrGetInt(vm,",
-                                DataType::Float => "vm->nativeWrapper.arrGetFloat(vm,",
-                                Bool => "vm->nativeWrapper.arrGetBool(vm,",
-                                DataType::Char => "vm->nativeWrapper.stringGetChar(vm,",
-                                DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,"
-                            };
-                            out.push_str(s);
-                            genExpression(i.expr, out, functionReturns, vTable)?;
-                            out.push(',');
-                            genExpression(i.index, out, functionReturns, vTable)?;
-                            out.push_str(")")
-                        }
-                        _ => panic!()
+                DataType::Object(o) => match o.name.as_str() {
+                    "String" => {
+                        out.push_str("vm->nativeWrapper.stringGetChar(vm,");
+                        genExpression(i.expr, out, functionReturns, vTable)?;
+                        out.push(',');
+                        genExpression(i.index, out, functionReturns, vTable)?;
+                        out.push_str(")")
                     }
-                }
-                _ => panic!()
+                    "Array" => {
+                        let c = o.generics.first().unwrap();
+                        let t = c.clone().ok_or("expected generic type not any")?;
+                        let s = match t {
+                            Int => "vm->nativeWrapper.arrGetInt(vm,",
+                            DataType::Float => "vm->nativeWrapper.arrGetFloat(vm,",
+                            Bool => "vm->nativeWrapper.arrGetBool(vm,",
+                            DataType::Char => "vm->nativeWrapper.stringGetChar(vm,",
+                            DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,",
+                        };
+                        out.push_str(s);
+                        genExpression(i.expr, out, functionReturns, vTable)?;
+                        out.push(',');
+                        genExpression(i.index, out, functionReturns, vTable)?;
+                        out.push_str(")")
+                    }
+                    _ => panic!(),
+                },
+                _ => panic!(),
             }
         }
         Expression::NotExpression(e) => {
@@ -232,7 +254,19 @@ fn genStatement(
 ) -> Result<(), Box<dyn Error>> {
     match statement {
         Statement::FunctionExpr(e) => {
-            let fName: MyStr = genFunName(e.name.as_str(), &e.arguments.iter().map(|it| { it.toDataType(vTable, functionReturns, None).unwrap().unwrap() }).collect::<Vec<DataType>>()).into_boxed_str().into();
+            let fName: MyStr = genFunName(
+                e.name.as_str(),
+                &e.arguments
+                    .iter()
+                    .map(|it| {
+                        it.toDataType(vTable, functionReturns, None)
+                            .unwrap()
+                            .unwrap()
+                    })
+                    .collect::<Vec<DataType>>(),
+            )
+                .into_boxed_str()
+                .into();
             let ret = functionReturns.get(&fName).unwrap().clone();
 
             for arg in e.arguments {
@@ -241,7 +275,7 @@ fn genStatement(
                     DataType::Float => "vm->nativeWrapper.pushFloat(vm,",
                     Bool => "vm->nativeWrapper.pushBool(vm,",
                     DataType::Char => "vm->nativeWrapper.pushChar(vm,",
-                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,"
+                    DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
                 };
                 out.push_str(t);
                 genExpression(arg, out, functionReturns, vTable)?;
@@ -293,7 +327,9 @@ fn genStatement(
                 let t = &e.toDataType(vTable, functionReturns, None)?;
                 match t {
                     None => {
-                        return Err(Box::new(NoValue { msg: String::from("idk") }));
+                        return Err(Box::new(NoValue {
+                            msg: String::from("idk"),
+                        }));
                     }
                     Some(ve) => {
                         out.push_str(&v.name);
@@ -368,7 +404,7 @@ fn genStatement(
                 ModType::Add => "+=",
                 ModType::Sub => "-=",
                 ModType::Div => "/=",
-                ModType::Mul => "*="
+                ModType::Mul => "*=",
             };
             out.push_str(&m.varName);
             out.push_str(s);
@@ -384,9 +420,7 @@ fn genStatement(
             genExpression(right, out, functionReturns, vTable)?;
             out.push(';');
         }
-        Statement::Continue => {
-            out.push_str("continue;")
-        }
+        Statement::Continue => out.push_str("continue;"),
         Statement::Break => out.push_str("break;"),
         Statement::Loop(body) => {
             out.push_str("while (1) { ");
@@ -430,7 +464,7 @@ pub fn genFunctionDef(
             DataType::Float => "vm->nativeWrapper.getLocalsFloat(frame,",
             Bool => "vm->nativeWrapper.getLocalsBool(frame,",
             DataType::Char => "vm->nativeWrapper.getLocalsChar(frame,",
-            DataType::Object(_) => "vm->nativeWrapper.getLocalsRef(frame,"
+            DataType::Object(_) => "vm->nativeWrapper.getLocalsRef(frame,",
         };
         out.push_str(ee);
 
@@ -439,7 +473,6 @@ pub fn genFunctionDef(
         out.push_str(");");
         e.insert(arg.name.clone(), (arg.typ.clone(), 0usize));
     }
-
 
     for s in &fun.body {
         buildLocalsTable(s, &mut e, &mut idk2, functionReturns)?;
@@ -468,10 +501,15 @@ pub fn genStructDef(
     _structs: &HashMap<MyStr, HashMap<String, DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     ops.push(ClassBegin);
-    ops.push(ClassName { name: MyStr::Runtime(struc.name.into_boxed_str()) });
+    ops.push(ClassName {
+        name: MyStr::Runtime(struc.name.into_boxed_str()),
+    });
 
     for (n, typ) in struc.fields {
-        ops.push(ClassField { name: n.into(), typ })
+        ops.push(ClassField {
+            name: n.into(),
+            typ,
+        })
     }
 
     ops.push(ClassEnd);
@@ -492,23 +530,33 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
             Operation::Global(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        MyStr::Runtime(genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str()),
+                        MyStr::Runtime(
+                            genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str(),
+                        ),
                         v.returnType.clone(),
                     );
                 }
                 Node::StructDef(v) => {
-                    structs.insert(MyStr::Runtime(v.name.clone().into_boxed_str()), v.fields.clone());
+                    structs.insert(
+                        MyStr::Runtime(v.name.clone().into_boxed_str()),
+                        v.fields.clone(),
+                    );
                 }
             },
             Operation::Statement(v) => {
                 if let Variable(c) = v {
                     match c.init {
                         None => {
-                            return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
+                            return Err(Box::new(NoValue {
+                                msg: "ahhh".to_string(),
+                            }));
                         }
                         Some(ref ex) => {
                             let t = ex.clone().toDataType(&mainLocals, &functionReturns, None)?;
-                            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), counter));
+                            mainLocals.insert(
+                                MyStr::Runtime(c.name.clone().into_boxed_str()),
+                                (t.clone().unwrap(), counter),
+                            );
                             localTypes.push(t.unwrap().clone());
                             counter += 1;
                         }
@@ -549,14 +597,25 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
     Ok(out)
 }
 
-pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<MyStr, Option<DataType>>) -> Result<(), Box<dyn Error>> {
+pub fn buildLocalsTable(
+    statement: &Statement,
+    mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
+    localTypes: &mut Vec<VariableMetadata>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+) -> Result<(), Box<dyn Error>> {
     match statement {
         Variable(c) => {
             let res = c.init.clone().ok_or("variable expected initializer")?;
             let t = res.toDataType(mainLocals, functionReturns, None)?;
             // println!("creating variable {} type {:?}", &c.name, &t);
-            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), localTypes.len()));
-            localTypes.push(VariableMetadata { name: MyStr::Runtime(c.name.clone().into_boxed_str()), typ: t.unwrap() });
+            mainLocals.insert(
+                MyStr::Runtime(c.name.clone().into_boxed_str()),
+                (t.clone().unwrap(), localTypes.len()),
+            );
+            localTypes.push(VariableMetadata {
+                name: MyStr::Runtime(c.name.clone().into_boxed_str()),
+                typ: t.unwrap(),
+            });
         }
         Statement::While(w) => {
             for s in &w.body {
@@ -593,21 +652,22 @@ pub fn statementFi(operations: Vec<Operation>) -> Vec<Operation> {
     let mut buf = vec![];
     for op in operations {
         match op {
-            Operation::Expr(e) => {
-                match e {
-                    Expression::FunctionCall(c) => {
-                        buf.push(Operation::Statement(Statement::FunctionExpr(c)))
-                    }
-                    _ => {}
+            Operation::Expr(e) => match e {
+                Expression::FunctionCall(c) => {
+                    buf.push(Operation::Statement(Statement::FunctionExpr(c)))
                 }
-            }
-            a => buf.push(a)
+                _ => {}
+            },
+            a => buf.push(a),
         }
     }
     buf
 }
 
-pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<MyStr, Option<DataType>>) -> Result<String, Box<dyn Error>> {
+pub fn bytecodeGen2(
+    operations: Vec<Operation>,
+    functionReturns: &mut HashMap<MyStr, Option<DataType>>,
+) -> Result<String, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut mainLocals = HashMap::new();
     let mut out = String::new();
@@ -618,10 +678,18 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
             buildLocalsTable(stat, &mut mainLocals, &mut localTypes, functionReturns)?;
             inlineMain.push(op);
         } else if let Operation::Expr(Expression::FunctionCall(call)) = op {
-            buildLocalsTable(&Statement::FunctionExpr(call.clone()), &mut mainLocals, &mut localTypes, functionReturns)?;
+            buildLocalsTable(
+                &Statement::FunctionExpr(call.clone()),
+                &mut mainLocals,
+                &mut localTypes,
+                functionReturns,
+            )?;
             inlineMain.push(op);
         } else if let Operation::Global(Node::FunctionDef(d)) = op {
-            functionReturns.insert(genFunNameMeta(d.name.as_str(), &d.args, d.argCount).into(), d.returnType.clone());
+            functionReturns.insert(
+                genFunNameMeta(d.name.as_str(), &d.args, d.argCount).into(),
+                d.returnType.clone(),
+            );
         }
     }
 
@@ -666,7 +734,6 @@ pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<My
 
     Ok(out)
 }
-
 
 /*
 function = black box that takes locals context and optionally returns value

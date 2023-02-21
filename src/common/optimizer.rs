@@ -58,7 +58,7 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
                 Op::Less => l.refLess(&r, &l.toDataType()),
                 Op::Eq => l.refEq(&r, &l.toDataType()),
                 Op::And => l.and(&r),
-                Op::Or => l.or(&r)
+                Op::Or => l.or(&r),
             };
 
             Some(l)
@@ -74,6 +74,6 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::CharLiteral(c) => Some(Value::Chr(*c)),
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
-        Expression::NotExpression(_) => Some(Value::Bol(false))
+        Expression::NotExpression(_) => Some(Value::Bol(false)),
     }
 }

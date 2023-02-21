@@ -7,7 +7,9 @@ use crate::lexer::{tokenizeSource, TokenType};
 use crate::lexer::TokenType::IntLiteral;
 use crate::parser::parseTokens;
 use crate::std::bootStrapVM;
-use crate::vm::{DataType, evaluateBytecode, MyStr, OpCode, StackFrame, Value, VariableMetadata, VirtualMachine};
+use crate::vm::{
+    DataType, evaluateBytecode, MyStr, OpCode, StackFrame, Value, VariableMetadata, VirtualMachine,
+};
 use crate::vm::RawOpCode::PushInt;
 
 #[test]
@@ -119,12 +121,13 @@ fn testMakeNativeFFI() {
     let vm = createVm();
 
     let name = "uwu";
-    unsafe { registerNative(&mut *vm, name.as_ptr(), name.len(), null(), 0, externFn); }
+    unsafe {
+        registerNative(&mut *vm, name.as_ptr(), name.len(), null(), 0, externFn);
+    }
 
     let sc = "uwu()";
 
     unsafe { evaluate(&mut *vm, sc.as_ptr(), sc.len()) };
-
 
     dropVm(vm)
 }
@@ -154,11 +157,14 @@ fn testOptimization() {
         };
         let res = crate::optimizer::evalE(&a);
 
-        assert_eq!(res, Some(Expression::ArithmeticOp {
-            left: box Expression::Variable(String::from("abc")),
-            right: box Expression::IntLiteral(String::from("16")),
-            op: Op::Add,
-        }));
+        assert_eq!(
+            res,
+            Some(Expression::ArithmeticOp {
+                left: box Expression::Variable(String::from("abc")),
+                right: box Expression::IntLiteral(String::from("16")),
+                op: Op::Add,
+            })
+        );
     }
 }
 
@@ -181,7 +187,14 @@ pub fn testLexingUnits() {
 pub fn testLibLoading() {
     let mut vm = bootStrapVM();
     vm.stack.push(Value::Num(1_000_000_000));
-    unsafe { vm.loadNative("/home/vasabi/CLionProjects/viplNative/cmake-build-release/libviplNative.so", String::from("test123"), None, Box::new([VariableMetadata::i(MyStr::Static(""))])); }
+    unsafe {
+        vm.loadNative(
+            "/home/vasabi/CLionProjects/viplNative/cmake-build-release/libviplNative.so",
+            String::from("test123"),
+            None,
+            Box::new([VariableMetadata::i(MyStr::Static(""))]),
+        );
+    }
 
     let a = Instant::now();
 
@@ -214,10 +227,16 @@ pub fn testComiple() {
         OpCode::StrNew(MyStr::Runtime(res.into_boxed_str())),
         OpCode::StrNew(MyStr::Static("lool(int)")),
         OpCode::PushInt(1),
-        OpCode::Call { encoded: MyStr::Static("loadNative(String, String, int)") },
+        OpCode::Call {
+            encoded: MyStr::Static("loadNative(String, String, int)"),
+        },
         OpCode::PushInt(69),
-        OpCode::Call { encoded: MyStr::Static("lool(int)") },
-        OpCode::Call { encoded: MyStr::Static("print(int)") }
+        OpCode::Call {
+            encoded: MyStr::Static("lool(int)"),
+        },
+        OpCode::Call {
+            encoded: MyStr::Static("print(int)"),
+        },
     ];
     crate::vm::evaluateBytecode(ops, vec![]);
     println!("{}", vm.stack.len());

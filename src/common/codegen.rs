@@ -9,10 +9,13 @@ use Statement::Variable;
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::lexer::*;
 use crate::optimizer::{evalE, evalExpr};
-use crate::parser::{*};
-use crate::vm::{DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, Value, VariableMetadata};
+use crate::parser::*;
+use crate::vm::{
+    DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, Value,
+    VariableMetadata,
+};
 use crate::vm::DataType::{Bool, Int};
-use crate::vm::OpCode::{*};
+use crate::vm::OpCode::*;
 
 #[derive(Debug)]
 struct NoValue {
@@ -74,7 +77,7 @@ pub struct StatementCtx<'a> {
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
-    pub clearStack: bool
+    pub clearStack: bool,
 }
 
 impl ExpressionCtx<'_> {
@@ -90,7 +93,11 @@ impl ExpressionCtx<'_> {
 }
 
 impl StatementCtx<'_> {
-    pub fn makeExpressionCtx<'a>(&'a mut self, exp: &'a Expression, typeHint: Option<DataType>) -> ExpressionCtx {
+    pub fn makeExpressionCtx<'a>(
+        &'a mut self,
+        exp: &'a Expression,
+        typeHint: Option<DataType>,
+    ) -> ExpressionCtx {
         ExpressionCtx {
             exp,
             ops: self.ops,
@@ -117,7 +124,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
     let mut d = evalE(&e);
     let e = match &mut d {
         None => &*e,
-        Some(v) => v
+        Some(v) => v,
     };
 
     match e {
@@ -125,7 +132,9 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let dataType = left.toDataType(r.vTable, r.functionReturns, None)?;
             match dataType {
                 None => {
-                    return Err(Box::new(NoValue { msg: "expression must have return value".to_string() }));
+                    return Err(Box::new(NoValue {
+                        msg: "expression must have return value".to_string(),
+                    }));
                 }
                 Some(dat) => {
                     genExpression(r.constructCtx(&**left))?;
@@ -139,7 +148,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         Op::Less => OpCode::Less(dat),
                         Op::Eq => OpCode::Equals(dat),
                         Op::And => OpCode::And,
-                        Op::Or => OpCode::Or
+                        Op::Or => OpCode::Or,
                     };
                     ctx.ops.push(t);
                 }
@@ -150,7 +159,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         Expression::FloatLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::DoubleLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::StringLiteral(i) => {
-            r.ops.push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
+            r.ops
+                .push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
         }
         Expression::BoolLiteral(i) => r.ops.push(OpCode::PushBool(*i)),
         Expression::FunctionCall(e) => {
@@ -160,7 +170,9 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 let t = arg.toDataType(r.vTable, r.functionReturns, None)?;
                 match t {
                     None => {
-                        return Err(Box::new(NoValue { msg: String::from("aahhh") }));
+                        return Err(Box::new(NoValue {
+                            msg: String::from("aahhh"),
+                        }));
                     }
                     Some(v) => {
                         argTypes.push(v);
@@ -178,34 +190,35 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 None => {
                     return Err(Box::new(VariableNotFound { name: v.clone() }));
                 }
-                Some(v) => v
+                Some(v) => v,
             };
             r.ops.push(OpCode::PushLocal {
-                index: r.vTable.get(&MyStr::Runtime(v.clone().into_boxed_str())).unwrap().1,
+                index: r
+                    .vTable
+                    .get(&MyStr::Runtime(v.clone().into_boxed_str()))
+                    .unwrap()
+                    .1,
             })
         }
-        Expression::CharLiteral(c) => {
-            r.ops.push(PushChar(*c))
-        }
+        Expression::CharLiteral(c) => r.ops.push(PushChar(*c)),
         Expression::ArrayLiteral(i) => {
             let d = match r.typeHint {
-                None => Some(i.get(0).ok_or("array must have at least one element")?.toDataType(r.vTable, r.functionReturns, None)?.ok_or("array elements must have type")?),
-                Some(ref v) => {
-                    match v {
-                        DataType::Object(v) => {
-                            match v.generics.first() {
-                                None => None,
-                                Some(v) => {
-                                    match v {
-                                        Generic::Any => None,
-                                        Generic::Type(v) => Some(v.clone())
-                                    }
-                                }
-                            }
-                        }
-                        _ => None
-                    }
-                }
+                None => Some(
+                    i.get(0)
+                        .ok_or("array must have at least one element")?
+                        .toDataType(r.vTable, r.functionReturns, None)?
+                        .ok_or("array elements must have type")?,
+                ),
+                Some(ref v) => match v {
+                    DataType::Object(v) => match v.generics.first() {
+                        None => None,
+                        Some(v) => match v {
+                            Generic::Any => None,
+                            Generic::Type(v) => Some(v.clone()),
+                        },
+                    },
+                    _ => None,
+                },
             };
             let e = d.ok_or("")?;
             // let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
@@ -220,7 +233,10 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         }
         Expression::ArrayIndexing(i) => {
             // println!("{:?}", i.expr);
-            let d = i.expr.toDataType(r.vTable, r.functionReturns, None)?.ok_or("ewgergreg")?;
+            let d = i
+                .expr
+                .toDataType(r.vTable, r.functionReturns, None)?
+                .ok_or("ewgergreg")?;
             match d {
                 DataType::Object(o) => {
                     // println!("{:?}", o);
@@ -228,7 +244,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         genExpression(r.constructCtx(&i.expr))?;
                         genExpression(r.constructCtx(&i.index))?;
                         r.ops.push(GetChar);
-                        return Ok(())
+                        return Ok(());
                     }
 
                     match o.generics.first().unwrap() {
@@ -237,11 +253,11 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                             genExpression(r.constructCtx(&i.index))?;
 
                             ctx.ops.push(OpCode::ArrayLoad(v.clone()));
-                        },
-                        Generic::Any => panic!()
+                        }
+                        Generic::Any => panic!(),
                     }
                 }
-                v => panic!("{v:?}")
+                v => panic!("{v:?}"),
             }
         }
         Expression::NotExpression(e) => {
@@ -265,17 +281,21 @@ impl Display for VariableNotFound {
 
 impl Error for VariableNotFound {}
 
-fn genStatement(
-    mut ctx: StatementCtx
-) -> Result<(), Box<dyn Error>> {
+fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
     match ctx.statement {
         Statement::FunctionExpr(ref e) => {
             let mut argTypes = vec![];
 
             for arg in &e.arguments {
-                let t = arg.toDataType(ctx.vTable, ctx.functionReturns, None).unwrap();
+                let t = arg
+                    .toDataType(ctx.vTable, ctx.functionReturns, None)
+                    .unwrap();
                 match t {
-                    None => return Err(Box::new(NoValue { msg: "e".to_string() })),
+                    None => {
+                        return Err(Box::new(NoValue {
+                            msg: "e".to_string(),
+                        }))
+                    }
                     Some(v) => {
                         argTypes.push(v);
                         genExpression(ctx.makeExpressionCtx(&arg, None))?;
@@ -291,20 +311,16 @@ fn genStatement(
             if ctx.clearStack {
                 match ctx.functionReturns.get(&s) {
                     None => {}
-                    Some(v) => {
-                        match v {
-                            None => {}
-                            Some(_) => {
-                                shouldPop = true;
-                            }
+                    Some(v) => match v {
+                        None => {}
+                        Some(_) => {
+                            shouldPop = true;
                         }
-                    }
+                    },
                 }
             }
 
-            ctx.ops.push(Call {
-                encoded: s,
-            });
+            ctx.ops.push(Call { encoded: s });
             if shouldPop {
                 ctx.ops.push(Pop)
             }
@@ -315,13 +331,19 @@ fn genStatement(
                 let t = &e.toDataType(ctx.vTable, ctx.functionReturns, v.typeHint.clone())?;
                 match t {
                     None => {
-                        return Err(Box::new(NoValue { msg: String::from("idk") }));
+                        return Err(Box::new(NoValue {
+                            msg: String::from("idk"),
+                        }));
                     }
                     Some(ve) => {
                         genExpression(ctx.makeExpressionCtx(&e, Some(ve.clone())))?;
                         // println!("{}", &v.name);
                         ctx.ops.push(OpCode::SetLocal {
-                            index: ctx.vTable.get(&MyStr::Runtime(v.name.clone().into_boxed_str())).unwrap().1,
+                            index: ctx
+                                .vTable
+                                .get(&MyStr::Runtime(v.name.clone().into_boxed_str()))
+                                .unwrap()
+                                .1,
                             typ: ve.clone(),
                         });
                     }
@@ -332,11 +354,15 @@ fn genStatement(
             let ret = w.exp.toDataType(ctx.vTable, ctx.functionReturns, None)?;
             match ret {
                 None => {
-                    return Err(Box::new(NoValue { msg: format!("expression {:?} must return bool", w.exp) }));
+                    return Err(Box::new(NoValue {
+                        msg: format!("expression {:?} must return bool", w.exp),
+                    }));
                 }
                 Some(ve) => {
                     if ve != Bool {
-                        return Err(Box::new(NoValue { msg: format!("expected bool got {:?} {:?}", ve, w.exp) }));
+                        return Err(Box::new(NoValue {
+                            msg: format!("expected bool got {:?} {:?}", ve, w.exp),
+                        }));
                     }
                     let size = ctx.ops.len();
                     genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
@@ -348,9 +374,15 @@ fn genStatement(
                         genStatement(ctx2)?;
                     }
                     let len = bodyBuf.len();
-                    ctx.ops.push(OpCode::Jmp { offset: len as isize + 1, jmpType: JmpType::False });
+                    ctx.ops.push(OpCode::Jmp {
+                        offset: len as isize + 1,
+                        jmpType: JmpType::False,
+                    });
                     ctx.ops.extend(bodyBuf);
-                    ctx.ops.push(OpCode::Jmp { offset: -(ctx.ops.len() as isize - size as isize + 1), jmpType: JmpType::Jmp })
+                    ctx.ops.push(OpCode::Jmp {
+                        offset: -(ctx.ops.len() as isize - size as isize + 1),
+                        jmpType: JmpType::Jmp,
+                    })
                 }
             }
         }
@@ -367,7 +399,10 @@ fn genStatement(
             if flow.elseBody.is_some() {
                 jumpDist += 1;
             }
-            ctx.ops.push(Jmp { offset: jumpDist, jmpType: JmpType::False });
+            ctx.ops.push(Jmp {
+                offset: jumpDist,
+                jmpType: JmpType::False,
+            });
             ctx.ops.extend(buf);
 
             match &flow.elseBody {
@@ -380,11 +415,14 @@ fn genStatement(
                         genStatement(ctx1)?;
                     }
 
-                    ctx.ops.push(OpCode::Jmp { offset: buf.len() as isize, jmpType: JmpType::Jmp });
+                    ctx.ops.push(OpCode::Jmp {
+                        offset: buf.len() as isize,
+                        jmpType: JmpType::Jmp,
+                    });
                     ctx.ops.extend(buf);
                 }
             }
-        },
+        }
         Statement::Return(ret) => {
             genExpression(ctx.makeExpressionCtx(&ret.exp, None))?;
             ctx.ops.push(OpCode::Return)
@@ -415,15 +453,22 @@ fn genStatement(
         }
         Statement::ArrayAssign { left, right } => {
             genExpression(ctx.makeExpressionCtx(&left.expr, None))?;
-            let t = right.toDataType(ctx.vTable, ctx.functionReturns, None)?.ok_or("cant assign void to array")?;
+            let t = right
+                .toDataType(ctx.vTable, ctx.functionReturns, None)?
+                .ok_or("cant assign void to array")?;
             genExpression(ctx.makeExpressionCtx(&right, None))?;
             genExpression(ctx.makeExpressionCtx(&left.index, None))?;
             ctx.ops.push(ArrayStore(t))
         }
         Statement::Continue => {
-            let index = ctx.loopContext.ok_or("continue can be only used in loops")?;
-            ctx.ops.push(Jmp { offset: (index - ctx.ops.len() + 2) as isize, jmpType: JmpType::Jmp })
-        },
+            let index = ctx
+                .loopContext
+                .ok_or("continue can be only used in loops")?;
+            ctx.ops.push(Jmp {
+                offset: (index - ctx.ops.len() + 2) as isize,
+                jmpType: JmpType::Jmp,
+            })
+        }
         Statement::Break => panic!(),
         Statement::Loop(body) => {
             let mut buf = vec![];
@@ -436,7 +481,10 @@ fn genStatement(
             }
             let bufLen = buf.len() as isize;
             ctx.ops.extend(buf);
-            ctx.ops.push(Jmp { offset: -(bufLen + 1), jmpType: JmpType::Jmp });
+            ctx.ops.push(Jmp {
+                offset: -(bufLen + 1),
+                jmpType: JmpType::Jmp,
+            });
         }
     }
     Ok(())
@@ -455,11 +503,15 @@ fn genFunctionDef(
         let resPath = crate::gccWrapper::compile(&buf)?;
 
         ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));
-        ops.push(StrNew(MyStr::Runtime(genFunNameMeta(&fun.name, &fun.args, c).into_boxed_str())));
+        ops.push(StrNew(MyStr::Runtime(
+            genFunNameMeta(&fun.name, &fun.args, c).into_boxed_str(),
+        )));
         ops.push(OpCode::PushInt(fun.argCount as isize));
-        ops.push(OpCode::Call { encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")) });
+        ops.push(OpCode::Call {
+            encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")),
+        });
 
-        return Ok(())
+        return Ok(());
     }
 
     ops.push(OpCode::FunBegin);
@@ -484,7 +536,9 @@ fn genFunctionDef(
         typ: idk2.into_boxed_slice(),
         argsCount: fun.argCount,
     });
-    ops.push(FunReturn { typ: fun.returnType });
+    ops.push(FunReturn {
+        typ: fun.returnType,
+    });
 
     for statement in fun.body {
         let ctx = StatementCtx {
@@ -509,24 +563,40 @@ pub fn genStructDef(
     _structs: &HashMap<MyStr, HashMap<String, DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     ops.push(ClassBegin);
-    ops.push(ClassName { name: MyStr::Runtime(struc.name.into_boxed_str()) });
+    ops.push(ClassName {
+        name: MyStr::Runtime(struc.name.into_boxed_str()),
+    });
 
     for (n, typ) in struc.fields {
-        ops.push(ClassField { name: n.into(), typ })
+        ops.push(ClassField {
+            name: n.into(),
+            typ,
+        })
     }
 
     ops.push(ClassEnd);
     Ok(())
 }
 
-pub fn buildLocalsTable(statement: &Statement, mainLocals: &mut HashMap<MyStr, (DataType, usize)>, localTypes: &mut Vec<VariableMetadata>, functionReturns: &HashMap<MyStr, Option<DataType>>) -> Result<(), Box<dyn Error>> {
+pub fn buildLocalsTable(
+    statement: &Statement,
+    mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
+    localTypes: &mut Vec<VariableMetadata>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+) -> Result<(), Box<dyn Error>> {
     match statement {
         Variable(c) => {
             let res = c.init.clone().ok_or("variable expected initializer")?;
             let t = res.toDataType(mainLocals, functionReturns, None)?;
             // println!("creating variable {} type {:?}", &c.name, &t);
-            mainLocals.insert(MyStr::Runtime(c.name.clone().into_boxed_str()), (t.clone().unwrap(), localTypes.len()));
-            localTypes.push(VariableMetadata { name: MyStr::Runtime(c.name.clone().into_boxed_str()), typ: t.unwrap() });
+            mainLocals.insert(
+                MyStr::Runtime(c.name.clone().into_boxed_str()),
+                (t.clone().unwrap(), localTypes.len()),
+            );
+            localTypes.push(VariableMetadata {
+                name: MyStr::Runtime(c.name.clone().into_boxed_str()),
+                typ: t.unwrap(),
+            });
         }
         Statement::While(w) => {
             for s in &w.body {
@@ -565,7 +635,7 @@ pub fn complexBytecodeGen(
     functionReturns: &mut HashMap<MyStr, Option<DataType>>,
     mainLocals: &mut HashMap<MyStr, (DataType, usize)>,
     structs: &mut HashMap<MyStr, HashMap<String, DataType>>,
-    clearStack: bool
+    clearStack: bool,
 ) -> Result<Vec<OpCode>, Box<dyn Error>> {
     let mut inlineMain = vec![];
     let mut ops = vec![];
@@ -575,23 +645,37 @@ pub fn complexBytecodeGen(
             Operation::Global(f) => match f {
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
-                        MyStr::Runtime(genFunNameMeta(v.name.as_str(), &v.args, v.argCount).into_boxed_str()),
+                        MyStr::Runtime(
+                            genFunNameMeta(v.name.as_str(), &v.args, v.argCount).into_boxed_str(),
+                        ),
                         v.returnType.clone(),
                     );
                 }
                 Node::StructDef(v) => {
-                    structs.insert(MyStr::Runtime(v.name.clone().into_boxed_str()), v.fields.clone());
+                    structs.insert(
+                        MyStr::Runtime(v.name.clone().into_boxed_str()),
+                        v.fields.clone(),
+                    );
                 }
             },
             Operation::Statement(v) => {
                 if let Variable(c) = v {
                     match c.init {
                         None => {
-                            return Err(Box::new(NoValue { msg: "ahhh".to_string() }));
+                            return Err(Box::new(NoValue {
+                                msg: "ahhh".to_string(),
+                            }));
                         }
                         Some(ref ex) => {
-                            let t = ex.clone().toDataType(mainLocals, functionReturns, c.typeHint.clone())?;
-                            mainLocals.insert(c.name.clone().into_boxed_str().into(), (t.clone().unwrap(), mainLocals.len()));
+                            let t = ex.clone().toDataType(
+                                mainLocals,
+                                functionReturns,
+                                c.typeHint.clone(),
+                            )?;
+                            mainLocals.insert(
+                                c.name.clone().into_boxed_str().into(),
+                                (t.clone().unwrap(), mainLocals.len()),
+                            );
                             localTypes.push(t.unwrap());
                         }
                     }
@@ -645,23 +729,42 @@ pub fn complexBytecodeGen(
     Ok(ops)
 }
 
-pub fn bytecodeGen(operations: Vec<Operation>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
+pub fn bytecodeGen(
+    operations: Vec<Operation>,
+) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
     let mut mainLocals = HashMap::new();
     let mut functionReturns = HashMap::new();
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    let res = complexBytecodeGen(operations, &mut localTypes, &mut functionReturns, &mut mainLocals, &mut structs, true)?;
+    let res = complexBytecodeGen(
+        operations,
+        &mut localTypes,
+        &mut functionReturns,
+        &mut mainLocals,
+        &mut structs,
+        true,
+    )?;
 
     Ok((res, localTypes))
 }
 
-pub fn bytecodeGen2(operations: Vec<Operation>, functionReturns: &mut HashMap<MyStr, Option<DataType>>) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
+pub fn bytecodeGen2(
+    operations: Vec<Operation>,
+    functionReturns: &mut HashMap<MyStr, Option<DataType>>,
+) -> Result<(Vec<OpCode>, Vec<DataType>), Box<dyn Error>> {
     let mut mainLocals = HashMap::new();
     let mut localTypes = vec![];
     let mut structs = HashMap::new();
 
-    let res = complexBytecodeGen(operations, &mut localTypes, functionReturns, &mut mainLocals, &mut structs, true)?;
+    let res = complexBytecodeGen(
+        operations,
+        &mut localTypes,
+        functionReturns,
+        &mut mainLocals,
+        &mut structs,
+        true,
+    )?;
 
     Ok((res, localTypes))
 }

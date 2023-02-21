@@ -68,7 +68,9 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
 
     println!("{:?}", &e);
 
-    let res = Command::new(e.first().unwrap()).args(&e[1..e.len()]).output()?;
+    let res = Command::new(e.first().unwrap())
+        .args(&e[1..e.len()])
+        .output()?;
 
     println!("{}", cmd);
     println!("ERR: {}", String::from_utf8_lossy(&res.stderr));
