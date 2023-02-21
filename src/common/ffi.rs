@@ -232,6 +232,57 @@ pub extern fn stringGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index
     }
 }
 
+#[no_mangle]
+pub extern fn arrGetInt(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> isize {
+    match obj {
+        ViplObject::Arr(a) => {
+            a.internal.get(index).unwrap().getNum()
+        }
+        _ => panic!()
+    }
+}
+
+#[no_mangle]
+pub extern fn arrGetFloat(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> f32 {
+    match obj {
+        ViplObject::Arr(a) => {
+            a.internal.get(index).unwrap().getFlo()
+        }
+        _ => panic!()
+    }
+}
+
+#[no_mangle]
+pub extern fn arrGetBool(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> bool {
+    match obj {
+        ViplObject::Arr(a) => {
+            a.internal.get(index).unwrap().getBool()
+        }
+        _ => panic!()
+    }
+}
+
+#[no_mangle]
+pub extern fn arrGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> char {
+    match obj {
+        ViplObject::Arr(a) => {
+            a.internal.get(index).unwrap().getChar()
+        }
+        _ => panic!()
+    }
+}
+
+#[no_mangle]
+pub extern fn arrGetRef(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> *const ViplObject {
+    match obj {
+        ViplObject::Arr(a) => {
+            let ptr = a.internal.get(index).unwrap().getReference().clone().unwrap();
+            Rc::into_raw(ptr)
+        }
+        _ => panic!()
+    }
+}
+
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushInt: extern fn(&mut VirtualMachine, isize) -> (),
@@ -251,6 +302,12 @@ pub struct NativeWrapper {
     pub getLocalsBool: extern fn(&mut StackFrame, usize) -> bool,
     pub getLocalsChar: extern fn(&mut StackFrame, usize) -> u8,
     pub getLocalsRef: extern fn(&mut StackFrame, usize) -> *const ViplObject,
+
+    pub arrGetInt: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> isize,
+    pub arrGetFloat: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> f32,
+    pub arrGetBool: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> bool,
+    pub arrGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> char,
+    pub arrGetRef: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> *const ViplObject,
 
     pub call: extern fn(&mut VirtualMachine, *const c_char),
     pub stringNew: extern fn(&mut VirtualMachine, *const c_char) -> *const ViplObject,
@@ -282,6 +339,11 @@ impl NativeWrapper {
             getLocalsBool,
             getLocalsChar,
             getLocalsRef,
+            arrGetInt,
+            arrGetFloat,
+            arrGetBool,
+            arrGetChar,
+            arrGetRef,
             call,
             stringNew,
             stringGetChar,

@@ -167,7 +167,11 @@ fn genExpression(
                             out.push_str(")")
                         }
                         "Array" => {
-                            out.push_str("NULL")
+                            out.push_str("vm->nativeWrapper.stringGetChar(vm,");
+                            genExpression(i.expr, out, functionReturns, vTable)?;
+                            out.push(',');
+                            genExpression(i.index, out, functionReturns, vTable)?;
+                            out.push_str(")")
                         }
                         _ => panic!()
                     }
