@@ -96,7 +96,7 @@ fn main() {
 
      */
     let e = now.elapsed();
-    println!("compiled in: {:.2?}", e);
+    println!("compiled in: {e:.2?}");
     println!("bich {:?}", bs.0);
 
     let a = Instant::now();
@@ -104,5 +104,5 @@ fn main() {
     evaluateBytecode2(bs.0, bs.1, &mut vm);
 
     let elapsed = a.elapsed();
-    println!("finished in: {:.2?}", elapsed);
+    println!("finished in: {elapsed:.2?}");
 }
