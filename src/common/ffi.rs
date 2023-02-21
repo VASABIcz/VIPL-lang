@@ -210,19 +210,6 @@ pub extern fn getLocalsRef(vm: &mut StackFrame, index: usize) -> *const ViplObje
 }
 
 #[no_mangle]
-pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
-    let name = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
-    vm.call(MyStr::Runtime(name.to_owned().into_boxed_str()))
-}
-
-#[no_mangle]
-pub extern fn stringNew(vm: &mut VirtualMachine, s: *const c_char) -> *const ViplObject {
-    let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
-    let rc = Rc::new(ViplObject::Str(Str { string: st }));
-    Rc::into_raw(rc)
-}
-
-#[no_mangle]
 pub extern fn stringGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
     match obj {
         ViplObject::Str(v) => {
@@ -283,6 +270,30 @@ pub extern fn arrGetRef(vm: &mut VirtualMachine, obj: &mut ViplObject, index: us
     }
 }
 
+#[no_mangle]
+pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
+    let name = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
+    vm.call(MyStr::Runtime(name.to_owned().into_boxed_str()))
+}
+
+#[no_mangle]
+pub extern fn stringNew(vm: &mut VirtualMachine, s: *const c_char) -> *const ViplObject {
+    let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
+    let rc = Rc::new(ViplObject::Str(Str { string: st }));
+    Rc::into_raw(rc)
+}
+
+#[no_mangle]
+pub extern fn strConcat(vm: &mut VirtualMachine, s1: &mut ViplObject, s2: &mut ViplObject) -> *const ViplObject {
+    let mut s3 = String::new();
+    s3.push_str(&s1.getStr().string);
+    s3.push_str(&s2.getStr().string);
+
+    // FIXME not sure if this is needed
+    let rc = Rc::new(ViplObject::Str(Str{ string: s3 }));
+    Rc::into_raw(rc)
+}
+
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushInt: extern fn(&mut VirtualMachine, isize) -> (),
@@ -312,6 +323,7 @@ pub struct NativeWrapper {
     pub call: extern fn(&mut VirtualMachine, *const c_char),
     pub stringNew: extern fn(&mut VirtualMachine, *const c_char) -> *const ViplObject,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
+    pub strConcat: extern fn (&mut VirtualMachine, &mut ViplObject, &mut ViplObject) -> *const ViplObject
 }
 
 impl Debug for NativeWrapper {
@@ -347,6 +359,7 @@ impl NativeWrapper {
             call,
             stringNew,
             stringGetChar,
+            strConcat,
         }
     }
 }

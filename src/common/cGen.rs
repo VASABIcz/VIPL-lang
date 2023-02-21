@@ -40,6 +40,20 @@ fn genExpression(
                     return Err(Box::new(NoValue { msg: "expression must have return value".to_string() }));
                 }
                 Some(dat) => {
+                    if let DataType::Object(v) = dat {
+                        if v.name.as_str() != "String" {
+                            panic!()
+                        }
+
+                        out.push_str("vm->nativeWrapper.strConcat(vm,");
+                        genExpression(*left, out, functionReturns, vTable)?;
+                        out.push(',');
+                        genExpression(*right, out, functionReturns, vTable)?;
+                        out.push_str(")");
+
+                        return Ok(());
+                    }
+
                     genExpression(*left, out, functionReturns, vTable)?;
                     let t = match op {
                         Op::Add => "+",
@@ -167,7 +181,16 @@ fn genExpression(
                             out.push_str(")")
                         }
                         "Array" => {
-                            out.push_str("vm->nativeWrapper.stringGetChar(vm,");
+                            let c = o.generics.first().unwrap();
+                            let t = c.clone().ok_or("expected generic type not any")?;
+                            let s = match t {
+                                Int => "vm->nativeWrapper.arrGetInt(vm,",
+                                DataType::Float => "vm->nativeWrapper.arrGetFloat(vm,",
+                                Bool => "vm->nativeWrapper.arrGetBool(vm,",
+                                DataType::Char => "vm->nativeWrapper.stringGetChar(vm,",
+                                DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,"
+                            };
+                            out.push_str(s);
                             genExpression(i.expr, out, functionReturns, vTable)?;
                             out.push(',');
                             genExpression(i.index, out, functionReturns, vTable)?;

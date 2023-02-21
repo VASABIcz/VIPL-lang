@@ -618,11 +618,12 @@ impl Value {
         }
     }
 
+    // FIXME c is sending some junk data fix ffi
     #[inline]
     pub fn getReference(&self) -> &Option<Rc<ViplObject>> {
         match self {
             Reference { instance } => instance,
-            _ => panic!()
+            v => panic!("{:?}", v)
         }
     }
 
