@@ -5,9 +5,11 @@
 - extensible
 - statically typed
 - REPL + compiler
--  ~~no 3rd party dependencies~~
-- -   libloading - loading dynamic libraries
-- - jemallocator - memory allocator to make scarry malloc segfaults go away
+- ~~no 3rd party dependencies~~
+-
+    - libloading - loading dynamic libraries
+-
+    - jemallocator - memory allocator to make scarry malloc segfaults go away
 - syntax based on python/rust
 - experimental C aot/jit compilation
 

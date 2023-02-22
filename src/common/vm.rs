@@ -1,13 +1,16 @@
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 
+use std::{ptr, rc};
 use std::borrow::BorrowMut;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::mem::{forget, transmute};
-use std::ptr;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 
 use libloading::Symbol;
 
@@ -612,6 +615,14 @@ impl Value {
     }
 
     #[inline]
+    pub fn getMutReference(&mut self) -> &mut Option<Rc<ViplObject>> {
+        match self {
+            Reference { instance } => instance,
+            v => panic!("{:?}", v),
+        }
+    }
+
+    #[inline]
     pub fn getReferenceValue(self) -> Option<Rc<ViplObject>> {
         match self {
             Reference { instance } => instance,
@@ -764,6 +775,13 @@ impl Value {
     }
 }
 
+#[repr(C)]
+struct RcBox<T: ?Sized> {
+    strong: Cell<usize>,
+    weak: Cell<usize>,
+    value: T,
+}
+
 impl Value {
     #[inline]
     pub fn add(&mut self, value: &Value, typ: &DataType) {
@@ -776,34 +794,26 @@ impl Value {
             }
             Bool => {}
             Object(it) => {
-                if it.name.as_str() == "String" {
-                    let mut buf = String::new();
-
-                    match self {
-                        Reference { instance } => match instance {
-                            None => {
-                                panic!()
-                            }
-                            Some(v) => unsafe {
-                                let ev = v.getStr();
-                                match value {
-                                    Reference { instance } => match instance {
-                                        None => {
-                                            panic!()
-                                        }
-                                        Some(va) => {
-                                            let ve = va.getStr();
-                                            buf.push_str(&ev.string);
-                                            buf.push_str(&ve.string);
-                                        }
-                                    },
-                                    _ => panic!(),
+                match it.name.as_str() {
+                    "String" => {
+                        match self {
+                            Reference { instance } => {
+                                match instance {
+                                    None => panic!(),
+                                    Some(v) => {
+                                        let str1 = v.getStr();
+                                        let str2 = value.getString();
+                                        let mut buf = String::with_capacity(str1.string.len() + str2.len());
+                                        buf.push_str(&str1.string);
+                                        buf.push_str(&str2);
+                                        *v = Rc::new(ViplObject::Str(Str { string: buf }))
+                                    }
                                 }
-                                *v = Rc::new(Str { string: buf }.into())
-                            },
-                        },
-                        _ => panic!(),
+                            }
+                            _ => panic!()
+                        }
                     }
+                    _ => panic!()
                 }
             }
             Char => panic!(),
@@ -1017,6 +1027,7 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
+    #[inline]
     pub fn call(&mut self, name: MyStr) {
         let f = self.functions.get(&name).unwrap();
         let mut locals = vec![Num(-1); f.varTable.len()];
@@ -1347,7 +1358,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     None => {
                         // println!("{:?}", &vm.functions.keys());
                         // println!("{}", encoded);
-                        let f = vm.functions.get(&encoded).unwrap();
+                        let f = vm.functions.get(&encoded).expect(&format!("function {} not found", &encoded));
                         // println!("meta {:?}", f.varTable);
                         let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
 
@@ -1487,12 +1498,10 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             ArrayLoad(_) => {
                 let index = vm.stack.pop().unwrap().getNum();
                 match vm.stack.pop().unwrap() {
-                    Reference { instance } => unsafe {
-                        let mut clon = instance.unwrap();
-                        let ne = Rc::get_mut_unchecked(&mut clon);
-                        let v = ne.getArr();
-                        vm.stack
-                            .push(v.internal.get(index as usize).unwrap().clone())
+                    Reference { instance } => {
+                        let clon = instance.unwrap();
+                        let e = clon.getArr();
+                        vm.stack.push(e.internal.get(index as usize).unwrap().clone())
                     },
                     _ => panic!(),
                 };
@@ -1536,6 +1545,32 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                                                                   SetField { .. } => panic!(),
                                                                    */
         }
+    }
+}
+
+impl VirtualMachine {
+    pub fn eval(&mut self, mut bytecode: Vec<OpCode>, locals: Vec<DataType>) {
+        let mut vals = vec![];
+        for b in &locals {
+            vals.push(b.toDefaultValue())
+        }
+        for _ in &bytecode {
+            self.opCodeCache.push(None);
+        }
+        run(
+            &mut SeekableOpcodes {
+                index: 0,
+                opCodes: &mut bytecode,
+            },
+            self,
+            &mut StackFrame::new(&mut vals),
+        );
+    }
+}
+
+impl Drop for VirtualMachine {
+    fn drop(&mut self) {
+        println!("daddy is dying :C")
     }
 }
 

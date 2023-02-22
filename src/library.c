@@ -23,11 +23,17 @@ typedef struct NativeWrapper {
   bool( * getLocalsBool)(struct StackFrame * , uintptr_t);
   uint8_t( * getLocalsChar)(struct StackFrame * , uintptr_t);
   const struct ViplObject * ( * getLocalsRef)(struct StackFrame * , uintptr_t);
+  intptr_t( * arrGetInt)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
+  float( * arrGetFloat)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
+  bool( * arrGetBool)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
+  uint32_t( * arrGetChar)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
+  const struct ViplObject * ( * arrGetRef)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
   void( * call)(struct VirtualMachine * ,
     const char * );
   const struct ViplObject * ( * stringNew)(struct VirtualMachine * ,
     const char * );
   uint8_t( * stringGetChar)(struct VirtualMachine * , struct ViplObject * , uintptr_t);
+  const struct ViplObject * ( * strConcat)(struct VirtualMachine * , struct ViplObject * , struct ViplObject * );
 }
 NativeWrapper;
 
@@ -37,35 +43,31 @@ typedef struct VirtualMachine {
 VirtualMachine;
 void call(VirtualMachine * vm, StackFrame * frame) {
   ViplObject * path = vm -> nativeWrapper.getLocalsRef(frame, 0);
-  ViplObject * files;
+  ViplObject * file;
+  long fileLen;
   long i;
-  long len;
   long counter;
-  ViplObject * buf;
-  long ft;
-  files = ({
-    vm -> nativeWrapper.pushRef(vm, path);vm -> nativeWrapper.call(vm, "ls(String)");vm -> nativeWrapper.popRef(vm);
+  char c;
+  if (!({
+      vm -> nativeWrapper.pushRef(vm, path);vm -> nativeWrapper.pushRef(vm, vm -> nativeWrapper.stringNew(vm, ".rs"));vm -> nativeWrapper.call(vm, "endsWith(String, String)");vm -> nativeWrapper.popBool(vm);
+    })) {
+    vm -> nativeWrapper.pushInt(vm, 0);
+    return;
+  }
+  vm -> nativeWrapper.pushRef(vm, path);
+  vm -> nativeWrapper.call(vm, "print(String)");
+  file = ({
+    vm -> nativeWrapper.pushRef(vm, path);vm -> nativeWrapper.call(vm, "readFile(String)");vm -> nativeWrapper.popRef(vm);
+  });
+  fileLen = ({
+    vm -> nativeWrapper.pushRef(vm, file);vm -> nativeWrapper.call(vm, "strLen(String)");vm -> nativeWrapper.popInt(vm);
   });
   i = 0;
-  len = ({
-    vm -> nativeWrapper.pushRef(vm, files);vm -> nativeWrapper.call(vm, "arrayLen(Array)");vm -> nativeWrapper.popInt(vm);
-  });
-  counter = 0;
-  while (i < len) {
-    buf = path + vm -> nativeWrapper.stringNew(vm, "/") + NULL;
-    ft = ({
-      vm -> nativeWrapper.pushRef(vm, buf);vm -> nativeWrapper.call(vm, "fileType(String)");vm -> nativeWrapper.popInt(vm);
-    });
-    if (ft == 2) {
-      counter += ({
-        vm -> nativeWrapper.pushRef(vm, buf);vm -> nativeWrapper.call(vm, "countDir(String)");vm -> nativeWrapper.popInt(vm);
-      });
-    } else {
-      if (ft == 1) {
-        counter += ({
-          vm -> nativeWrapper.pushRef(vm, buf);vm -> nativeWrapper.call(vm, "countFile(String)");vm -> nativeWrapper.popInt(vm);
-        });
-      }
+  counter = 1;
+  while (i < fileLen) {
+    c = vm -> nativeWrapper.stringGetChar(vm, file, i);
+    if (c == 'a') {
+      counter += 1;
     }
     i += 1;
   }

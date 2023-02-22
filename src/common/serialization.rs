@@ -170,7 +170,6 @@ pub fn getType(bytes: &[u8], index: usize) -> (DataType, usize) {
 
     let n: RawDataType = unsafe { transmute(d) };
 
-    println!("a {n:?}");
 
     let t = match n {
         RawDataType::Int => DataType::Int,
@@ -277,10 +276,8 @@ pub fn deserialize(data: Vec<u8>) -> Vec<OpCode> {
                 buf.push(PushLocal { index: s.0 })
             }
             RawOpCode::SetLocal => {
-                println!("UwU");
                 let t = getType(&data, i);
                 skip += t.1;
-                println!("meow {:?}", &t.1);
                 let s = getSize(&data, i + t.1);
                 skip += s.1;
                 buf.push(SetLocal {

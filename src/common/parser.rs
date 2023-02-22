@@ -115,10 +115,8 @@ pub fn parse(
                     if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1
                     {
                         *isPrevUser = true;
-                        println!("a {:?}", &previous);
                         unit.parse(tokens, previous.clone(), parsingUnits)?
                     } else {
-                        println!("b {:?}", &previous);
 
                         if parserType == Around || parserType == Back {
                             unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
@@ -132,7 +130,6 @@ pub fn parse(
                     continue 'main;
                 }
 
-                println!("{:?}", &res);
                 buf.push(res);
                 continue 'main;
             }
@@ -146,10 +143,8 @@ pub fn parse(
                     if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1
                     {
                         *isPrevUser = true;
-                        println!("a {:?}", &previous);
                         unit.parse(tokens, previous.clone(), parsingUnits)?
                     } else {
-                        println!("b {:?}", &previous);
 
                         if parserType == Around || parserType == Back {
                             unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
@@ -198,7 +193,6 @@ pub fn parseTokens(toks: Vec<Token>) -> Result<Vec<Operation>, Box<dyn Error>> {
                 continue 'main;
             }
         }
-        println!("c");
         return Err(Box::new(NoSuchParsingUnit {
             typ: Ahead,
             token: tokens.peekOne().cloned(),

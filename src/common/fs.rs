@@ -22,7 +22,7 @@ pub fn setupFs(vm: &mut VirtualMachine) {
                         )))
                     }
                 }
-                Err(_) => {}
+                Err(e) => panic!("{}", e)
             }
 
             vm.stack.push(Value::makeArray(buf, DataType::str()))

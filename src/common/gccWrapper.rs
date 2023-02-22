@@ -61,12 +61,9 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
 
     fs::write(&cPath, buf)?;
 
-    // -O3
-    let cmd = format!("clang -ggdb -shared -o {} -fPIC {}", soPath, cPath);
+    let cmd = format!("gcc -Ofast -march=native -shared -o {} -fPIC {}", soPath, cPath);
 
     let e: Vec<&str> = cmd.split(" ").collect();
-
-    println!("{:?}", &e);
 
     let res = Command::new(e.first().unwrap())
         .args(&e[1..e.len()])

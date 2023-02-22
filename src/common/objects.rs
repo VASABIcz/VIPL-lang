@@ -6,10 +6,17 @@ use std::fmt::Debug;
 use crate::vm::{DataType, Value};
 
 #[derive(Debug)]
+#[repr(C)]
 pub enum ViplObject {
     Arr(Array),
     Str(Str),
     Runtime(Box<dyn Object>),
+}
+
+impl Drop for ViplObject {
+    fn drop(&mut self) {
+        // println!("gc object {:?}", self)
+    }
 }
 
 impl ViplObject {
@@ -102,12 +109,14 @@ impl dyn Object {
 }
 
 #[derive(Clone, Debug)]
+#[repr(C)]
 pub struct ObjectDefinition {
     pub name: String,
     pub mapping: HashMap<String, (usize, DataType)>,
 }
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct Str {
     pub string: String,
 }
@@ -152,6 +161,7 @@ impl Object for Str {
 }
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct Array {
     pub internal: Vec<Value>,
     pub typ: DataType,
@@ -171,18 +181,4 @@ impl Object for Array {
     fn getField(&self, _field: usize) -> Option<Value> {
         None
     }
-}
-
-fn cd(r: Box<dyn Any>) {
-    let res = r.downcast_ref::<Str>().unwrap();
-    println!("{}", res.string);
-}
-
-#[test]
-fn xd() {
-    let x: Box<Str> = Box::new(Str {
-        string: String::from("UwU"),
-    });
-    let e: Box<dyn Any> = x;
-    cd(e);
 }

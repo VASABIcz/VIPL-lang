@@ -466,17 +466,3 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
     ]
 }
-
-#[test]
-fn testLexer() {
-    let mut lexingUnits = lexingUnits();
-    let input = "x = 69 fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
-
-    let src = SourceProvider {
-        data: input,
-        index: 0,
-    };
-
-    let tokens = tokenize(&mut lexingUnits, src);
-    println!("{tokens:?}");
-}

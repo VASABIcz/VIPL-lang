@@ -707,8 +707,6 @@ pub fn bytecodeGen2(
         }
     }
 
-    println!("b");
-
     out.push_str("void call(VirtualMachine* vm,StackFrame* frame){");
 
     for local in &mainLocals {

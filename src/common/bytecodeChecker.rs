@@ -106,7 +106,7 @@ pub fn checkFunction(
         checkedFunctions,
     )?;
 
-    println!("check f {}", genName.as_str());
+    // println!("check f {}", genName.as_str());
 
     // FIXME
     opCodes.nextOpcode();
@@ -249,7 +249,7 @@ pub fn checkBytecode<'a>(
             }
             (Some(v), i) => (v, i),
         };
-        println!("checking {:?}", op);
+        // println!("checking {:?}", op);
         match op {
             FunBegin => {
                 checkFunction(opCodes, abstractStack, vm, checkedFunctions)?;

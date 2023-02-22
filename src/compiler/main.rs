@@ -2,9 +2,8 @@ extern crate rust_vm;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::rc::Rc;
 use std::time::Instant;
-
-use jemallocator::Jemalloc;
 
 use rust_vm::codegen::bytecodeGen2;
 use rust_vm::fs::setupFs;
@@ -12,9 +11,6 @@ use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
 use rust_vm::vm::evaluateBytecode2;
-
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
@@ -97,7 +93,6 @@ fn main() {
      */
     let e = now.elapsed();
     println!("compiled in: {e:.2?}");
-    println!("bich {:?}", bs.0);
 
     let a = Instant::now();
 

@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use crate::ast::{Expression, Op};
 use crate::codegen::bytecodeGen;
-use crate::lexer::{tokenizeSource, TokenType};
+use crate::ffi::evaluate;
+use crate::lexer::{lexingUnits, SourceProvider, tokenize, tokenizeSource, TokenType};
 use crate::lexer::TokenType::IntLiteral;
 use crate::parser::parseTokens;
 use crate::std::bootStrapVM;
@@ -30,6 +31,21 @@ fn testNumericLexingUnit() {
     assert_eq!(tokens[7].typ, TokenType::LongLiteral);
     assert_eq!(tokens[8].typ, TokenType::DoubleLiteral);
 }
+
+#[test]
+fn testLexer() {
+    let mut lexingUnits = lexingUnits();
+    let input = "x = 69 fn main() { x = -420.69 print(69*x) while (x == 1) { print(69) } if () }";
+
+    let src = SourceProvider {
+        data: input,
+        index: 0,
+    };
+
+    let tokens = tokenize(&mut lexingUnits, src);
+    println!("{tokens:?}");
+}
+
 
 #[test]
 fn testStringLexingUnit() {
@@ -213,13 +229,16 @@ pub fn testComiple() {
     long x;
     x=0;
     while(x < max){
+        vm->nativeWrapper.stringNew(vm, \"UwU\");
         x+=1;
     }
+    vm->nativeWrapper.stringNew(vm, \"UwU\");
+    vm->nativeWrapper.stringNew(vm, \"UwU\");
     vm->nativeWrapper.pushInt(vm, 6969);
     return;
 }";
 
-    let vm = bootStrapVM();
+    let mut vm = bootStrapVM();
 
     let res = crate::gccWrapper::compile(sc).unwrap();
 
@@ -238,6 +257,22 @@ pub fn testComiple() {
             encoded: MyStr::Static("print(int)"),
         },
     ];
-    crate::vm::evaluateBytecode(ops, vec![]);
+
+    let ops2 = vec![
+        OpCode::PushInt(10_000),
+        OpCode::Call {
+            encoded: MyStr::Static("lool(int)"),
+        },
+        OpCode::Call {
+            encoded: MyStr::Static("print(int)"),
+        },
+    ];
+
+    vm.eval(ops, vec![]);
+
+    for _ in 0..1000 {
+        vm.eval(ops2.clone(), vec![]);
+    }
+
     println!("{}", vm.stack.len());
 }
