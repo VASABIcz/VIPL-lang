@@ -10,8 +10,8 @@
 #![feature(new_uninit)]
 
 // FIXME this is just quick workaround
-#[global_allocator]
-static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+// #[global_allocator]
+// static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 pub mod ast;
 pub mod bytecodeChecker;

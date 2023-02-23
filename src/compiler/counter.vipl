@@ -24,8 +24,8 @@ fn native countFile(path: String): int {
 }
 
 fn countDir(path: String): int {
-    print("dir")
-    print(path)
+    // print("dir")
+    // print(path)
 
     files = ls(path)
     i = 0
@@ -34,6 +34,7 @@ fn countDir(path: String): int {
 
     while i < len {
         buf = path + ("/" + (files[i]))
+        print(buf)
         ft = fileType(buf)
         if ft == 2 {
             counter += countDir(buf)

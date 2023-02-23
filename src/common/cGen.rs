@@ -50,7 +50,7 @@ fn genExpression(
                             panic!()
                         }
 
-                        out.push_str("vm->nativeWrapper.strConcat(vm,");
+                        out.push_str("vm->nativeWrapper.strConcat(vm,frame,");
                         genExpression(*left, out, functionReturns, vTable)?;
                         out.push(',');
                         genExpression(*right, out, functionReturns, vTable)?;
@@ -81,7 +81,7 @@ fn genExpression(
         Expression::FloatLiteral(i) => out.push_str(&i),
         Expression::DoubleLiteral(i) => out.push_str(&i),
         Expression::StringLiteral(i) => {
-            out.push_str("vm->nativeWrapper.stringNew(vm,\"");
+            out.push_str("vm->nativeWrapper.stringNew(vm,frame,\"");
             out.push_str(&i);
             out.push_str("\")");
         }
@@ -135,7 +135,7 @@ fn genExpression(
                     DataType::Float => "vm->nativeWrapper.popFloat(vm);",
                     Bool => "vm->nativeWrapper.popBool(vm);",
                     DataType::Char => "vm->nativeWrapper.popChar(vm);",
-                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm);",
+                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm,frame);",
                 };
                 out.push_str(s)
             }
@@ -211,7 +211,7 @@ fn genExpression(
                             DataType::Float => "vm->nativeWrapper.arrGetFloat(vm,",
                             Bool => "vm->nativeWrapper.arrGetBool(vm,",
                             DataType::Char => "vm->nativeWrapper.stringGetChar(vm,",
-                            DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,",
+                            DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,frame,",
                         };
                         out.push_str(s);
                         genExpression(i.expr, out, functionReturns, vTable)?;
@@ -290,7 +290,7 @@ fn genStatement(
                     DataType::Float => "vm->nativeWrapper.popFloat(vm);",
                     Bool => "vm->nativeWrapper.popBool(vm);",
                     DataType::Char => "vm->nativeWrapper.popChar(vm);",
-                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm);",
+                    DataType::Object(_) => "vm->nativeWrapper.popRef(vm,frame);",
                 };
                 out.push_str(s)
             }

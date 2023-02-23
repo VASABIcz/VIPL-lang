@@ -801,11 +801,14 @@ impl Value {
                                 match instance {
                                     None => panic!(),
                                     Some(v) => {
-                                        let str1 = v.getStr();
+                                        let str1 = &v.getStr().string;
                                         let str2 = value.getString();
-                                        let mut buf = String::with_capacity(str1.string.len() + str2.len());
-                                        buf.push_str(&str1.string);
-                                        buf.push_str(&str2);
+
+                                        let mut buf = String::with_capacity(str1.len() + str2.len());
+
+                                        buf.push_str(str1);
+                                        buf.push_str(str2);
+
                                         *v = Rc::new(ViplObject::Str(Str { string: buf }))
                                     }
                                 }
@@ -901,6 +904,29 @@ pub struct StackFrame<'a> {
     // pub previous: Option<&'a StackFrame<'a>>,
     pub localVariables: &'a mut [Value],
     pub name: Option<&'a str>,
+    pub objects: Option<Vec<Rc<ViplObject>>>,
+}
+
+impl Drop for StackFrame<'_> {
+    fn drop(&mut self) {
+        println!("dropping stack");
+        match &self.objects {
+            None => println!("no allocated objects"),
+            Some(v) => println!("{} allocated objects", v.len())
+        }
+    }
+}
+
+impl StackFrame<'_> {
+    #[inline]
+    pub fn addObject(&mut self, obj: Rc<ViplObject>) {
+        // FIXME
+        return;
+        match &mut self.objects {
+            None => panic!(),
+            Some(v) => v.push(obj)
+        }
+    }
 }
 
 impl StackFrame<'_> {
@@ -909,6 +935,7 @@ impl StackFrame<'_> {
             // previous: None,
             localVariables,
             name: Option::from("root"),
+            objects: None,
         }
     }
 }
@@ -996,7 +1023,7 @@ pub enum FuncType {
         callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
     },
     Extern {
-        callback: extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        callback: extern fn(&mut VirtualMachine, &mut StackFrame) -> (),
     },
 }
 
@@ -1040,6 +1067,7 @@ impl VirtualMachine {
         let mut stack = StackFrame {
             localVariables: &mut locals,
             name: None,
+            objects: None,
         };
 
         let t = f.typ.clone();
@@ -1061,7 +1089,11 @@ impl VirtualMachine {
                 run(&mut seekable, &mut *ptr, &mut stack);
             },
             Native { callback } => callback(self, &mut stack),
-            Extern { callback } => callback(self, &mut stack),
+            Extern { callback } => {
+                stack.objects = Some(vec![]);
+                callback(self, &mut stack);
+                println!("finished risky ffi call")
+            },
         }
     }
 }
@@ -1397,6 +1429,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 let mut stack = StackFrame {
                     localVariables: &mut cahedLocals,
                     name: None,
+                    objects: None,
                 };
 
                 match cached.1 {
@@ -1411,7 +1444,11 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         opCodes.index = old as isize;
                     }
                     Native { callback } => callback(vm, &mut stack),
-                    Extern { callback } => callback(vm, &mut stack),
+                    Extern { callback } => {
+                        stack.objects = Some(vec![]);
+                        callback(vm, &mut stack);
+                        println!("finished risky ffi call")
+                    }
                 }
             },
             Return => return,
@@ -1570,7 +1607,7 @@ impl VirtualMachine {
 
 impl Drop for VirtualMachine {
     fn drop(&mut self) {
-        println!("daddy is dying :C")
+        println!("vm is being destroyed")
     }
 }
 

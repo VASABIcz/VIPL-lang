@@ -163,6 +163,7 @@ fn main() {
         let mut stack = StackFrame {
             localVariables: &mut localValues,
             name: None,
+            objects: None,
         };
 
         let mut opCodes = SeekableOpcodes {
