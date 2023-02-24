@@ -504,7 +504,7 @@ impl Value {
         match self {
             Reference { instance } => match instance {
                 None => panic!(),
-                Some(v) => unsafe { &v.getStr().string },
+                Some(v) => &v.getStr().string,
             },
             e => panic!("{e:?}"),
         }
@@ -909,10 +909,16 @@ pub struct StackFrame<'a> {
 
 impl Drop for StackFrame<'_> {
     fn drop(&mut self) {
-        println!("dropping stack");
+        println!("{:?}", self);
         match &self.objects {
-            None => println!("no allocated objects"),
-            Some(v) => println!("{} allocated objects", v.len())
+            None => {}
+            Some(v) => unsafe {
+                for o in v {
+                    let raw = Rc::into_raw(o.clone());
+                    Rc::decrement_strong_count(raw);
+                    Rc::from_raw(raw);
+                }
+            }
         }
     }
 }
@@ -920,8 +926,6 @@ impl Drop for StackFrame<'_> {
 impl StackFrame<'_> {
     #[inline]
     pub fn addObject(&mut self, obj: Rc<ViplObject>) {
-        // FIXME
-        return;
         match &mut self.objects {
             None => panic!(),
             Some(v) => v.push(obj)

@@ -205,6 +205,7 @@ pub extern fn pushRef(vm: &mut VirtualMachine, v: *mut ViplObject) {
     }
     unsafe {
         // incrementing rc so that it doesnt get freed while being used by native function
+
         Rc::increment_strong_count(v);
         let rc = Rc::from_raw(v);
         vm.stack.push(Value::Reference {

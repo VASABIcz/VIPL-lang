@@ -15,7 +15,7 @@ pub enum ViplObject {
 
 impl Drop for ViplObject {
     fn drop(&mut self) {
-        // println!("gc object {:?}", self)
+        println!("gc object {:?}", self)
     }
 }
 
