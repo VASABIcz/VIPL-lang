@@ -8,6 +8,7 @@
 #![feature(let_chains)]
 #![feature(allocator_api)]
 #![feature(new_uninit)]
+#![feature(pointer_byte_offsets)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]
@@ -27,3 +28,4 @@ pub mod parser;
 pub mod std;
 mod tests;
 pub mod vm;
+mod rice;

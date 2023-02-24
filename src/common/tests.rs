@@ -1,4 +1,5 @@
 use std::ptr::null;
+use std::rc::Rc;
 use std::time::Instant;
 
 use crate::ast::{Expression, Op};
@@ -7,6 +8,7 @@ use crate::ffi::evaluate;
 use crate::lexer::{lexingUnits, SourceProvider, tokenize, tokenizeSource, TokenType};
 use crate::lexer::TokenType::IntLiteral;
 use crate::parser::parseTokens;
+use crate::rice::Rice;
 use crate::std::bootStrapVM;
 use crate::vm::{
     DataType, evaluateBytecode, MyStr, OpCode, StackFrame, Value, VariableMetadata, VirtualMachine,
@@ -275,4 +277,18 @@ pub fn testComiple() {
     }
 
     println!("{}", vm.stack.len());
+}
+
+fn f(r: Rice<isize>) {
+    println!("{}", *r);
+}
+
+#[test]
+pub fn testRice() {
+    let r = Rice::new(6);
+    f(r.clone());
+    let ptr = unsafe { r.intoRaw() };
+    let notPtr = unsafe { Rice::fromRaw(ptr) };
+
+    println!("{}", *notPtr);
 }
