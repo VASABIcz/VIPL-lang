@@ -18,16 +18,14 @@ impl<T> RiceInner<T> {
 }
 
 pub struct Rice<T> {
-    pub inner: *mut RiceInner<T>,
-    phantom: PhantomData<*mut RiceInner<T>>,
+    pub inner: *mut RiceInner<T>
 }
 
 impl<T> Rice<T> {
     pub fn new(data: T) -> Self {
         let p = Box::leak(Box::new(RiceInner { count: 1, data }));
         Self {
-            inner: p,
-            phantom: Default::default(),
+            inner: p
         }
     }
 
@@ -40,8 +38,7 @@ impl<T> Rice<T> {
 
     pub unsafe fn fromRaw(ptr: *const T) -> Rice<T> {
         Self {
-            inner: ptr.byte_offset((size_of::<usize>()) as isize * -1) as *mut RiceInner<T>,
-            phantom: Default::default(),
+            inner: ptr.byte_offset((size_of::<usize>()) as isize * -1) as *mut RiceInner<T>
         }
     }
 }
@@ -59,7 +56,7 @@ impl<T> Drop for Rice<T> {
         unsafe {
             (*self.inner).decrement();
             if (*self.inner).count == 0 {
-                let _ = Box::from_raw(self.inner);
+                drop(Box::from_raw(self.inner));
             }
         }
     }
@@ -69,8 +66,7 @@ impl<T> Clone for Rice<T> {
     fn clone(&self) -> Self {
         unsafe { (*self.inner).increment() }
         Self {
-            inner: self.inner,
-            phantom: Default::default(),
+            inner: self.inner
         }
     }
 }

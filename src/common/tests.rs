@@ -1,3 +1,4 @@
+use std::ops::Add;
 use std::ptr::null;
 use std::rc::Rc;
 use std::time::Instant;
@@ -208,7 +209,7 @@ pub fn testLibLoading() {
     unsafe {
         vm.loadNative(
             "/home/vasabi/CLionProjects/viplNative/cmake-build-release/libviplNative.so",
-            String::from("test123"),
+            "test123",
             None,
             Box::new([VariableMetadata::i(MyStr::Static(""))]),
         );
@@ -290,5 +291,5 @@ pub fn testRice() {
     let ptr = unsafe { r.intoRaw() };
     let notPtr = unsafe { Rice::fromRaw(ptr) };
 
-    println!("{}", *notPtr);
+    println!("{}", notPtr.add(5));
 }

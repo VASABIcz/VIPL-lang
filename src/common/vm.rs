@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 
-use libloading::Symbol;
+use libloading::{Library, Symbol};
 
 use crate::ast::{Expression, Op};
 use crate::ffi::NativeWrapper;
@@ -901,7 +901,6 @@ impl Value {
 #[derive(Debug)]
 #[repr(C)]
 pub struct StackFrame<'a> {
-    // pub previous: Option<&'a StackFrame<'a>>,
     pub localVariables: &'a mut [Value],
     pub name: Option<&'a str>,
     pub objects: Option<Vec<Rc<ViplObject>>>,
@@ -910,13 +909,12 @@ pub struct StackFrame<'a> {
 impl Drop for StackFrame<'_> {
     fn drop(&mut self) {
         println!("{:?}", self);
-        match &self.objects {
-            None => {}
-            Some(v) => unsafe {
-                for o in v {
-                    let raw = Rc::into_raw(o.clone());
+        if let Some(objects) = &self.objects {
+            for o in objects {
+                let raw = Rc::into_raw(o.clone());
+                unsafe {
                     Rc::decrement_strong_count(raw);
-                    Rc::from_raw(raw);
+                    Rc::decrement_strong_count(raw);
                 }
             }
         }
@@ -936,7 +934,6 @@ impl StackFrame<'_> {
 impl StackFrame<'_> {
     pub fn new(localVariables: &mut [Value]) -> StackFrame {
         StackFrame {
-            // previous: None,
             localVariables,
             name: Option::from("root"),
             objects: None,
@@ -958,27 +955,11 @@ impl VirtualMachine {
     pub unsafe fn loadNative(
         &mut self,
         path: &str,
-        name: String,
+        name: &str,
         returnType: Option<DataType>,
         args: Box<[VariableMetadata]>,
     ) {
-        let enc = genFunNameMeta(&name, &args, args.len());
-        let l = libloading::Library::new(path).unwrap();
-        let b = Box::leak(Box::new(l));
-        let a: Symbol<extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> ()> =
-            b.get(b"call\0").unwrap();
-        self.functions.insert(
-            MyStr::from(enc.clone().into_boxed_str()),
-            Func {
-                name: enc,
-                returnType,
-                argAmount: args.len(),
-                varTable: args,
-                typ: Extern {
-                    callback: *a.into_raw(),
-                },
-            },
-        );
+        self.loadRawNative(path, name, returnType, args.len())
     }
 
     pub unsafe fn loadRawNative(
@@ -988,10 +969,13 @@ impl VirtualMachine {
         returnType: Option<DataType>,
         argCount: usize,
     ) {
-        let l = libloading::Library::new(path).unwrap();
-        let b = Box::leak(Box::new(l));
+        let l = Library::new(path).unwrap();
+
+        self.nativeLibraries.push(l);
+        let lib = self.nativeLibraries.last().unwrap();
+
         let a: Symbol<extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> ()> =
-            b.get(b"call\0").unwrap();
+            lib.get(b"call\0").unwrap();
 
         self.functions.insert(
             MyStr::from(name.to_owned().into_boxed_str()),
@@ -1033,7 +1017,17 @@ pub enum FuncType {
 
 impl Debug for FuncType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Ok(())
+        match self {
+            Runtime { rangeStart, rangeStop } => {
+                write!(f, "runtime func {:?}", rangeStart)
+            }
+            Native { callback } => {
+                write!(f, "builtin func {:?}", *callback as *const ())
+            }
+            Extern { callback } => {
+                write!(f, "extern func {:?}", *callback as *const ())
+            }
+        }
     }
 }
 
@@ -1055,6 +1049,7 @@ pub struct VirtualMachine {
     pub stack: Vec<Value>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
+    pub nativeLibraries: Vec<Library>
 }
 
 impl VirtualMachine {
@@ -1102,14 +1097,6 @@ impl VirtualMachine {
     }
 }
 
-/*
-impl Drop for VirtualMachine {
-    fn drop(&mut self) {
-        println!("i am being freed")
-    }
-}
- */
-
 impl VirtualMachine {
     pub fn new() -> Self {
         Self {
@@ -1119,6 +1106,7 @@ impl VirtualMachine {
             opCodes: vec![],
             opCodeCache: vec![],
             nativeWrapper: NativeWrapper::new(),
+            nativeLibraries: vec![],
         }
     }
 
@@ -1572,19 +1560,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     }
                 }
             }
-            o => panic!("unimplemented opcode or error {:?}", o), /*
-                                                                  FunName { .. } => panic!(),
-                                                                  FunReturn { .. } => panic!(),
-                                                                  LocalVarTable { .. } => panic!(),
-                                                                  FunEnd => panic!(),
-                                                                  ClassBegin => panic!(),
-                                                                  ClassName { .. } => panic!(),
-                                                                  ClassField { .. } => panic!(),
-                                                                  ClassEnd => panic!(),
-                                                                  New { .. } => panic!(),
-                                                                  GetField { .. } => panic!(),
-                                                                  SetField { .. } => panic!(),
-                                                                   */
+            o => panic!("unimplemented opcode {:?}", o)
         }
     }
 }
