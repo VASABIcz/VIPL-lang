@@ -13,10 +13,12 @@ pub enum ViplObject {
     Runtime(Box<dyn Object>),
 }
 
-impl Drop for ViplObject {
-    fn drop(&mut self) {
-        println!("gc object {:?}", self)
-    }
+unsafe impl Sync for ViplObject {
+
+}
+
+unsafe impl Send for ViplObject {
+
 }
 
 impl ViplObject {

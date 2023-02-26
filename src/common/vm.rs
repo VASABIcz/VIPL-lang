@@ -1,6 +1,3 @@
-#![feature(get_mut_unchecked)]
-#![feature(downcast_unchecked)]
-
 use std::{ptr, rc};
 use std::borrow::BorrowMut;
 use std::cell::Cell;
@@ -183,24 +180,6 @@ pub enum RawDataType {
 }
 
 impl DataType {
-    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 48] = unsafe { transmute((*self).clone()) };
-        bytes.push(opId[0]);
-        match self {
-            Int => {}
-            Float => {}
-            Bool => {}
-            Object(x) => {
-                let bs = x.name.to_string().escape_default().to_string();
-                bytes.extend(bs.len().to_ne_bytes());
-                bytes.extend(bs.as_bytes())
-            }
-            Char => {}
-        }
-    }
-}
-
-impl DataType {
     pub fn toString(&self) -> &str {
         match self {
             Int => "int",
@@ -246,13 +225,6 @@ pub enum JmpType {
     False,
 }
 
-impl JmpType {
-    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let opId: [u8; 1] = unsafe { transmute((*self).clone()) };
-        bytes.push(opId[0]);
-    }
-}
-
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct VariableMetadata {
@@ -284,15 +256,6 @@ impl VariableMetadata {
 
     pub fn b(name: MyStr) -> Self {
         Self { name, typ: Bool }
-    }
-}
-
-impl VariableMetadata {
-    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
-        let bs = self.name.to_string().escape_default().to_string();
-        bytes.extend(bs.len().to_ne_bytes());
-        bytes.extend(bs.as_bytes());
-        self.typ.toBytes(bytes);
     }
 }
 
@@ -908,7 +871,6 @@ pub struct StackFrame<'a> {
 
 impl Drop for StackFrame<'_> {
     fn drop(&mut self) {
-        println!("{:?}", self);
         if let Some(objects) = &self.objects {
             for o in objects {
                 let raw = Rc::into_raw(o.clone());
@@ -1091,7 +1053,6 @@ impl VirtualMachine {
             Extern { callback } => {
                 stack.objects = Some(vec![]);
                 callback(self, &mut stack);
-                println!("finished risky ffi call")
             },
         }
     }
@@ -1439,7 +1400,6 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     Extern { callback } => {
                         stack.objects = Some(vec![]);
                         callback(vm, &mut stack);
-                        println!("finished risky ffi call")
                     }
                 }
             },
@@ -1551,14 +1511,12 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             StrNew(s) => vm.stack.push(Value::makeString(s.clone().to_string())),
             GetChar => {
                 let index = vm.stack.pop().unwrap().getNum();
-                match vm.stack.pop().unwrap().getReference() {
-                    None => panic!(),
-                    Some(v) => {
-                        vm.stack.push(Chr(
-                            *v.getStr().string.as_bytes().get(index as usize).unwrap() as char,
-                        ));
-                    }
-                }
+
+                let opIndex = vm.stack.len()-1;
+
+                let r = vm.stack.get_mut(opIndex).unwrap();
+                let c = *r.getString().as_bytes().get(index as usize).unwrap() as char;
+                *r = Chr(c);
             }
             o => panic!("unimplemented opcode {:?}", o)
         }

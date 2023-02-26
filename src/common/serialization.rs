@@ -3,6 +3,40 @@ use std::mem::transmute;
 use crate::vm::{DataType, JmpType, MyStr, OpCode, RawDataType, RawOpCode, VariableMetadata};
 use crate::vm::OpCode::*;
 
+impl DataType {
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
+        let opId: [u8; 48] = unsafe { transmute((*self).clone()) };
+        bytes.push(opId[0]);
+        match self {
+            Int => {}
+            Float => {}
+            Bool => {}
+            Object(x) => {
+                let bs = x.name.to_string().escape_default().to_string();
+                bytes.extend(bs.len().to_ne_bytes());
+                bytes.extend(bs.as_bytes())
+            }
+            Char => {}
+        }
+    }
+}
+
+impl VariableMetadata {
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
+        let bs = self.name.to_string().escape_default().to_string();
+        bytes.extend(bs.len().to_ne_bytes());
+        bytes.extend(bs.as_bytes());
+        self.typ.toBytes(bytes);
+    }
+}
+
+impl JmpType {
+    pub fn toBytes(&self, bytes: &mut Vec<u8>) {
+        let opId: [u8; 1] = unsafe { transmute((*self).clone()) };
+        bytes.push(opId[0]);
+    }
+}
+
 pub fn serialize(ops: &[OpCode]) -> Vec<u8> {
     let mut buf = vec![];
 

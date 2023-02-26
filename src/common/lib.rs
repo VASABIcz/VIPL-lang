@@ -26,6 +26,7 @@ pub mod objects;
 pub mod optimizer;
 pub mod parser;
 pub mod std;
-mod tests;
 pub mod vm;
+pub mod strCaching;
+mod tests;
 mod rice;
