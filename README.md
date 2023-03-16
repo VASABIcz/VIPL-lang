@@ -8,7 +8,6 @@
 - ~~no 3rd party dependencies~~
 -
     - libloading - loading dynamic libraries (used for "jit" compilation)
--
 - syntax based on python/rust
 - experimental C aot/jit compilation
 
