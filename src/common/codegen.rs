@@ -46,6 +46,20 @@ pub struct PartialExprCtx<'a> {
 }
 
 impl PartialExprCtx<'_> {
+    pub fn genPushInt(&mut self, value: isize) {
+        if value == 1 {
+            self.ops.push(PushIntOne())
+        }
+        else if value == 0 {
+            self.ops.push(PushIntZero())
+        }
+        else {
+            self.ops.push(PushInt(value))
+        }
+    }
+}
+
+impl PartialExprCtx<'_> {
     pub fn constructCtx<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
         ExpressionCtx {
             exp,
@@ -154,8 +168,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Expression::IntLiteral(i) => r.ops.push(PushInt(i.parse::<isize>().unwrap())),
-        Expression::LongLiteral(i) => r.ops.push(PushInt(i.parse::<isize>().unwrap())),
+        Expression::IntLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
+        Expression::LongLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
         Expression::FloatLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::DoubleLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
         Expression::StringLiteral(i) => {
@@ -222,12 +236,12 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             };
             let e = d.ok_or("")?;
             // let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
-            r.ops.push(PushInt(i.len() as isize));
+            r.genPushInt(i.len() as isize);
             r.ops.push(ArrayNew(e.clone()));
             for (ind, exp) in i.iter().enumerate() {
                 r.ops.push(Dup);
                 genExpression(r.constructCtx(exp))?;
-                r.ops.push(PushInt(ind as isize));
+                r.genPushInt(ind as isize);
                 r.ops.push(ArrayStore(e.clone()));
             }
         }

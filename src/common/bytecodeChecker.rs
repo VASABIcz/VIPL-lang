@@ -96,7 +96,7 @@ pub fn checkFunction(
 
     let genName = genFunNameMeta(name.as_str(), vars, *argCount);
     checkedFunctions.insert(genName.clone().into_boxed_str());
-    opCodes.index += index as isize;
+    opCodes.index += index;
 
     checkBytecode(
         opCodes,
@@ -494,6 +494,12 @@ pub fn checkBytecode<'a>(
                 abstractStack.assertPop(&DataType::Int)?;
                 abstractStack.assertPop(&DataType::str())?;
                 abstractStack.push(DataType::Char);
+            }
+            PushIntOne() => {
+                abstractStack.push(Int)
+            }
+            PushIntZero() => {
+                abstractStack.push(Int)
             }
         }
     }

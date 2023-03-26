@@ -274,6 +274,7 @@ impl TokenProvider {
         self.consume();
         let t = match self.tokens.get(i) {
             None => {
+                panic!("SADGE");
                 return Err(Box::new(InvalidToken {
                     msg: format!("invalid token got None expected {typ:?}"),
                 }))
@@ -281,6 +282,7 @@ impl TokenProvider {
             Some(v) => v,
         };
         if t.typ != typ {
+            panic!("SADGE");
             return Err(Box::new(InvalidToken {
                 msg: format!("invalid token got {t:?} expected {typ:?}"),
             }));

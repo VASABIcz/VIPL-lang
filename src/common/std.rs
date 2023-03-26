@@ -17,7 +17,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             name: MyStr::Static("Value"),
             typ: Int,
         }]),
-        |_a, b| println!("{}", b.localVariables[0].getNum()),
+        |_a, b| println!("{}", b.localVariables[0].getNumRef()),
         None,
     );
 
@@ -38,8 +38,8 @@ pub fn bootStrapVM() -> VirtualMachine {
             VariableMetadata::i(MyStr::Static("right")),
         ]),
         |_a, b| {
-            let left = b.localVariables[1].getNum();
-            let right = b.localVariables[0].getNum();
+            let left = b.localVariables[1].getNumRef();
+            let right = b.localVariables[0].getNumRef();
             if left != right {
                 panic!("assert {left} != {right}")
             }
@@ -109,9 +109,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         |a, _b| {
             a.stack.push(Value::Reference {
                 instance: Some(Rc::new(
-                    Str {
-                        string: "".to_string(),
-                    }
+                    Str::new("".to_string())
                         .into(),
                 )),
             })
@@ -209,7 +207,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             },
         ]),
         |vm, locals| {
-            let index = locals.localVariables.get(1).unwrap().getNum();
+            let index = locals.localVariables.get(1).unwrap().getNumRef();
             match locals.localVariables.get_mut(0).unwrap() {
                 Reference { instance } => match instance {
                     None => panic!(),
@@ -265,17 +263,17 @@ pub fn bootStrapVM() -> VirtualMachine {
 
     vm.makeNative(
         String::from("loadNative"),
-        box [
-            VariableMetadata::from(DataType::str()), // path
-            VariableMetadata::from(DataType::str()), // name
-            VariableMetadata::from(DataType::Int),   // arg count
-        ],
+        Box::new([
+                    VariableMetadata::from(DataType::str()), // path
+                    VariableMetadata::from(DataType::str()), // name
+                    VariableMetadata::from(DataType::Int),   // arg count
+                ]),
         |vm, locals| unsafe {
             let path = locals.localVariables.get(0).unwrap().getString();
             let name = locals.localVariables.get(1).unwrap().getString();
-            let argCount = locals.localVariables.get(2).unwrap().getNum();
+            let argCount = locals.localVariables.get(2).unwrap().getNumRef();
 
-            vm.loadRawNative(path, name, None, argCount as usize)
+            vm.loadRawNative(&path, &name, None, argCount as usize)
         },
         None,
     );

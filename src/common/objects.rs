@@ -38,8 +38,16 @@ impl ViplObject {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getStr(&self) -> &Str {
+        match self {
+            ViplObject::Str(v) => v,
+            v => panic!("{:?}", v),
+        }
+    }
+
+    #[inline]
+    pub fn toStr(self) -> Str {
         match self {
             ViplObject::Str(v) => v,
             v => panic!("{:?}", v),
@@ -121,6 +129,14 @@ pub struct ObjectDefinition {
 #[repr(C)]
 pub struct Str {
     pub string: String,
+}
+
+impl Str {
+    pub fn new(str: String) -> Self {
+        Self {
+            string: str
+        }
+    }
 }
 
 impl Into<ViplObject> for Str {

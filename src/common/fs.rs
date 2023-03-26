@@ -1,4 +1,7 @@
+use std::ffi::OsString;
 use std::fs;
+use std::mem::transmute;
+use std::os::unix::fs::DirEntryExt2;
 
 use crate::vm::{DataType, Generic, MyStr, Value, VariableMetadata, VirtualMachine};
 
@@ -9,23 +12,20 @@ pub fn setupFs(vm: &mut VirtualMachine) {
             name: MyStr::Static(""),
             typ: DataType::str(),
         }]),
-        |vm, locals| {
+        #[inline(always)] |vm, locals| {
             let path = locals.localVariables.first().unwrap().getString();
 
-            let mut buf = vec![];
 
             match fs::read_dir(&path) {
-                Ok(v) => {
-                    for p in v {
-                        buf.push(Value::makeString(String::from(
-                            p.unwrap().file_name().to_str().unwrap(),
-                        )))
-                    }
+                Ok(v) => unsafe {
+                    let arr = v.map(#[inline(always)] |it|{
+                        let mut refName = it.unwrap();
+                        Value::makeString(String::from(refName.file_name_ref().to_str().unwrap()))
+                    }).collect();
+                    vm.stack.push(Value::makeArray(arr, DataType::str()))
                 }
                 Err(e) => panic!("{}", e)
             }
-
-            vm.stack.push(Value::makeArray(buf, DataType::str()))
         },
         Some(DataType::arr(Generic::Type(DataType::str()))),
     );
@@ -58,13 +58,13 @@ pub fn setupFs(vm: &mut VirtualMachine) {
                 Ok(v) => {
                     let mut buf = 0;
                     if v.is_file() {
-                        buf += 1
+                        buf = 1
                     }
-                    if v.is_dir() {
-                        buf += 2
+                    else if v.is_dir() {
+                        buf = 2
                     }
-                    if v.is_symlink() {
-                        buf += 4
+                    else if v.is_symlink() {
+                        buf = 4
                     }
                     buf
                 }

@@ -106,11 +106,9 @@ fn genExpression(
             )
                 .into_boxed_str()
                 .into();
-            // println!("{:?}", fName);
-            // println!("{:?}", functionReturns);
-            let ret = functionReturns.get(&fName).unwrap().clone();
 
-            let argsLen = e.arguments.len();
+
+            let ret = functionReturns.get(&fName).unwrap().clone();
 
             out.push_str("({");
 
@@ -141,30 +139,6 @@ fn genExpression(
             }
 
             out.push_str("})");
-
-            /*
-            out.push_str(e.name.as_str());
-            out.push_str("(");
-
-            let argsLen = e.arguments.len();
-
-            for (i, arg) in e.arguments.into_iter().enumerate() {
-                let t = arg.toDataType(vTable, functionReturns, None)?;
-                match t {
-                    None => {
-                        return Err(Box::new(NoValue { msg: String::from("aahhh") }));
-                    }
-                    Some(v) => {
-                        genExpression(arg, out, functionReturns, vTable)?;
-                        if i != argsLen - 1 {
-                            out.push(',')
-                        }
-                    }
-                }
-            }
-            out.push_str(")");
-
-             */
         }
         Expression::Variable(v) => out.push_str(&v),
         Expression::CharLiteral(c) => {

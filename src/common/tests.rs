@@ -155,8 +155,8 @@ fn testMakeNativeFFI() {
 fn testOptimization() {
     {
         let a = Expression::ArithmeticOp {
-            left: box Expression::IntLiteral(String::from("4")),
-            right: box Expression::IntLiteral(String::from("4")),
+            left: Box::new(Expression::IntLiteral(String::from("4"))),
+            right:Box::new(Expression::IntLiteral(String::from("4"))),
             op: Op::Mul,
         };
         let res = crate::optimizer::evalE(&a);
@@ -166,12 +166,12 @@ fn testOptimization() {
 
     {
         let a = Expression::ArithmeticOp {
-            left: box Expression::Variable(String::from("abc")),
-            right: box Expression::ArithmeticOp {
-                left: box Expression::IntLiteral(String::from("4")),
-                right: box Expression::IntLiteral(String::from("4")),
-                op: Op::Mul,
-            },
+            left: Box::new(Expression::Variable(String::from("abc"))),
+            right: Box::new(Expression::ArithmeticOp {
+                            left: Box::new(Expression::IntLiteral(String::from("4"))),
+                            right: Box::new(Expression::IntLiteral(String::from("4"))),
+                            op: Op::Mul,
+                        }),
             op: Op::Add,
         };
         let res = crate::optimizer::evalE(&a);
@@ -179,8 +179,8 @@ fn testOptimization() {
         assert_eq!(
             res,
             Some(Expression::ArithmeticOp {
-                left: box Expression::Variable(String::from("abc")),
-                right: box Expression::IntLiteral(String::from("16")),
+                left: Box::new(Expression::Variable(String::from("abc"))),
+                right: Box::new(Expression::IntLiteral(String::from("16"))),
                 op: Op::Add,
             })
         );

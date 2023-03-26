@@ -167,7 +167,7 @@ fn main() {
         };
 
         let mut opCodes = SeekableOpcodes {
-            index: opcodeIndex as isize,
+            index: opcodeIndex,
             opCodes: &mut opcodes,
         };
 

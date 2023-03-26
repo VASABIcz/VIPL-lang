@@ -1,4 +1,4 @@
-use std::{ptr, rc};
+use std::{intrinsics, ptr, rc};
 use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -21,6 +21,12 @@ use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value::*;
+
+struct FastVec<T> {
+    cap: usize,
+    ptr: *mut T,
+    size: usize
+}
 
 #[derive(Debug, Clone, Eq)]
 pub enum MyStr {
@@ -277,6 +283,8 @@ pub enum OpCode {
     F2I,
     I2F,
     PushInt(isize),
+    PushIntOne(),
+    PushIntZero(),
     PushFloat(f32),
     PushBool(bool),
     PushChar(char),
@@ -427,7 +435,7 @@ pub struct MyClass {
 
 // TODO maybe null still retains object info
 #[derive(Clone, Debug)]
-#[repr(C)]
+// #[repr(C)]
 pub enum Value {
     Num(isize),
     Flo(f32),
@@ -462,7 +470,7 @@ impl Into<Expression> for Value {
 }
 
 impl Value {
-    #[inline]
+    #[inline(always)]
     pub fn getString(&self) -> &String {
         match self {
             Reference { instance } => match instance {
@@ -476,7 +484,7 @@ impl Value {
     #[inline]
     pub fn makeString(str: String) -> Value {
         Reference {
-            instance: Some(Rc::new(Str { string: str }.into())),
+            instance: Some(Rc::new(Str::new(str).into())),
         }
     }
 
@@ -520,15 +528,23 @@ impl Value {
 }
 
 impl Value {
-    #[inline]
-    pub fn getNum(&self) -> isize {
+    #[inline(always)]
+    pub fn getNum(self) -> isize {
+        match self {
+            Num(v) => v,
+            _ => panic!(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn getNumRef(&self) -> isize {
         match self {
             Num(v) => *v,
             _ => panic!(),
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getFlo(&self) -> f32 {
         match self {
             Flo(v) => *v,
@@ -536,7 +552,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getRefFlo(&mut self) -> &mut f32 {
         match self {
             Flo(v) => v,
@@ -544,7 +560,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getRefNum(&mut self) -> &mut isize {
         match self {
             Num(v) => v,
@@ -552,7 +568,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getRefBol(&mut self) -> &mut bool {
         match self {
             Bol(v) => v,
@@ -560,7 +576,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getBool(&self) -> bool {
         match self {
             Bol(v) => *v,
@@ -568,8 +584,7 @@ impl Value {
         }
     }
 
-    // FIXME c is sending some junk data fix ffi
-    #[inline]
+    #[inline(always)]
     pub fn getReference(&self) -> &Option<Rc<ViplObject>> {
         match self {
             Reference { instance } => instance,
@@ -577,7 +592,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getMutReference(&mut self) -> &mut Option<Rc<ViplObject>> {
         match self {
             Reference { instance } => instance,
@@ -585,7 +600,7 @@ impl Value {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getReferenceValue(self) -> Option<Rc<ViplObject>> {
         match self {
             Reference { instance } => instance,
@@ -618,7 +633,7 @@ impl Value {
     #[inline]
     pub fn gt(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
-            Int => self.getNum() > val.getNum(),
+            Int => self.getNumRef() > val.getNumRef(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
             Object { .. } => panic!(),
@@ -655,7 +670,7 @@ impl Value {
     #[inline]
     pub fn less(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
-            Int => self.getNum() < val.getNum(),
+            Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
             Object { .. } => panic!(),
@@ -666,11 +681,10 @@ impl Value {
     #[inline]
     pub fn refLess(&mut self, val: &Value, typ: &DataType) {
         let l = match typ {
-            Int => self.getNum() > val.getNum(),
+            Int => self.getNumRef() > val.getNumRef(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            Object { .. } => panic!(),
-            Char => panic!(),
+            _ => panic!()
         };
 
         *self = Bol(l)
@@ -679,7 +693,7 @@ impl Value {
     #[inline]
     pub fn refGt(&mut self, val: &Value, typ: &DataType) {
         let l = match typ {
-            Int => self.getNum() < val.getNum(),
+            Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
             Object { .. } => panic!(),
@@ -692,7 +706,7 @@ impl Value {
     #[inline]
     pub fn eq(&self, val: &Value, typ: &DataType) -> bool {
         match typ {
-            Int => self.getNum() == val.getNum(),
+            Int => self.getNumRef() == val.getNumRef(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
@@ -703,7 +717,7 @@ impl Value {
     #[inline]
     pub fn refEq(&mut self, val: &Value, typ: &DataType) {
         let x = match typ {
-            Int => self.getNum() == val.getNum(),
+            Int => self.getNumRef() == val.getNumRef(),
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
@@ -747,7 +761,7 @@ struct RcBox<T: ?Sized> {
 
 impl Value {
     #[inline]
-    pub fn add(&mut self, value: &Value, typ: &DataType) {
+    pub fn add(&mut self, value: Value, typ: &DataType) {
         match typ {
             Int => {
                 *self.getRefNum() += value.getNum();
@@ -790,7 +804,7 @@ impl Value {
     pub fn sub(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum() -= value.getNum();
+                *self.getRefNum() -= value.getNumRef();
             }
             Float => {
                 *self.getRefFlo() -= value.getFlo();
@@ -805,7 +819,7 @@ impl Value {
     pub fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum() *= value.getNum();
+                *self.getRefNum() *= value.getNumRef();
             }
             Float => {
                 *self.getRefFlo() *= value.getFlo();
@@ -820,7 +834,7 @@ impl Value {
     pub fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum() /= value.getNum();
+                *self.getRefNum() /= value.getNumRef();
             }
             Float => {
                 *self.getRefFlo() /= value.getFlo();
@@ -838,7 +852,7 @@ impl Value {
 
     #[inline]
     pub fn i2f(&mut self) -> Value {
-        Flo(self.getNum() as f32)
+        Flo(self.getNumRef() as f32)
     }
 }
 
@@ -954,7 +968,7 @@ impl VirtualMachine {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Func {
     pub name: String,
     pub returnType: Option<DataType>,
@@ -1011,10 +1025,67 @@ pub struct VirtualMachine {
     pub stack: Vec<Value>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
-    pub nativeLibraries: Vec<Library>
+    pub nativeLibraries: Vec<Library>,
+
+    pub cachedFunctions: Vec<Func>,
+    pub cachedFunctionsLookup: HashMap<MyStr, usize>
 }
 
+const DEBUG: bool = false;
+
 impl VirtualMachine {
+    #[inline(always)]
+    pub fn pop(&self) -> Value {
+        let mut res: &mut FastVec<Value> = unsafe { transmute(&self.stack as *const Vec<Value>) };
+        let mut buf: Value = unsafe { transmute([0u8; 16]) };
+        res.size -= 1;
+
+        unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
+
+        buf
+    }
+
+    pub fn callFast(&mut self, identifier: usize) {
+        let f = unsafe { self.cachedFunctions.get_unchecked(identifier) };
+        let mut locals = vec![Num(-1); f.varTable.len()];
+
+        for i in 0..(f.argAmount) {
+            let arg = self.stack.pop().unwrap();
+            locals[(f.argAmount - 1) - i] = arg;
+        }
+
+        let mut stack = StackFrame {
+            localVariables: &mut locals,
+            name: None,
+            objects: None,
+        };
+
+        let t = f.typ.clone();
+
+        // FIXME this is so much cursed
+        // FIXME i am bypassing all rust safety guaranties :)
+
+        let ptr = self as *mut VirtualMachine;
+
+        match t {
+            Runtime {
+                rangeStart: s,
+                rangeStop: _e,
+            } => unsafe {
+                let mut seekable = SeekableOpcodes {
+                    index: s,
+                    opCodes: &mut (*ptr).opCodes,
+                };
+                run(&mut seekable, &mut *ptr, &mut stack);
+            },
+            Native { callback } => callback(self, &mut stack),
+            Extern { callback } => {
+                stack.objects = Some(vec![]);
+                callback(self, &mut stack);
+            },
+        }
+    }
+
     #[inline]
     pub fn call(&mut self, name: MyStr) {
         let f = self.functions.get(&name).unwrap();
@@ -1044,7 +1115,7 @@ impl VirtualMachine {
                 rangeStop: _e,
             } => unsafe {
                 let mut seekable = SeekableOpcodes {
-                    index: s as isize,
+                    index: s,
                     opCodes: &mut (*ptr).opCodes,
                 };
                 run(&mut seekable, &mut *ptr, &mut stack);
@@ -1062,13 +1133,21 @@ impl VirtualMachine {
     pub fn new() -> Self {
         Self {
             functions: Default::default(),
-            stack: vec![],
+            stack: Vec::with_capacity(128),
             classes: Default::default(),
             opCodes: vec![],
             opCodeCache: vec![],
             nativeWrapper: NativeWrapper::new(),
             nativeLibraries: vec![],
+            cachedFunctions: vec![],
+            cachedFunctionsLookup: Default::default(),
         }
+    }
+
+    pub fn registerFunc(&mut self, fun: Func, name: MyStr) {
+        self.functions.insert(name.clone(), fun.clone());
+        self.cachedFunctions.push(fun);
+        self.cachedFunctionsLookup.insert(name, self.cachedFunctions.len()-1);
     }
 
     pub fn makeNative(
@@ -1080,16 +1159,15 @@ impl VirtualMachine {
     ) {
         let genName = genFunNameMeta(&name, &args, args.len());
         let l = args.len();
-        self.functions.insert(
-            MyStr::Runtime(genName.into_boxed_str()),
-            Func {
-                name,
-                returnType: ret,
-                varTable: args,
-                argAmount: l,
-                typ: Native { callback: fun },
-            },
-        );
+        let n = MyStr::Runtime(genName.into_boxed_str());
+        let f = Func {
+            name,
+            returnType: ret,
+            varTable: args,
+            argAmount: l,
+            typ: Native { callback: fun },
+        };
+        self.registerFunc(f, n);
     }
 
     pub fn makeExtern(
@@ -1101,16 +1179,15 @@ impl VirtualMachine {
     ) {
         let genName = genFunNameMeta(&name, &args, args.len());
         let l = args.len();
-        self.functions.insert(
-            MyStr::Runtime(genName.into_boxed_str()),
-            Func {
-                name,
-                returnType: ret,
-                varTable: args,
-                argAmount: l,
-                typ: Extern { callback: fun },
-            },
-        );
+        let n = MyStr::Runtime(genName.into_boxed_str());
+        let f =     Func {
+            name,
+            returnType: ret,
+            varTable: args,
+            argAmount: l,
+            typ: Extern { callback: fun },
+        };
+        self.registerFunc(f, n);
     }
 
     pub fn makeRuntime(
@@ -1135,24 +1212,23 @@ impl VirtualMachine {
             },
         };
 
-        self.functions
-            .insert(MyStr::Runtime(genName.into_boxed_str()), fun);
+        self.registerFunc(fun, MyStr::Runtime(genName.into_boxed_str()));
     }
 }
 
 pub struct SeekableOpcodes<'a> {
-    pub index: isize,
+    pub index: usize,
     pub opCodes: &'a mut [OpCode],
 }
 
 impl SeekableOpcodes<'_> {
-    #[inline]
+    #[inline(always)]
     pub fn seek(&mut self, offset: isize) {
         // FIXME boundary check
-        self.index += offset;
+        self.index = (self.index as isize + offset) as usize;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn nextOpcode(&mut self) -> (Option<&mut OpCode>, usize) {
         let n = self.opCodes.get_mut(self.index as usize);
         let i = self.index;
@@ -1161,7 +1237,7 @@ impl SeekableOpcodes<'_> {
         (n, i as usize)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
         self.opCodes.get(index)
     }
@@ -1255,17 +1331,19 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     ret.clone(),
                     0,
                 );
-                opCodes.index = index as isize;
+                opCodes.index = index;
             }
             F2I => {
-                let mut x = vm.stack.pop().unwrap();
+                let mut x = vm.pop();
                 vm.stack.push(x.f2i())
             }
             I2F => {
-                let mut x = vm.stack.pop().unwrap();
+                let mut x = vm.pop();
                 vm.stack.push(x.i2f())
             }
             PushInt(v) => vm.stack.push(Num(*v)),
+            PushIntOne() => vm.stack.push(Num(1)),
+            PushIntZero() => vm.stack.push(Num(1)),
             PushFloat(v) => vm.stack.push(Flo(*v)),
             PushBool(v) => vm.stack.push(Bol(*v)),
             Pop => {
@@ -1282,15 +1360,15 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     .push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
             }
             SetLocal { index, typ: _ } => {
-                let x = vm.stack.pop().unwrap();
+                let x = vm.pop();
                 *unsafe { stackFrame.localVariables.get_unchecked_mut(*index) } = x;
                 // println!("{:?}", stackFrame.localVariables.get(*index));
                 // stackFrame.get_mut().localVariables.insert(*index, x);
             }
             Jmp { offset, jmpType } => match jmpType {
                 JmpType::One => {
-                    vm.stack.pop().unwrap();
-                    let _b = vm.stack.pop().unwrap();
+                    vm.pop();
+                    let _b = vm.pop();
                     panic!()
                 }
                 JmpType::Zero => {}
@@ -1299,30 +1377,30 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     opCodes.seek(x);
                 }
                 JmpType::Gt => {
-                    let a = vm.stack.pop().unwrap();
-                    let b = vm.stack.pop().unwrap();
+                    let a = vm.pop();
+                    let b = vm.pop();
                     if a.gt(&b, &DataType::Float) {
                         let x = *offset;
                         opCodes.seek(x)
                     }
                 }
                 JmpType::Less => {
-                    let a = vm.stack.pop().unwrap();
-                    let b = vm.stack.pop().unwrap();
+                    let a = vm.pop();
+                    let b = vm.pop();
                     if a.less(&b, &DataType::Float) {
                         let x = *offset;
                         opCodes.seek(x)
                     }
                 }
                 JmpType::True => {
-                    let a = vm.stack.pop().unwrap();
+                    let a = vm.pop();
                     if a.getBool() {
                         let x = *offset;
                         opCodes.seek(x)
                     }
                 }
                 JmpType::False => {
-                    let a = vm.stack.pop().unwrap();
+                    let a = vm.pop();
                     if !a.getBool() {
                         let x = *offset;
                         opCodes.seek(x)
@@ -1330,8 +1408,6 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 }
             },
             Call { encoded } => unsafe {
-                // println!("function call {}", encoded);
-                // println!("stack size {}", vm.stack.len());
                 let cached = match &vm.opCodeCache.get_unchecked(index) {
                     Some(v) => match v {
                         CachedOpCode::CallCache {
@@ -1341,17 +1417,8 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         } => (stack, typ, argCount),
                     },
                     None => {
-                        // println!("{:?}", &vm.functions.keys());
-                        // println!("{}", encoded);
                         let f = vm.functions.get(&encoded).expect(&format!("function {} not found", &encoded));
-                        // println!("meta {:?}", f.varTable);
-                        let localVars = vec![Value::Num(-1); f.varTable.len()]; // Vec::with_capacity(f.varTable.len());
-
-                        /*
-                        for i in &*f.varTable {
-                            localVars.push(i.typ.toDefaultValue())
-                        }
-                        */
+                        let localVars = vec![Num(-1); f.varTable.len()];
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
                             locals: localVars.into(),
@@ -1375,7 +1442,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 
                 // println!("{}", encoded);
                 for i in 0..(*cached.2) {
-                    let arg = vm.stack.pop().unwrap();
+                    let arg = vm.pop();
                     cahedLocals[(cached.2 - 1) - i] = arg;
                 }
 
@@ -1392,9 +1459,9 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     } => {
                         let old = index + 1;
 
-                        opCodes.index = *s as isize;
+                        opCodes.index = *s;
                         run(opCodes, vm, &mut stack);
-                        opCodes.index = old as isize;
+                        opCodes.index = old;
                     }
                     Native { callback } => callback(vm, &mut stack),
                     Extern { callback } => {
@@ -1405,48 +1472,48 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             },
             Return => return,
             Add(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).add(&a, v);
+                vm.stack.get_unchecked_mut(l).add(a, v);
             },
             Sub(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).sub(&a, v);
             },
             Div(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).div(&a, v);
             },
             Mul(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 // println!("aaa {:?}", vm.stack.get(l));
                 vm.stack.get_unchecked_mut(l).mul(&a, v);
             },
             Equals(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).refEq(&a, v);
             },
             Greater(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).refGt(&a, &v);
             },
             Less(v) => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).refLess(&a, v);
             },
             Or => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).or(&a);
             },
             And => unsafe {
-                let a = vm.stack.pop().unwrap();
+                let a = vm.pop();
                 let l = vm.stack.len() - 1;
                 vm.stack.get_unchecked_mut(l).and(&a);
             },
@@ -1456,7 +1523,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             },
             ArrayNew(d) => {
                 // println!("{}", vm.stack.len());
-                let _size = vm.stack.pop().unwrap();
+                let _size = vm.pop();
                 vm.stack.push(Value::Reference {
                     instance: Some(Rc::new(
                         crate::objects::Array {
@@ -1468,9 +1535,9 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 })
             }
             ArrayStore(_) => {
-                let index = vm.stack.pop().unwrap().getNum();
-                let val = vm.stack.pop().unwrap();
-                match vm.stack.pop().unwrap() {
+                let index = vm.pop().getNum();
+                let val = vm.pop();
+                match vm.pop() {
                     Reference { instance } => unsafe {
                         let mut clon = instance.unwrap();
                         let ne = Rc::get_mut_unchecked(&mut clon);
@@ -1485,8 +1552,8 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 };
             }
             ArrayLoad(_) => {
-                let index = vm.stack.pop().unwrap().getNum();
-                match vm.stack.pop().unwrap() {
+                let index = vm.pop().getNum();
+                match vm.pop() {
                     Reference { instance } => {
                         let clon = instance.unwrap();
                         let e = clon.getArr();
@@ -1495,7 +1562,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     _ => panic!(),
                 };
             }
-            ArrayLength => match vm.stack.pop().unwrap().getReference() {
+            ArrayLength => match vm.pop().getReference() {
                 None => {}
                 Some(v) => {
                     vm.stack.push(Num(v.getArr().internal.len() as isize));
@@ -1510,7 +1577,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             PushChar(c) => vm.stack.push(Chr(*c)),
             StrNew(s) => vm.stack.push(Value::makeString(s.clone().to_string())),
             GetChar => {
-                let index = vm.stack.pop().unwrap().getNum();
+                let index = vm.pop().getNum();
 
                 let opIndex = vm.stack.len()-1;
 

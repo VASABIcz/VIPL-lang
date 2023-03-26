@@ -147,19 +147,19 @@ impl Expression {
                                     .ok_or("array type must have genneric type")?;
                                 Ok(Some(DataType::arr(e.clone())))
                             } else {
-                                Err(box InvalidTypeException {
+                                Err(Box::new(InvalidTypeException {
                                     expected: DataType::Object(ObjectMeta {
                                         name: MyStr::from("Array"),
                                         generics: Box::new([Any]),
                                     }),
                                     actual: Some(Object(o.clone())),
-                                })
+                                }))
                             }
                         }
-                        v => Err(box InvalidTypeException {
-                            expected: DataType::arr(Any),
-                            actual: Some(v),
-                        }),
+                        v => Err(Box::new(InvalidTypeException {
+                                                    expected: DataType::arr(Any),
+                                                    actual: Some(v),
+                                                })),
                     }
                 } else {
                     let t = e

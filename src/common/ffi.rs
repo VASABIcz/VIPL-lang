@@ -264,7 +264,7 @@ pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
     if DEBUG {
         println!("ffi-getLocalsInt");
     }
-    unsafe { vm.localVariables.get(index).unwrap() }.getNum()
+    unsafe { vm.localVariables.get(index).unwrap() }.getNumRef()
 }
 
 #[no_mangle]
@@ -296,11 +296,8 @@ pub extern fn getLocalsRef(locals: &mut StackFrame, index: usize) -> *mut ViplOb
     if DEBUG {
         println!("ffi-getLocalsRef");
     }
-    let rc = locals.localVariables.get(index).unwrap()
-        .getReference()
-        .clone()
-        .unwrap();
-    locals.addObject(rc.clone());
+    let rc = unsafe { locals.localVariables.get_unchecked(index) }.getReference().clone().unwrap();
+    // locals.addObject(rc.clone());
     Rc::into_raw(rc) as *mut ViplObject
 }
 
@@ -319,7 +316,7 @@ pub extern fn arrGetInt(vm: &mut VirtualMachine, obj: &mut ViplObject, index: us
         println!("ffi-arrGetInt");
     }
     match obj {
-        ViplObject::Arr(a) => a.internal.get(index).unwrap().getNum(),
+        ViplObject::Arr(a) => a.internal.get(index).unwrap().getNumRef(),
         _ => panic!(),
     }
 }
@@ -391,7 +388,15 @@ pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
     if DEBUG {
         println!("ffi-call: {}", name);
     }
-    vm.call(MyStr::Runtime(name.to_owned().into_boxed_str()));
+    vm.call(MyStr::Static(name));
+}
+
+#[no_mangle]
+pub extern fn callFast(vm: &mut VirtualMachine, id: usize) {
+    if DEBUG {
+        println!("ffi-callFast: {}", id);
+    }
+    vm.callFast(id);
 }
 
 #[no_mangle]
@@ -400,7 +405,7 @@ pub extern fn stringNew(vm: &mut VirtualMachine, locals: &mut StackFrame, s: *co
         println!("ffi-stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
-    let rc = Rc::new(ViplObject::Str(Str { string: st }));
+    let rc = Rc::new(ViplObject::Str(Str::new(st)));
 
     locals.addObject(rc.clone());
 
@@ -455,6 +460,7 @@ pub struct NativeWrapper {
     pub arrGetRef: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, usize) -> *mut ViplObject,
 
     pub call: extern fn(&mut VirtualMachine, *const c_char),
+    pub callFast: extern fn(&mut VirtualMachine, usize),
     pub stringNew: extern fn(&mut VirtualMachine, &mut StackFrame, *const c_char) -> *mut ViplObject,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
@@ -490,6 +496,7 @@ impl NativeWrapper {
             arrGetChar,
             arrGetRef,
             call,
+            callFast,
             stringNew,
             stringGetChar,
             strConcat,

@@ -11,8 +11,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 opt-level = 3
-strip = true
-debug = false
+strip = false
+debug = true
 
 [[bin]]
 name = "repl"

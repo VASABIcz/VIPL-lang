@@ -26,11 +26,6 @@ fn main() {
     let mut vm = bootStrapVM();
     // let mut localTypes = vec![];
     setupFs(&mut vm);
-    let mut functionReturns = HashMap::new();
-
-    for f in &vm.functions {
-        functionReturns.insert(f.0.clone(), f.1.returnType.clone());
-    }
 
     let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
@@ -73,7 +68,7 @@ fn main() {
         }
     };
 
-    // println!("{:?}", &bs.0);
+    println!("{:?}", &bs.0);
 
     /*
     match checkBytecode(&mut SeekableOpcodes {

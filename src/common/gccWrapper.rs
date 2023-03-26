@@ -34,6 +34,7 @@ typedef struct NativeWrapper {
   uint8_t (*arrGetChar)(struct VirtualMachine*, struct ViplObject*, uintptr_t);
   struct ViplObject *(*arrGetRef)(struct VirtualMachine*, struct StackFrame*, struct ViplObject*, uintptr_t);
   void (*call)(struct VirtualMachine*, const char*);
+  void (*callFast)(struct VirtualMachine*, uintptr_t);
   struct ViplObject *(*stringNew)(struct VirtualMachine*, struct StackFrame*, const char*);
   uint8_t (*stringGetChar)(struct VirtualMachine*, struct ViplObject*, uintptr_t);
   struct ViplObject *(*strConcat)(struct VirtualMachine*, struct StackFrame*, struct ViplObject*, struct ViplObject*);
@@ -51,6 +52,7 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
     let mut buf = String::new();
     buf.push_str(LIBRARY);
     buf.push_str(sc);
+    fs::write("test.c", &buf).expect("TODO: panic message");
 
     let ns = start.elapsed().as_nanos();
 
