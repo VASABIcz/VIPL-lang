@@ -47,7 +47,7 @@ fn countDir(path: String): int {
                 print(ft)
                 print("ERROR")
             }
-        }    println!("caled");
+        }
         i += 1
     }
     return counter
