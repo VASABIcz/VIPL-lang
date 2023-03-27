@@ -29,5 +29,5 @@ pub mod parser;
 pub mod std;
 pub mod vm;
 pub mod strCaching;
+pub mod rice;
 mod tests;
-mod rice;

@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::mem::{forget, transmute};
+use std::mem::{forget, ManuallyDrop, transmute};
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
@@ -16,6 +16,7 @@ use crate::ffi::NativeWrapper;
 use crate::objects::{ObjectDefinition, Str, ViplObject};
 use crate::parser::Operation::Expr;
 use crate::parser::parseDataType;
+use crate::rice::Rice;
 use crate::std::bootStrapVM;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -443,6 +444,26 @@ pub enum Value {
     Chr(char),
     Reference { instance: Option<Rc<ViplObject>> },
 }
+
+#[repr(C)]
+pub union ValueC {
+    pub Num: isize,
+    pub Flo: f64,
+    pub Bol: bool,
+    pub Chr: char,
+    pub Reference: ManuallyDrop<Rice<ViplObject>>,
+}
+
+/*
+impl Drop for ValueC {
+    fn drop(&mut self) {
+        println!("i am being dropped :(");
+        unsafe {
+            ManuallyDrop::drop(&mut self.Reference);
+        }
+    }
+}
+ */
 
 impl Value {
     #[inline]
