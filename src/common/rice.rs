@@ -2,6 +2,8 @@ use std::marker::PhantomData;
 use std::mem::{forget, size_of};
 use std::ops::Deref;
 
+const DEBUG: bool = true;
+
 pub struct RiceInner<T: ?Sized> {
     pub count: usize,
     pub data: T,
@@ -53,9 +55,15 @@ impl<T> Deref for Rice<T> {
 
 impl<T> Drop for Rice<T> {
     fn drop(&mut self) {
+        if DEBUG {
+            unsafe { println!("rice is being dropped {}", (*(self.inner)).count) }
+        }
         unsafe {
             (*self.inner).decrement();
             if (*self.inner).count == 0 {
+                if DEBUG {
+                    println!("deallocating rice");
+                }
                 drop(Box::from_raw(self.inner));
             }
         }
@@ -65,6 +73,9 @@ impl<T> Drop for Rice<T> {
 impl<T> Clone for Rice<T> {
     fn clone(&self) -> Self {
         unsafe { (*self.inner).increment() }
+        if DEBUG {
+            println!("incrementing rice");
+        }
         Self {
             inner: self.inner
         }
