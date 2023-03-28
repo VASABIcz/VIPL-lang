@@ -817,13 +817,13 @@ impl Value {
     }
 
     #[inline]
-    pub fn f2i(&mut self) -> Value {
-        Value{Num: self.getFlo() as isize}
+    pub fn f2i(&mut self) {
+        *self = (self.getFlo() as isize).into()
     }
 
     #[inline]
-    pub fn i2f(&mut self) -> Value {
-        (self.getNumRef() as f64).into()
+    pub fn i2f(&mut self) {
+        *self = (self.getNumRef() as f64).into()
     }
 }
 
@@ -995,6 +995,18 @@ impl VirtualMachine {
         unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
 
         buf
+    }
+
+    #[inline(always)]
+    pub fn getMutTop(&mut self) -> &mut Value {
+        let s = self.stack.len();
+        unsafe { self.stack.get_unchecked_mut(s - 1) }
+    }
+
+    #[inline(always)]
+    pub fn getTop(&self) -> &Value {
+        let s = self.stack.len();
+        unsafe { self.stack.get_unchecked(s - 1) }
     }
 
     pub fn callFast(&mut self, identifier: usize) {
@@ -1286,12 +1298,10 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 opCodes.index = index;
             }
             F2I => {
-                let mut x = vm.pop();
-                vm.stack.push(x.f2i())
+                vm.getMutTop().f2i()
             }
             I2F => {
-                let mut x = vm.pop();
-                vm.stack.push(x.i2f())
+                vm.getMutTop().f2i()
             }
             PushInt(v) => vm.stack.push(Value{Num: *v}),
             PushIntOne() => vm.stack.push(Value{Num: 1}),
@@ -1302,20 +1312,15 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 vm.stack.pop();
             }
             Dup => unsafe {
-                let val = vm.stack.get_unchecked(vm.stack.len() - 1);
+                let val = vm.getTop();
                 vm.stack.push(val.clone());
             },
             PushLocal { index } => {
-                // println!("{:?}", stackFrame.localVariables.get(*index));
-                // println!("loclas size {}", stackFrame.localVariables.len());
-                vm.stack
-                    .push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
+                vm.stack.push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
             }
             SetLocal { index, typ: _ } => {
                 let x = vm.pop();
                 *unsafe { stackFrame.localVariables.get_unchecked_mut(*index) } = x;
-                // println!("{:?}", stackFrame.localVariables.get(*index));
-                // stackFrame.get_mut().localVariables.insert(*index, x);
             }
             Jmp { offset, jmpType } => match jmpType {
                 JmpType::One => {
@@ -1423,72 +1428,48 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 }
             },
             Return => return,
-            Add(v) => unsafe {
+            Add(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).add(a, v);
+                vm.getMutTop().add(a, v);
             },
-            Sub(v) => unsafe {
+            Sub(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).sub(&a, v);
+                vm.getMutTop().sub(&a, v);
             },
-            Div(v) => unsafe {
+            Div(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).div(&a, v);
+                vm.getMutTop().div(&a, v);
             },
-            Mul(v) => unsafe {
+            Mul(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                // println!("aaa {:?}", vm.stack.get(l));
-                vm.stack.get_unchecked_mut(l).mul(&a, v);
+                vm.getMutTop().mul(&a, v);
             },
-            Equals(v) => unsafe {
+            Equals(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).refEq(&a, v);
+                vm.getMutTop().refEq(&a, v);
             },
-            Greater(v) => unsafe {
+            Greater(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).refGt(&a, &v);
+                vm.getMutTop().refGt(&a, &v);
             },
-            Less(v) => unsafe {
+            Less(v) => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).refLess(&a, v);
+                vm.getMutTop().refLess(&a, v);
             },
-            Or => unsafe {
+            Or => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).or(&a);
+                vm.getMutTop().or(&a);
             },
-            And => unsafe {
+            And => {
                 let a = vm.pop();
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).and(&a);
+                vm.getMutTop().and(&a);
             },
-            Not => unsafe {
-                let l = vm.stack.len() - 1;
-                vm.stack.get_unchecked_mut(l).not();
+            Not => {
+                vm.getMutTop().not();
             },
             ArrayNew(d) => {
-                // println!("{}", vm.stack.len());
                 let _size = vm.pop();
                 vm.stack.push(Value{Reference: ManuallyDrop::new(Rice::new(ViplObject::Arr(Array::new(d.clone()))))})
-                /*
-                vm.stack.push(Value::Reference {
-                    instance: Some(Rc::new(
-                        crate::objects::Array {
-                            internal: vec![],
-                            typ: d.clone(),
-                        }
-                            .into(),
-                    )),
-                })
-
-                 */
             }
             ArrayStore(_) => {
                 let index = vm.pop().getNum();
