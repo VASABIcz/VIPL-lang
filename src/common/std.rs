@@ -1,12 +1,14 @@
 use std::env::args;
+use std::mem::ManuallyDrop;
 use std::rc::Rc;
 
 use crate::lexer::TokenType::Var;
 use crate::objects::Str;
+use crate::rice::Rice;
 use crate::vm::*;
 use crate::vm::DataType::*;
 use crate::vm::OpCode::*;
-use crate::vm::Value::*;
+use crate::vm::Value;
 
 pub fn bootStrapVM() -> VirtualMachine {
     let mut vm = VirtualMachine::new();
@@ -18,6 +20,16 @@ pub fn bootStrapVM() -> VirtualMachine {
             typ: Int,
         }]),
         |_a, b| println!("{}", b.localVariables[0].getNumRef()),
+        None,
+    );
+
+    vm.makeNative(
+        String::from("print"),
+        Box::new([VariableMetadata {
+            name: MyStr::Static("Value"),
+            typ: Bool,
+        }]),
+        |_a, b| println!("{}", b.localVariables[0].getBool()),
         None,
     );
 
@@ -84,21 +96,8 @@ pub fn bootStrapVM() -> VirtualMachine {
         }]),
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            match c {
-                Num(_) => {}
-                Flo(_) => {}
-                Bol(_) => {}
-                Chr(_) => {}
-                Reference { instance } => match instance {
-                    None => {}
-                    Some(ee) => unsafe {
-                        let mut clon = ee.clone();
-                        let ne = Rc::get_mut_unchecked(&mut clon);
-                        let ff = ne.getStr();
-                        println!("{}", ff.string);
-                    },
-                },
-            }
+            let str = c.asRef().getStr();
+            println!("{}", str.string);
         },
         None,
     );
@@ -107,12 +106,7 @@ pub fn bootStrapVM() -> VirtualMachine {
         String::from("makeString"),
         Box::new([]),
         |a, _b| {
-            a.stack.push(Value::Reference {
-                instance: Some(Rc::new(
-                    Str::new("".to_string())
-                        .into(),
-                )),
-            })
+            a.stack.push(Value{Reference: ManuallyDrop::new(Rice::new(Str::new("".to_string()).into()))});
         },
         Some(DataType::str()),
     );
@@ -130,28 +124,9 @@ pub fn bootStrapVM() -> VirtualMachine {
             },
         ]),
         |_a, b| {
-            let chr = match b.localVariables.get(1).unwrap() {
-                Chr(c) => *c,
-                n => {
-                    panic!("{n:?}")
-                }
-            };
+            let chr = b.localVariables.get(1).unwrap().asChar();
             let str = b.localVariables.get_mut(0).unwrap();
-            match str {
-                Reference { instance } => match instance {
-                    None => {
-                        panic!()
-                    }
-                    Some(v) => unsafe {
-                        let ne = Rc::get_mut_unchecked(v);
-                        let e = ne.getMutStr();
-                        e.string.push(chr);
-                    },
-                },
-                ee => {
-                    panic!("{ee:?}");
-                }
-            }
+            str.asMutRef().getMutStr().string.push(chr);
         },
         None,
     );
@@ -162,15 +137,9 @@ pub fn bootStrapVM() -> VirtualMachine {
             name: MyStr::Static(""),
             typ: DataType::arr(Generic::Any),
         }]),
-        |vm, locals| match locals.localVariables.get_mut(0).unwrap() {
-            Reference { instance } => match instance {
-                None => panic!(),
-                Some(v) => unsafe {
-                    let v = v.getArr();
-                    vm.stack.push(Value::Num(v.internal.len() as isize))
-                },
-            },
-            _ => panic!(),
+        |vm, locals| {
+            let size = locals.localVariables.get_mut(0).unwrap().asRef().getArr().internal.len();
+            vm.stack.push(Value{Num: size as isize})
         },
         Some(DataType::Int),
     );
@@ -181,48 +150,34 @@ pub fn bootStrapVM() -> VirtualMachine {
             name: MyStr::Static(""),
             typ: DataType::str(),
         }]),
-        |vm, locals| match locals.localVariables.get_mut(0).unwrap() {
-            Reference { instance } => match instance {
-                None => panic!(),
-                Some(v) => unsafe {
-                    let a = v.getStr();
-                    vm.stack.push(Value::Num(a.string.len() as isize))
-                },
-            },
-            _ => panic!(),
+        |vm, locals| {
+            let size = locals.localVariables.get_mut(0).unwrap().asRef().getStr().string.len();
+            vm.stack.push(Value{Num: size as isize})
         },
         Some(DataType::Int),
     );
 
-    vm.makeNative(
-        "getChar".to_string(),
-        Box::new([
-            VariableMetadata {
-                name: MyStr::Static(""),
-                typ: DataType::str(),
-            },
-            VariableMetadata {
-                name: MyStr::Static(""),
-                typ: DataType::Int,
-            },
-        ]),
-        |vm, locals| {
-            let index = locals.localVariables.get(1).unwrap().getNumRef();
-            match locals.localVariables.get_mut(0).unwrap() {
-                Reference { instance } => match instance {
-                    None => panic!(),
-                    Some(v) => unsafe {
-                        let a = v.getStr();
-                        vm.stack.push(Value::Chr(
-                            *a.string.as_bytes().get_unchecked(index as usize) as char,
-                        ))
-                    },
+    unsafe {
+        vm.makeNative(
+            "getChar".to_string(),
+            Box::new([
+                VariableMetadata {
+                    name: MyStr::Static(""),
+                    typ: DataType::str(),
                 },
-                _ => panic!(),
-            }
-        },
-        Some(DataType::Char),
-    );
+                VariableMetadata {
+                    name: MyStr::Static(""),
+                    typ: DataType::Int,
+                },
+            ]),
+            |vm, locals| {
+                let index = locals.localVariables.get(1).unwrap().getNumRef();
+                let c = locals.localVariables.get(0).unwrap().Reference.getStr().string.as_bytes().get_unchecked(index as usize);
+                vm.stack.push(Value { Chr: *c as char })
+            },
+            Some(DataType::Char),
+        );
+    }
 
     vm.makeNative(
         "endsWith".to_string(),
@@ -237,26 +192,9 @@ pub fn bootStrapVM() -> VirtualMachine {
             },
         ]),
         |vm, locals| {
-            let sec = locals.localVariables.get(1).unwrap().clone();
-            match locals.localVariables.get_mut(0).unwrap() {
-                Reference { instance } => match instance {
-                    None => panic!(),
-                    Some(v) => unsafe {
-                        let e = v.getStr();
-                        match sec {
-                            Reference { instance } => match instance {
-                                None => panic!(),
-                                Some(k) => {
-                                    let c = k.getStr();
-                                    vm.stack.push(Value::Bol(e.string.ends_with(&c.string)))
-                                }
-                            },
-                            _ => panic!(),
-                        }
-                    },
-                },
-                _ => panic!(),
-            }
+            let sec = locals.localVariables.get(1).unwrap().asRef().getStr();
+            let str = locals.localVariables.get(0).unwrap().asRef().getStr();
+            vm.stack.push(Value{Bol: str.string.ends_with(&sec.string)});
         },
         Some(DataType::Bool),
     );

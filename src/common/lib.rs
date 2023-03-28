@@ -15,6 +15,8 @@
 // #[global_allocator]
 // static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+extern crate core;
+
 pub mod ast;
 pub mod bytecodeChecker;
 pub mod cGen;

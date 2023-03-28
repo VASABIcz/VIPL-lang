@@ -17,7 +17,7 @@ use rust_vm::parser::{parse, parseOne, parsingUnits, TokenProvider};
 use rust_vm::parser::ParsingUnitSearchType::{Ahead, Back};
 use rust_vm::rice::Rice;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{run, SeekableOpcodes, StackFrame, Value, ValueC};
+use rust_vm::vm::{run, SeekableOpcodes, StackFrame, Value};
 
 fn readInput() -> String {
     print!(">>> ");
@@ -39,9 +39,11 @@ fn handleError(err: Box<dyn Error>) {
 }
 
 fn main() {
+    println!("{}", size_of::<Value>());
+    /*
     println!("{}", size_of::<usize>());
     println!("{}", size_of::<Value>());
-    println!("{}", size_of::<ValueC>());
+    // println!("{}", size_of::<ValueC>());
     let x = 111;
     let y = 111;
     println!("{:#?}", (&x as *const i32));
@@ -57,4 +59,6 @@ fn main() {
     {
         println!("value should be droped already");
     }
+
+     */
 }

@@ -71,7 +71,7 @@ pub fn setupFs(vm: &mut VirtualMachine) {
                 Err(_) => 0,
             };
 
-            vm.stack.push(Value::Num(val))
+            vm.stack.push(Value::from(val))
         },
         Some(DataType::Int),
     );

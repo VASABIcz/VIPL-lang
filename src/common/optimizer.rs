@@ -19,7 +19,7 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
                     Op::And => a.and(&b),
                     Op::Or => a.or(&b)
                 };
-                Some(a.into())
+                Some(a.toExpression(&a.toDataType()))
             } else {
                 Some(Expression::ArithmeticOp {
                     left: Box::new(evalE(left).unwrap_or(*left.clone())),
@@ -63,17 +63,17 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
 
             Some(l)
         }
-        Expression::IntLiteral(n) => Some(Value::Num(n.parse::<isize>().unwrap())),
+        Expression::IntLiteral(n) => Some(n.parse::<isize>().unwrap().into()),
         Expression::LongLiteral(_) => None,
-        Expression::FloatLiteral(f) => Some(Value::Flo(f.parse::<f32>().unwrap())),
+        Expression::FloatLiteral(f) => Some(f.parse::<f64>().unwrap().into()),
         Expression::DoubleLiteral(_d) => None,
         Expression::StringLiteral(_) => None,
-        Expression::BoolLiteral(b) => Some(Value::Bol(*b)),
+        Expression::BoolLiteral(b) => Some((*b).into()),
         Expression::FunctionCall(_) => None,
         Expression::Variable(_) => None,
-        Expression::CharLiteral(c) => Some(Value::Chr(*c)),
+        Expression::CharLiteral(c) => Some((*c).into()),
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
-        Expression::NotExpression(_) => Some(Value::Bol(false)),
+        Expression::NotExpression(_) => Some(false.into()),
     }
 }

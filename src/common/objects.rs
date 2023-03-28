@@ -5,12 +5,12 @@ use std::fmt::Debug;
 
 use crate::vm::{DataType, Value};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub enum ViplObject {
     Arr(Array),
     Str(Str),
-    Runtime(Box<dyn Object>),
+    // Runtime(Box<dyn Object>),
 }
 
 unsafe impl Sync for ViplObject {
@@ -24,6 +24,14 @@ unsafe impl Send for ViplObject {
 impl ViplObject {
     #[inline]
     pub fn getArr(&self) -> &Array {
+        match self {
+            ViplObject::Arr(v) => v,
+            _ => panic!(),
+        }
+    }
+
+    #[inline]
+    pub fn toArr(self) -> Array {
         match self {
             ViplObject::Arr(v) => v,
             _ => panic!(),
@@ -67,7 +75,7 @@ impl ViplObject {
         match self {
             ViplObject::Arr(a) => a,
             ViplObject::Str(a) => a,
-            ViplObject::Runtime(v) => &**v,
+            // ViplObject::Runtime(v) => &**v,
         }
     }
 }
@@ -125,7 +133,7 @@ pub struct ObjectDefinition {
     pub mapping: HashMap<String, (usize, DataType)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Str {
     pub string: String,
@@ -178,11 +186,20 @@ impl Object for Str {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Array {
     pub internal: Vec<Value>,
     pub typ: DataType,
+}
+
+impl Array {
+    pub fn new(typ: DataType) -> Self {
+        Self {
+            internal: vec![],
+            typ,
+        }
+    }
 }
 
 impl Object for Array {

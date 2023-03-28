@@ -1,5 +1,5 @@
 
-fn native calc(max: int): int {
+fn calc(max: int): int {
     x = 0
 
     while x < max {

@@ -151,8 +151,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     }));
                 }
                 Some(dat) => {
-                    genExpression(r.constructCtx(&**left))?;
-                    genExpression(r.constructCtx(&**right))?;
+                    genExpression(r.constructCtx(left))?;
+                    genExpression(r.constructCtx(right))?;
                     let t = match op {
                         Op::Add => OpCode::Add(dat),
                         Op::Sub => OpCode::Sub(dat),
@@ -170,8 +170,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         }
         Expression::IntLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
         Expression::LongLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
-        Expression::FloatLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
-        Expression::DoubleLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f32>().unwrap())),
+        Expression::FloatLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
+        Expression::DoubleLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
         Expression::StringLiteral(i) => {
             r.ops
                 .push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
@@ -275,7 +275,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             }
         }
         Expression::NotExpression(e) => {
-            genExpression(r.constructCtx(&**e))?;
+            genExpression(r.constructCtx(e))?;
             ctx.ops.push(Not)
         }
     }
@@ -447,12 +447,14 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     return Err(Box::new(VariableNotFound { name: m.varName.clone() }));
                 }
                 Some(local) => {
-                    if let Some(v) = evalExpr(&m.expr) && let Some(f) = v.tryValueAsFloat() && f == 1f32 {
-                        ctx.ops.push(Inc { typ: v.toDataType(), index: local.1 })
-                    } else {
-                        let dataType = m.expr.toDataType(ctx.vTable, ctx.functionReturns, None)?.expect("expected return value");
-                        ctx.ops.push(PushLocal { index: local.1 });
-                        genExpression(ctx.makeExpressionCtx(&m.expr, None))?;
+                    let dataType = m.expr.toDataType(ctx.vTable, ctx.functionReturns, None)?.expect("expected return value");
+                    ctx.ops.push(PushLocal { index: local.1 });
+                    genExpression(ctx.makeExpressionCtx(&m.expr, None))?;
+              /*      if *ctx.ops.last().unwrap() == PushIntOne() {
+                        ctx.ops.pop();
+                        ctx.ops.push(Inc { typ: dataType, index: local.1 })
+                    }*/
+                    // else {
                         let op = match m.modType {
                             ModType::Add => Add(dataType.clone()),
                             ModType::Sub => Sub(dataType.clone()),
@@ -461,7 +463,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                         };
                         ctx.ops.push(op);
                         ctx.ops.push(SetLocal { index: local.1, typ: dataType })
-                    }
+                    // }
                 }
             }
         }

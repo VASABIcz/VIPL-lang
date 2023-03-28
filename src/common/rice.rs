@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use std::mem::{forget, size_of};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 const DEBUG: bool = true;
 
@@ -20,14 +20,20 @@ impl<T> RiceInner<T> {
 }
 
 pub struct Rice<T> {
-    pub inner: *mut RiceInner<T>
+    pub inner: *mut RiceInner<T>,
+    _marker: PhantomData<T>,
 }
 
 impl<T> Rice<T> {
+    pub fn increment_strong_count(this: &mut Self) {
+        unsafe { (&mut *this.inner).increment() }
+    }
+
     pub fn new(data: T) -> Self {
         let p = Box::leak(Box::new(RiceInner { count: 1, data }));
         Self {
-            inner: p
+            inner: p,
+            _marker: Default::default(),
         }
     }
 
@@ -40,7 +46,8 @@ impl<T> Rice<T> {
 
     pub unsafe fn fromRaw(ptr: *const T) -> Rice<T> {
         Self {
-            inner: ptr.byte_offset((size_of::<usize>()) as isize * -1) as *mut RiceInner<T>
+            inner: ptr.byte_offset((size_of::<usize>()) as isize * -1) as *mut RiceInner<T>,
+            _marker: Default::default(),
         }
     }
 }
@@ -50,6 +57,12 @@ impl<T> Deref for Rice<T> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { &(*self.inner).data }
+    }
+}
+
+impl<T> DerefMut for Rice<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut (*self.inner).data }
     }
 }
 
@@ -77,7 +90,8 @@ impl<T> Clone for Rice<T> {
             println!("incrementing rice");
         }
         Self {
-            inner: self.inner
+            inner: self.inner,
+            _marker: Default::default(),
         }
     }
 }

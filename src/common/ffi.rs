@@ -1,6 +1,6 @@
 use std::ffi::{c_char, CStr};
 use std::fmt::{Debug, Formatter};
-use std::mem::forget;
+use std::mem::{forget, ManuallyDrop};
 use std::ptr;
 use std::rc::Rc;
 use std::thread::{sleep, Thread};
@@ -8,6 +8,7 @@ use std::thread::{sleep, Thread};
 use crate::codegen::bytecodeGen;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::objects::{Str, ViplObject};
+use crate::rice::Rice;
 use crate::std::bootStrapVM;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 
@@ -152,7 +153,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
             &mut StackFrame {
                 // previous: None,
                 localVariables: &mut [],
-                name: None,
+                // name: None,
                 objects: None,
             },
         )
@@ -175,7 +176,7 @@ pub extern fn pushInt(vm: &mut VirtualMachine, v: isize) {
 }
 
 #[no_mangle]
-pub extern fn pushFloat(vm: &mut VirtualMachine, v: f32) {
+pub extern fn pushFloat(vm: &mut VirtualMachine, v: f64) {
     if DEBUG {
         println!("ffi-pushFloat {}", v);
     }
@@ -207,9 +208,10 @@ pub extern fn pushRef(vm: &mut VirtualMachine, v: *mut ViplObject) {
         // incrementing rc so that it doesnt get freed while being used by native function
 
         Rc::increment_strong_count(v);
-        let rc = Rc::from_raw(v);
-        vm.stack.push(Value::Reference {
-            instance: Some(rc),
+        let mut rc = Rice::fromRaw(v);
+        Rice::increment_strong_count(&mut rc);
+        vm.stack.push(Value {
+            Reference: ManuallyDrop::new(rc),
         });
     }
 }
@@ -223,7 +225,7 @@ pub extern fn popInt(vm: &mut VirtualMachine) -> isize {
 }
 
 #[no_mangle]
-pub extern fn popFloat(vm: &mut VirtualMachine) -> f32 {
+pub extern fn popFloat(vm: &mut VirtualMachine) -> f64 {
     if DEBUG {
         println!("ffi-popFloat");
     }
@@ -268,7 +270,7 @@ pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
 }
 
 #[no_mangle]
-pub extern fn getLocalsFloat(vm: &mut StackFrame, index: usize) -> f32 {
+pub extern fn getLocalsFloat(vm: &mut StackFrame, index: usize) -> f64 {
     if DEBUG {
         println!("ffi-getLocalsFloat");
     }
@@ -322,7 +324,7 @@ pub extern fn arrGetInt(vm: &mut VirtualMachine, obj: &mut ViplObject, index: us
 }
 
 #[no_mangle]
-pub extern fn arrGetFloat(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> f32 {
+pub extern fn arrGetFloat(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> f64 {
     if DEBUG {
         println!("ffi-arrGetFloat");
     }
@@ -436,25 +438,25 @@ pub extern fn strConcat(
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushInt: extern fn(&mut VirtualMachine, isize) -> (),
-    pub pushFloat: extern fn(&mut VirtualMachine, f32) -> (),
+    pub pushFloat: extern fn(&mut VirtualMachine, f64) -> (),
     pub pushBool: extern fn(&mut VirtualMachine, bool) -> (),
     pub pushChar: extern fn(&mut VirtualMachine, u8) -> (),
     pub pushRef: extern fn(&mut VirtualMachine, *mut ViplObject) -> (),
 
     pub popInt: extern fn(&mut VirtualMachine) -> isize,
-    pub popFloat: extern fn(&mut VirtualMachine) -> f32,
+    pub popFloat: extern fn(&mut VirtualMachine) -> f64,
     pub popBool: extern fn(&mut VirtualMachine) -> bool,
     pub popChar: extern fn(&mut VirtualMachine) -> u8,
     pub popRef: extern fn(&mut VirtualMachine, &mut StackFrame) -> *mut ViplObject,
 
     pub getLocalsInt: extern fn(&mut StackFrame, usize) -> isize,
-    pub getLocalsFloat: extern fn(&mut StackFrame, usize) -> f32,
+    pub getLocalsFloat: extern fn(&mut StackFrame, usize) -> f64,
     pub getLocalsBool: extern fn(&mut StackFrame, usize) -> bool,
     pub getLocalsChar: extern fn(&mut StackFrame, usize) -> u8,
     pub getLocalsRef: extern fn(&mut StackFrame, usize) -> *mut ViplObject,
 
     pub arrGetInt: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> isize,
-    pub arrGetFloat: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> f32,
+    pub arrGetFloat: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> f64,
     pub arrGetBool: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> bool,
     pub arrGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
     pub arrGetRef: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, usize) -> *mut ViplObject,

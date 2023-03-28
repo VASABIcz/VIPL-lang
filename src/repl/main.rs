@@ -162,7 +162,7 @@ fn main() {
 
         let mut stack = StackFrame {
             localVariables: &mut localValues,
-            name: None,
+            // name: None,
             objects: None,
         };
 
