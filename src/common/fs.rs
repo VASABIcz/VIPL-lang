@@ -1,6 +1,6 @@
-use std::ffi::OsString;
+
 use std::fs;
-use std::mem::transmute;
+
 use std::os::unix::fs::DirEntryExt2;
 
 use crate::vm::{DataType, Generic, MyStr, Value, VariableMetadata, VirtualMachine};
@@ -16,10 +16,10 @@ pub fn setupFs(vm: &mut VirtualMachine) {
             let path = locals.localVariables.first().unwrap().getString();
 
 
-            match fs::read_dir(&path) {
+            match fs::read_dir(path) {
                 Ok(v) => unsafe {
                     let arr = v.map(#[inline(always)] |it|{
-                        let mut refName = it.unwrap();
+                        let refName = it.unwrap();
                         Value::makeString(String::from(refName.file_name_ref().to_str().unwrap()), vm)
                     }).collect();
                     let a = Value::makeArray(arr, DataType::str(), vm);

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::env::args;
+
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
@@ -8,13 +8,13 @@ use Statement::Variable;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::lexer::*;
-use crate::optimizer::{evalE, evalExpr};
+use crate::optimizer::{evalE};
 use crate::parser::*;
 use crate::vm::{
-    DataType, evaluateBytecode, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode, Value,
+    DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, OpCode,
     VariableMetadata,
 };
-use crate::vm::DataType::{Bool, Int};
+use crate::vm::DataType::{Bool};
 use crate::vm::OpCode::*;
 
 #[derive(Debug)]
@@ -72,7 +72,7 @@ impl PartialExprCtx<'_> {
 }
 
 impl ExpressionCtx<'_> {
-    pub fn reduce<'a>(&'a mut self) -> (&Expression, PartialExprCtx<'a>) {
+    pub fn reduce(&mut self) -> (&Expression, PartialExprCtx<'_>) {
         let p = PartialExprCtx {
             ops: self.ops,
             functionReturns: self.functionReturns,
@@ -135,9 +135,9 @@ impl StatementCtx<'_> {
 
 fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
     let (e, mut r) = ctx.reduce();
-    let mut d = evalE(&e);
+    let mut d = evalE(e);
     let e = match &mut d {
-        None => &*e,
+        None => e,
         Some(v) => v,
     };
 
@@ -190,7 +190,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     }
                     Some(v) => {
                         argTypes.push(v);
-                        genExpression(r.constructCtx(&arg))?;
+                        genExpression(r.constructCtx(arg))?;
                     }
                 }
             }
@@ -312,7 +312,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     }
                     Some(v) => {
                         argTypes.push(v);
-                        genExpression(ctx.makeExpressionCtx(&arg, None))?;
+                        genExpression(ctx.makeExpressionCtx(arg, None))?;
                     }
                 }
             }
@@ -350,7 +350,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                         }));
                     }
                     Some(ve) => {
-                        genExpression(ctx.makeExpressionCtx(&e, Some(ve.clone())))?;
+                        genExpression(ctx.makeExpressionCtx(e, Some(ve.clone())))?;
                         // println!("{}", &v.name);
                         ctx.ops.push(OpCode::SetLocal {
                             index: ctx
@@ -382,7 +382,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
                     let mut bodyBuf = vec![];
                     for s in &w.body {
-                        let mut ctx2 = ctx.copy(&s);
+                        let mut ctx2 = ctx.copy(s);
                         ctx2.ops = &mut bodyBuf;
                         println!("{}", size);
                         ctx2.loopContext = Some(size);
@@ -404,7 +404,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         Statement::If(flow) => {
             let mut buf = vec![];
             for s in &flow.body {
-                let mut cop = ctx.copy(&s);
+                let mut cop = ctx.copy(s);
                 cop.ops = &mut buf;
                 genStatement(cop)?;
             }
@@ -425,7 +425,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 Some(els) => {
                     buf = vec![];
                     for s in els {
-                        let mut ctx1 = ctx.copy(&s);
+                        let mut ctx1 = ctx.copy(s);
                         ctx1.ops = &mut buf;
                         genStatement(ctx1)?;
                     }
@@ -473,7 +473,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             let t = right
                 .toDataType(ctx.vTable, ctx.functionReturns, None)?
                 .ok_or("cant assign void to array")?;
-            genExpression(ctx.makeExpressionCtx(&right, None))?;
+            genExpression(ctx.makeExpressionCtx(right, None))?;
             genExpression(ctx.makeExpressionCtx(&left.index, None))?;
             ctx.ops.push(ArrayStore(t))
         }
@@ -732,10 +732,10 @@ pub fn complexBytecodeGen(
             }
             Operation::Expr(e) => {
                 let ctx = ExpressionCtx {
-                    exp: &e,
+                    exp: e,
                     ops: &mut ops,
                     functionReturns,
-                    vTable: &mainLocals,
+                    vTable: mainLocals,
                     typeHint: None,
                 };
                 genExpression(ctx)?;

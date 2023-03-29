@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::marker::PhantomData;
+
 use std::ops::{Deref, DerefMut};
 
 const DEBUG: bool = false;
@@ -80,7 +80,7 @@ impl Heap {
 
         self.allocations.insert(ptr as usize);
 
-        return Hay::new(ptr)
+        Hay::new(ptr)
     }
 
     pub fn gc(&mut self, collected: HayCollector) {

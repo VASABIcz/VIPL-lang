@@ -116,13 +116,10 @@ pub fn parse(
                     {
                         *isPrevUser = true;
                         unit.parse(tokens, previous.clone(), parsingUnits)?
+                    } else if parserType == Around || parserType == Back {
+                        unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
                     } else {
-
-                        if parserType == Around || parserType == Back {
-                            unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
-                        } else {
-                            unit.parse(tokens, None, parsingUnits)?
-                        }
+                        unit.parse(tokens, None, parsingUnits)?
                     };
 
                 if parserType == Back {
@@ -144,13 +141,10 @@ pub fn parse(
                     {
                         *isPrevUser = true;
                         unit.parse(tokens, previous.clone(), parsingUnits)?
+                    } else if parserType == Around || parserType == Back {
+                        unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
                     } else {
-
-                        if parserType == Around || parserType == Back {
-                            unit.parse(tokens, opBuf.clone().take(), parsingUnits)?
-                        } else {
-                            unit.parse(tokens, None, parsingUnits)?
-                        }
+                        unit.parse(tokens, None, parsingUnits)?
                     };
 
                 if parserType == Back {

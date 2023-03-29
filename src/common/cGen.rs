@@ -6,11 +6,11 @@ use std::io::Write;
 use Statement::Variable;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
-use crate::lexer::*;
-use crate::optimizer::evalExpr;
+
+
 use crate::parser::*;
 use crate::vm::{
-    DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode,
+    DataType, genFunName, genFunNameMeta, MyStr, OpCode,
     VariableMetadata,
 };
 use crate::vm::DataType::{Bool, Int};
@@ -54,7 +54,7 @@ fn genExpression(
                         genExpression(*left, out, functionReturns, vTable)?;
                         out.push(',');
                         genExpression(*right, out, functionReturns, vTable)?;
-                        out.push_str(")");
+                        out.push(')');
 
                         return Ok(());
                     }
@@ -147,11 +147,12 @@ fn genExpression(
             out.push(c);
             out.push('\'');
         }
-        Expression::ArrayLiteral(i) => {
+        Expression::ArrayLiteral(_i) => {
             panic!();
+            /*
             out.push('{');
 
-            let d = i
+            let _d = i
                 .get(0)
                 .ok_or("array must have at least one element")?
                 .toDataType(vTable, functionReturns, None)?
@@ -165,6 +166,8 @@ fn genExpression(
             }
 
             out.push('}');
+
+             */
         }
         Expression::ArrayIndexing(i) => {
             let t = i.expr.toDataType(vTable, functionReturns, None)?.unwrap();
@@ -175,7 +178,7 @@ fn genExpression(
                         genExpression(i.expr, out, functionReturns, vTable)?;
                         out.push(',');
                         genExpression(i.index, out, functionReturns, vTable)?;
-                        out.push_str(")")
+                        out.push(')')
                     }
                     "Array" => {
                         let c = o.generics.first().unwrap();
@@ -191,7 +194,7 @@ fn genExpression(
                         genExpression(i.expr, out, functionReturns, vTable)?;
                         out.push(',');
                         genExpression(i.index, out, functionReturns, vTable)?;
-                        out.push_str(")")
+                        out.push(')')
                     }
                     _ => panic!(),
                 },
@@ -224,7 +227,7 @@ fn genStatement(
     out: &mut String,
     functionReturns: &HashMap<MyStr, Option<DataType>>,
     vTable: &HashMap<MyStr, (DataType, usize)>,
-    loopContext: Option<usize>,
+    _loopContext: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
     match statement {
         Statement::FunctionExpr(e) => {
@@ -305,7 +308,7 @@ fn genStatement(
                             msg: String::from("idk"),
                         }));
                     }
-                    Some(ve) => {
+                    Some(_ve) => {
                         out.push_str(&v.name);
                         out.push('=');
                         genExpression(e, out, functionReturns, vTable)?;
@@ -322,7 +325,7 @@ fn genStatement(
             for s in w.body {
                 genStatement(s, out, functionReturns, vTable, None)?;
             }
-            out.push_str("}");
+            out.push('}');
         }
         Statement::If(flow) => {
             out.push_str("if(");
@@ -333,7 +336,7 @@ fn genStatement(
                 genStatement(s, out, functionReturns, vTable, None)?;
             }
 
-            out.push_str("}");
+            out.push('}');
 
             match flow.elseBody {
                 None => {}
@@ -344,7 +347,7 @@ fn genStatement(
                         genStatement(s, out, functionReturns, vTable, None)?;
                     }
 
-                    out.push_str("}");
+                    out.push('}');
                 }
             }
         }
@@ -385,14 +388,17 @@ fn genStatement(
             genExpression(m.expr, out, functionReturns, vTable)?;
             out.push(';');
         }
-        Statement::ArrayAssign { left, right } => {
+        Statement::ArrayAssign { left: _, right: _ } => {
             panic!();
+            /*
             genExpression(left.expr, out, functionReturns, vTable)?;
             out.push('[');
             genExpression(left.index, out, functionReturns, vTable)?;
             out.push_str("] = ");
             genExpression(right, out, functionReturns, vTable)?;
             out.push(';');
+
+             */
         }
         Statement::Continue => out.push_str("continue;"),
         Statement::Break => out.push_str("break;"),
@@ -416,7 +422,7 @@ pub fn genFunctionDef(
         None => {
             out.push_str("void");
         }
-        Some(v) => {
+        Some(_v) => {
             out.push_str("void");
             // out.push_str(&v.toString());
         }
@@ -463,7 +469,7 @@ pub fn genFunctionDef(
         genStatement(a, out, functionReturns, &e, None)?;
     }
 
-    out.push_str("}");
+    out.push('}');
 
     Ok(())
 }
@@ -548,7 +554,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
                 Node::FunctionDef(v) => {
                     genFunctionDef(v.clone(), &mut out, &functionReturns)?;
                 }
-                Node::StructDef(v) => {
+                Node::StructDef(_v) => {
                     panic!()
                     //genStructDef(v.clone(), &mut out, &functionReturns, &mut structs)?;
                 }
@@ -673,7 +679,7 @@ pub fn bytecodeGen2(
                 Node::FunctionDef(v) => {
                     genFunctionDef(v.clone(), &mut out, functionReturns)?;
                 }
-                Node::StructDef(v) => {
+                Node::StructDef(_v) => {
                     panic!();
                     // genStructDef(v.clone(), &mut out, functionReturns, &mut structs)?;
                 }
@@ -702,7 +708,7 @@ pub fn bytecodeGen2(
         }
     }
 
-    out.push_str("}");
+    out.push('}');
 
     Ok(out)
 }

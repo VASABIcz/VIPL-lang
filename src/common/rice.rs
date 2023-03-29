@@ -26,7 +26,7 @@ pub struct Rice<T> {
 
 impl<T> Rice<T> {
     pub fn increment_strong_count(this: &mut Self) {
-        unsafe { (&mut *this.inner).increment() }
+        unsafe { (*this.inner).increment() }
     }
 
     pub fn new(data: T) -> Self {
@@ -46,7 +46,7 @@ impl<T> Rice<T> {
 
     pub unsafe fn fromRaw(ptr: *const T) -> Rice<T> {
         Self {
-            inner: ptr.byte_offset((size_of::<usize>()) as isize * -1) as *mut RiceInner<T>,
+            inner: ptr.byte_offset(-((size_of::<usize>()) as isize)) as *mut RiceInner<T>,
             _marker: Default::default(),
         }
     }

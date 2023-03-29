@@ -2,7 +2,7 @@ use std::env::temp_dir;
 use std::error::Error;
 use std::fs;
 use std::process::Command;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant};
 
 static LIBRARY: &str =
     "#include <stdbool.h>
@@ -61,11 +61,11 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
     let b1 = p.join(format!("vipl-srcFile-{}.so", ns));
     let soPath = b1.to_str().ok_or("failed to conver .so path to str")?;
 
-    fs::write(&cPath, buf)?;
+    fs::write(cPath, buf)?;
 
     let cmd = format!("gcc -Ofast -march=native -shared -o {} -fPIC {}", soPath, cPath);
 
-    let e: Vec<&str> = cmd.split(" ").collect();
+    let e: Vec<&str> = cmd.split(' ').collect();
 
     let res = Command::new(e.first().unwrap())
         .args(&e[1..e.len()])

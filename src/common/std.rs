@@ -1,10 +1,10 @@
-use std::env::args;
-use std::mem::ManuallyDrop;
-use std::rc::Rc;
 
-use crate::lexer::TokenType::Var;
+
+
+
+
 use crate::objects::{Str, ViplObject};
-use crate::rice::Rice;
+
 use crate::vm::*;
 use crate::vm::DataType::*;
 use crate::vm::OpCode::*;
@@ -220,7 +220,7 @@ pub fn bootStrapVM() -> VirtualMachine {
             let name = locals.localVariables.get(1).unwrap().getString();
             let argCount = locals.localVariables.get(2).unwrap().getNumRef();
 
-            vm.loadRawNative(&path, &name, None, argCount as usize)
+            vm.loadRawNative(path, name, None, argCount as usize)
         },
         None,
     );

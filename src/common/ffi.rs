@@ -1,13 +1,13 @@
 use std::ffi::{c_char, CStr};
 use std::fmt::{Debug, Formatter};
-use std::mem::{forget, ManuallyDrop};
+use std::mem::{forget};
 use std::ptr;
-use std::thread::{sleep, Thread};
+
 
 use crate::codegen::bytecodeGen;
 use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
-use crate::objects::{Str, ViplObject};
+use crate::objects::{ViplObject};
 use crate::std::bootStrapVM;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 
@@ -24,7 +24,7 @@ pub extern fn createVm() -> *mut VirtualMachine {
 
 #[no_mangle]
 pub extern fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
-    vm.stack.push(value.clone());
+    vm.stack.push(*value);
 }
 
 #[no_mangle]
@@ -249,7 +249,7 @@ pub extern fn popBool(vm: &mut VirtualMachine) -> bool {
 }
 
 #[no_mangle]
-pub extern fn popRef(vm: &mut VirtualMachine, locals: &mut StackFrame) -> *mut ViplObject {
+pub extern fn popRef(vm: &mut VirtualMachine, _locals: &mut StackFrame) -> *mut ViplObject {
     if DEBUG {
         println!("ffi-popRef");
     }
@@ -301,16 +301,16 @@ pub extern fn getLocalsRef(locals: &mut StackFrame, index: usize) -> *mut ViplOb
 }
 
 #[no_mangle]
-pub extern fn stringGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
+pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
     if DEBUG {
         // println!("ffi-stringGetChar");
     }
 
-    *obj.getStr().string.as_bytes().get(index).unwrap() as u8
+    *obj.getStr().string.as_bytes().get(index).unwrap()
 }
 
 #[no_mangle]
-pub extern fn arrGetInt(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> isize {
+pub extern fn arrGetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> isize {
     if DEBUG {
         println!("ffi-arrGetInt");
     }
@@ -321,7 +321,7 @@ pub extern fn arrGetInt(vm: &mut VirtualMachine, obj: &mut ViplObject, index: us
 }
 
 #[no_mangle]
-pub extern fn arrGetFloat(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> f64 {
+pub extern fn arrGetFloat(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> f64 {
     if DEBUG {
         println!("ffi-arrGetFloat");
     }
@@ -332,7 +332,7 @@ pub extern fn arrGetFloat(vm: &mut VirtualMachine, obj: &mut ViplObject, index: 
 }
 
 #[no_mangle]
-pub extern fn arrGetBool(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> bool {
+pub extern fn arrGetBool(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> bool {
     if DEBUG {
         println!("ffi-arrGetBool");
     }
@@ -343,7 +343,7 @@ pub extern fn arrGetBool(vm: &mut VirtualMachine, obj: &mut ViplObject, index: u
 }
 
 #[no_mangle]
-pub extern fn arrGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
+pub extern fn arrGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
     if DEBUG {
         println!("ffi-arrGetChar");
     }
@@ -355,8 +355,8 @@ pub extern fn arrGetChar(vm: &mut VirtualMachine, obj: &mut ViplObject, index: u
 
 #[no_mangle]
 pub extern fn arrGetRef(
-    vm: &mut VirtualMachine,
-    locals: &mut StackFrame,
+    _vm: &mut VirtualMachine,
+    _locals: &mut StackFrame,
     obj: &mut ViplObject,
     index: usize,
 ) -> *mut ViplObject {
@@ -397,7 +397,7 @@ pub extern fn callFast(vm: &mut VirtualMachine, id: usize) {
 }
 
 #[no_mangle]
-pub extern fn stringNew(vm: &mut VirtualMachine, locals: &mut StackFrame, s: *const c_char) -> *mut ViplObject {
+pub extern fn stringNew(vm: &mut VirtualMachine, _locals: &mut StackFrame, s: *const c_char) -> *mut ViplObject {
     if DEBUG {
         println!("ffi-stringNew");
     }
@@ -410,7 +410,7 @@ pub extern fn stringNew(vm: &mut VirtualMachine, locals: &mut StackFrame, s: *co
 #[no_mangle]
 pub extern fn strConcat(
     vm: &mut VirtualMachine,
-    locals: &mut StackFrame,
+    _locals: &mut StackFrame,
     s1: &mut ViplObject,
     s2: &mut ViplObject,
 ) -> *mut ViplObject {
@@ -462,7 +462,7 @@ pub struct NativeWrapper {
 }
 
 impl Debug for NativeWrapper {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }

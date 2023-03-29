@@ -28,10 +28,10 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
                 })
             }
         }
-        Expression::IntLiteral(n) => Some(exp.clone()),
-        Expression::FloatLiteral(f) => Some(exp.clone()),
-        Expression::BoolLiteral(b) => Some(exp.clone()),
-        Expression::CharLiteral(c) => Some(exp.clone()),
+        Expression::IntLiteral(_n) => Some(exp.clone()),
+        Expression::FloatLiteral(_f) => Some(exp.clone()),
+        Expression::BoolLiteral(_b) => Some(exp.clone()),
+        Expression::CharLiteral(_c) => Some(exp.clone()),
         Expression::NotExpression(_) => Some(exp.clone()),
         Expression::LongLiteral(_) => None,
         Expression::DoubleLiteral(_d) => None,

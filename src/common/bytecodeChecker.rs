@@ -57,7 +57,7 @@ pub fn checkFunction(
     vm: &mut VirtualMachine,
     checkedFunctions: &mut HashSet<Box<str>>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut index = opCodes.index as usize;
+    let mut index = opCodes.index;
     let name = match opCodes.getOpcode(index).unwrap() {
         FunName { name } => name,
         _v => {

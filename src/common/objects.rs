@@ -156,17 +156,17 @@ impl Str {
     }
 }
 
-impl Into<ViplObject> for Str {
+impl From<Str> for ViplObject {
     #[inline]
-    fn into(self) -> ViplObject {
-        ViplObject::Str(self)
+    fn from(val: Str) -> Self {
+        ViplObject::Str(val)
     }
 }
 
-impl Into<ViplObject> for Array {
+impl From<Array> for ViplObject {
     #[inline]
-    fn into(self) -> ViplObject {
-        ViplObject::Arr(self)
+    fn from(val: Array) -> Self {
+        ViplObject::Arr(val)
     }
 }
 
@@ -221,7 +221,7 @@ impl Array {
 impl Allocation for Array {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
         allocations.visit(self as *const Self as usize);
-        if let DataType::Object(a) = &self.typ {
+        if let DataType::Object(_a) = &self.typ {
             for obj in &self.internal {
                 obj.asRef();
             }

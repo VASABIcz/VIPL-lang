@@ -1,25 +1,26 @@
-use std::{intrinsics, ptr, rc};
-use std::borrow::BorrowMut;
-use std::cell::Cell;
+use std::{intrinsics, ptr};
+
+
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::mem::{forget, ManuallyDrop, transmute};
-use std::rc::Rc;
-use std::thread::sleep;
-use std::time::Duration;
+use std::mem::{transmute};
+
+
+
 
 use libloading::{Library, Symbol};
 
-use crate::ast::{Expression, Op};
+use crate::ast::{Expression};
 use crate::ffi::NativeWrapper;
 use crate::heap::{Allocation, Hay, HayCollector, Heap};
 use crate::objects::{Array, ObjectDefinition, ViplObject};
 use crate::objects::Str;
-use crate::parser::Operation::Expr;
-use crate::parser::parseDataType;
-use crate::rice::Rice;
+
+
+
 use crate::std::bootStrapVM;
+
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
@@ -526,7 +527,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn makeObject(obj: Box<dyn crate::objects::Object>) -> Value {
+    pub fn makeObject(_obj: Box<dyn crate::objects::Object>) -> Value {
         todo!();
         // Value{Reference: ManuallyDrop::new(Rice::new(ViplObject::Runtime(Box::leak(obj))))}
     }
@@ -545,7 +546,7 @@ impl Value {
 impl Value {
     #[inline(always)]
     pub fn getNum(self) -> isize {
-        return self.asNum()
+        self.asNum()
     }
 
     #[inline(always)]
@@ -849,13 +850,13 @@ impl StackFrame<'_> {
     }
 }
 
-pub fn parseDataTypeFromStr(s: &str) {
+pub fn parseDataTypeFromStr(_s: &str) {
     // Array<Array<Array<int>>>
     // Array<Array<Array
     panic!()
 }
 
-pub fn decodeFunctionString(s: &str) {
+pub fn decodeFunctionString(_s: &str) {
     panic!()
 }
 
@@ -926,7 +927,7 @@ pub enum FuncType {
 impl Debug for FuncType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Runtime { rangeStart, rangeStop } => {
+            Runtime { rangeStart, rangeStop: _ } => {
                 write!(f, "runtime func {:?}", rangeStart)
             }
             Native { callback } => {
@@ -970,8 +971,8 @@ const DEBUG: bool = false;
 impl VirtualMachine {
     #[inline(always)]
     pub fn pop(&self) -> Value {
-        let mut res: &mut FastVec<Value> = unsafe { transmute(&self.stack as *const Vec<Value>) };
-        let mut buf: Value = unsafe { transmute([0u8; 8]) };
+        let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
+        let mut buf: Value = Value{Num: 0};
         res.size -= 1;
 
         unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
@@ -1193,11 +1194,11 @@ impl SeekableOpcodes<'_> {
 
     #[inline(always)]
     pub fn nextOpcode(&mut self) -> (Option<&mut OpCode>, usize) {
-        let n = self.opCodes.get_mut(self.index as usize);
+        let n = self.opCodes.get_mut(self.index);
         let i = self.index;
         self.index += 1;
 
-        (n, i as usize)
+        (n, i)
     }
 
     #[inline(always)]
@@ -1254,7 +1255,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
         // println!("evaluating {:?}", op);
         match op {
             FunBegin => {
-                let mut index = opCodes.index as usize;
+                let mut index = opCodes.index;
                 let name = match opCodes.getOpcode(index).unwrap() {
                     FunName { name } => name,
                     v => panic!("{v:?}"),
@@ -1373,7 +1374,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         } => (stack, typ, argCount),
                     },
                     None => {
-                        let f = vm.functions.get(&encoded).expect(&format!("function {} not found", &encoded));
+                        let f = vm.functions.get(encoded).unwrap_or_else(|| panic!("function {} not found", &encoded));
                         let localVars = vec![Value{Num: 0}; f.varTable.len()];
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
@@ -1432,7 +1433,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 let a = vm.pop();
                 let c = vm.getMutTop() as *mut Value;
 
-                (&mut *c).add(a, v, vm);
+                (*c).add(a, v, vm);
             },
             Sub(v) => {
                 let a = vm.pop();
@@ -1452,7 +1453,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             },
             Greater(v) => {
                 let a = vm.pop();
-                vm.getMutTop().refGt(&a, &v);
+                vm.getMutTop().refGt(&a, v);
             },
             Less(v) => {
                 let a = vm.pop();

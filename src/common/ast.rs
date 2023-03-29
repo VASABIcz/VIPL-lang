@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
 use crate::bytecodeChecker::InvalidTypeException;
-use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, OpCode, VariableMetadata};
+use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 use crate::vm::Generic::Any;
 
@@ -151,7 +151,7 @@ impl Expression {
                                         name: MyStr::from("Array"),
                                         generics: Box::new([Any]),
                                     }),
-                                    actual: Some(Object(o.clone())),
+                                    actual: Some(Object(o)),
                                 }))
                             }
                         }
