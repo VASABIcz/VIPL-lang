@@ -33,3 +33,4 @@ pub mod vm;
 pub mod strCaching;
 pub mod rice;
 mod tests;
+mod heap;

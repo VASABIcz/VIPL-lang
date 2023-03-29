@@ -2,15 +2,24 @@ use std::any::Any;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use crate::heap::{Allocation, HayCollector};
 
 use crate::vm::{DataType, Value};
 
 #[derive(Debug, Clone)]
-#[repr(C)]
 pub enum ViplObject {
     Arr(Array),
     Str(Str),
     // Runtime(Box<dyn Object>),
+}
+
+impl Allocation for ViplObject {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        match self {
+            ViplObject::Arr(v) => v.collectAllocations(allocations),
+            ViplObject::Str(v) => v.collectAllocations(allocations)
+        }
+    }
 }
 
 unsafe impl Sync for ViplObject {
@@ -80,7 +89,7 @@ impl ViplObject {
     }
 }
 
-pub trait Object: Debug + Any {
+pub trait Object: Debug + Any + Allocation {
     fn getName(&self) -> String;
     fn getFields(&self) -> &[DataType];
     fn setField(&mut self, field: usize, value: Value);
@@ -170,6 +179,13 @@ impl Drop for Str {
 
  */
 
+impl Allocation for Str {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        println!("str ptr {}", self as *const Self as usize);
+        allocations.visit(self as *const Self as usize)
+    }
+}
+
 impl Object for Str {
     fn getName(&self) -> String {
         String::from("String")
@@ -198,6 +214,17 @@ impl Array {
         Self {
             internal: vec![],
             typ,
+        }
+    }
+}
+
+impl Allocation for Array {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        allocations.visit(self as *const Self as usize);
+        if let DataType::Object(a) = &self.typ {
+            for obj in &self.internal {
+                obj.asRef();
+            }
         }
     }
 }

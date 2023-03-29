@@ -2,13 +2,12 @@ use std::ffi::{c_char, CStr};
 use std::fmt::{Debug, Formatter};
 use std::mem::{forget, ManuallyDrop};
 use std::ptr;
-use std::rc::Rc;
 use std::thread::{sleep, Thread};
 
 use crate::codegen::bytecodeGen;
+use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::objects::{Str, ViplObject};
-use crate::rice::Rice;
 use crate::std::bootStrapVM;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
 
@@ -155,6 +154,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
                 localVariables: &mut [],
                 // name: None,
                 objects: None,
+                previous: None,
             },
         )
     }
@@ -207,11 +207,11 @@ pub extern fn pushRef(vm: &mut VirtualMachine, v: *mut ViplObject) {
     unsafe {
         // incrementing rc so that it doesnt get freed while being used by native function
 
-        Rc::increment_strong_count(v);
-        let mut rc = Rice::fromRaw(v);
-        Rice::increment_strong_count(&mut rc);
+        // Rc::increment_strong_count(v);
+        // let mut rc = Rice::fromRaw(v);
+        // Rice::increment_strong_count(&mut rc);
         vm.stack.push(Value {
-            Reference: ManuallyDrop::new(rc),
+            Reference: Hay::new(v),
         });
     }
 }
@@ -221,7 +221,7 @@ pub extern fn popInt(vm: &mut VirtualMachine) -> isize {
     if DEBUG {
         println!("ffi-popInt");
     }
-    vm.stack.pop().unwrap().getNum()
+    vm.pop().getNum()
 }
 
 #[no_mangle]
@@ -229,7 +229,7 @@ pub extern fn popFloat(vm: &mut VirtualMachine) -> f64 {
     if DEBUG {
         println!("ffi-popFloat");
     }
-    vm.stack.pop().unwrap().getFlo()
+    vm.pop().getFlo()
 }
 
 #[no_mangle]
@@ -237,7 +237,7 @@ pub extern fn popChar(vm: &mut VirtualMachine) -> u8 {
     if DEBUG {
         println!("ffi-popChar");
     }
-    vm.stack.pop().unwrap().getChar() as u8
+    vm.pop().getChar() as u8
 }
 
 #[no_mangle]
@@ -245,7 +245,7 @@ pub extern fn popBool(vm: &mut VirtualMachine) -> bool {
     if DEBUG {
         println!("ffi-popBool");
     }
-    vm.stack.pop().unwrap().getBool()
+    vm.pop().getBool()
 }
 
 #[no_mangle]
@@ -253,12 +253,9 @@ pub extern fn popRef(vm: &mut VirtualMachine, locals: &mut StackFrame) -> *mut V
     if DEBUG {
         println!("ffi-popRef");
     }
-    let rc = vm.stack.pop().unwrap().getReference().clone().unwrap();
+    let mut rc = vm.pop();
 
-    locals.addObject(rc.clone());
-
-    let ptr = Rc::into_raw(rc);
-    ptr as *mut ViplObject
+    rc.asMutRef() as *mut ViplObject
 }
 
 #[no_mangle]
@@ -298,9 +295,9 @@ pub extern fn getLocalsRef(locals: &mut StackFrame, index: usize) -> *mut ViplOb
     if DEBUG {
         println!("ffi-getLocalsRef");
     }
-    let rc = unsafe { locals.localVariables.get_unchecked(index) }.getReference().clone().unwrap();
-    // locals.addObject(rc.clone());
-    Rc::into_raw(rc) as *mut ViplObject
+    let rc = unsafe { locals.localVariables.get_unchecked_mut(index) }.getMutReference();
+
+    rc as *mut ViplObject
 }
 
 #[no_mangle]
@@ -372,13 +369,11 @@ pub extern fn arrGetRef(
                 .internal
                 .get(index)
                 .unwrap()
-                .getReference()
-                .clone()
-                .unwrap();
+                .asHay();
 
-            locals.addObject(rc.clone());
+            // locals.addObject(rc);
 
-            Rc::into_raw(rc) as *mut ViplObject
+            rc.inner
         }
         _ => panic!(),
     }
@@ -407,11 +402,9 @@ pub extern fn stringNew(vm: &mut VirtualMachine, locals: &mut StackFrame, s: *co
         println!("ffi-stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
-    let rc = Rc::new(ViplObject::Str(Str::new(st)));
+    let mut a = Value::makeString(st, vm);
 
-    locals.addObject(rc.clone());
-
-    Rc::into_raw(rc) as *mut ViplObject
+    a.asMutRef() as *mut ViplObject
 }
 
 #[no_mangle]
@@ -429,10 +422,10 @@ pub extern fn strConcat(
     s3.push_str(&s2.getStr().string);
 
     // FIXME not sure if this is needed
-    let rc = Rc::new(ViplObject::Str(Str { string: s3 }));
-    locals.addObject(rc.clone());
+    let ptr = Value::makeString(s3, vm);
+    // locals.addObject(ptr.asHay());
 
-    Rc::into_raw(rc) as *mut ViplObject
+    ptr.asHay().inner
 }
 
 #[repr(C)]

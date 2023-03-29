@@ -164,6 +164,7 @@ fn main() {
             localVariables: &mut localValues,
             // name: None,
             objects: None,
+            previous: None,
         };
 
         let mut opCodes = SeekableOpcodes {

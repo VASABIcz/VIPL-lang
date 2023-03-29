@@ -20,9 +20,10 @@ pub fn setupFs(vm: &mut VirtualMachine) {
                 Ok(v) => unsafe {
                     let arr = v.map(#[inline(always)] |it|{
                         let mut refName = it.unwrap();
-                        Value::makeString(String::from(refName.file_name_ref().to_str().unwrap()))
+                        Value::makeString(String::from(refName.file_name_ref().to_str().unwrap()), vm)
                     }).collect();
-                    vm.stack.push(Value::makeArray(arr, DataType::str()))
+                    let a = Value::makeArray(arr, DataType::str(), vm);
+                    vm.stack.push(a)
                 }
                 Err(e) => panic!("{}", e)
             }
@@ -40,7 +41,8 @@ pub fn setupFs(vm: &mut VirtualMachine) {
             let path = locals.localVariables.first().unwrap().getString();
 
             let str = fs::read_to_string(path).unwrap_or_default();
-            vm.stack.push(Value::makeString(str))
+            let a = Value::makeString(str, vm);
+            vm.stack.push(a)
         },
         Some(DataType::str()),
     );

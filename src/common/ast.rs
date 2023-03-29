@@ -117,7 +117,6 @@ impl Expression {
                 let enc = genFunName(f.name.as_str(), &types);
                 match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
                     None => {
-                        panic!();
                         println!("{functionReturns:?}");
                         Err(Box::new(TypeNotFound { typ: enc }))
                     }

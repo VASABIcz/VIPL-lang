@@ -384,7 +384,8 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     for s in &w.body {
                         let mut ctx2 = ctx.copy(&s);
                         ctx2.ops = &mut bodyBuf;
-                        ctx2.loopContext = Some(size - 2);
+                        println!("{}", size);
+                        ctx2.loopContext = Some(size);
                         genStatement(ctx2)?;
                     }
                     let len = bodyBuf.len();
@@ -675,23 +676,25 @@ pub fn complexBytecodeGen(
             },
             Operation::Statement(v) => {
                 if let Variable(c) = v {
-                    match c.init {
-                        None => {
-                            return Err(Box::new(NoValue {
-                                msg: "ahhh".to_string(),
-                            }));
-                        }
-                        Some(ref ex) => {
-                            let t = ex.clone().toDataType(
-                                mainLocals,
-                                functionReturns,
-                                c.typeHint.clone(),
-                            )?;
-                            mainLocals.insert(
-                                c.name.clone().into_boxed_str().into(),
-                                (t.clone().unwrap(), mainLocals.len()),
-                            );
-                            localTypes.push(t.unwrap());
+                    if !mainLocals.contains_key(&MyStr::from(c.name.clone())) {
+                        match c.init {
+                            None => {
+                                return Err(Box::new(NoValue {
+                                    msg: "ahhh".to_string(),
+                                }));
+                            }
+                            Some(ref ex) => {
+                                let t = ex.clone().toDataType(
+                                    mainLocals,
+                                    functionReturns,
+                                    c.typeHint.clone(),
+                                )?;
+                                mainLocals.insert(
+                                    c.name.clone().into_boxed_str().into(),
+                                    (t.clone().unwrap(), mainLocals.len()),
+                                );
+                                localTypes.push(t.unwrap());
+                            }
                         }
                     }
                 }

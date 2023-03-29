@@ -13,6 +13,7 @@ use libloading::{Library, Symbol};
 
 use crate::ast::{Expression, Op};
 use crate::ffi::NativeWrapper;
+use crate::heap::{Allocation, Hay, HayCollector, Heap};
 use crate::objects::{Array, ObjectDefinition, ViplObject};
 use crate::objects::Str;
 use crate::parser::Operation::Expr;
@@ -434,23 +435,28 @@ pub struct MyClass {
     pub fields: HashMap<String, MyClassField>,
 }
 
-#[repr(C)]
+#[derive(Copy, Clone)]
 pub union Value {
     pub Num: isize,
     pub Flo: f64,
     pub Bol: bool,
     pub Chr: char,
-    pub Reference: ManuallyDrop<Rice<ViplObject>>,
+    pub Reference: Hay<ViplObject>,
 }
 
 impl Value {
     #[inline(always)]
-    pub fn asRef(&self) -> &ManuallyDrop<Rice<ViplObject>> {
+    pub fn asHay(&self) -> Hay<ViplObject> {
+        unsafe { self.Reference }
+    }
+
+    #[inline(always)]
+    pub fn asRef(&self) -> &ViplObject {
         unsafe { &self.Reference }
     }
 
     #[inline(always)]
-    pub fn asMutRef(&mut self) -> &mut ManuallyDrop<Rice<ViplObject>> {
+    pub fn asMutRef(&mut self) -> &mut ViplObject {
         unsafe { &mut self.Reference }
     }
 
@@ -472,12 +478,6 @@ impl Value {
     #[inline(always)]
     pub fn asBool(&self) -> bool {
         unsafe { self.Bol }
-    }
-}
-
-impl Clone for Value {
-    fn clone(&self) -> Self {
-        Self{Num: self.asNum()}
     }
 }
 
@@ -509,17 +509,6 @@ impl Debug for Value {
     }
 }
 
-/*
-impl Drop for ValueC {
-    fn drop(&mut self) {
-        println!("i am being dropped :(");
-        unsafe {
-            ManuallyDrop::drop(&mut self.Reference);
-        }
-    }
-}
- */
-
 impl Value {
     #[inline(always)]
     pub fn getString(&self) -> &String {
@@ -532,8 +521,8 @@ impl Value {
     }
 
     #[inline]
-    pub fn makeString(str: String) -> Value {
-        Value{Reference: ManuallyDrop::new(Rice::new(Str::new(str).into()))}
+    pub fn makeString(str: String, vm: &mut VirtualMachine) -> Value {
+        Value{Reference: vm.heap.allocate(Str::new(str).into())}
     }
 
     #[inline]
@@ -543,8 +532,8 @@ impl Value {
     }
 
     #[inline]
-    pub fn makeArray(arr: Vec<Value>, typ: DataType) -> Value {
-        Value{Reference: ManuallyDrop::new(Rice::new(Array{internal: arr, typ}.into()))}
+    pub fn makeArray(arr: Vec<Value>, typ: DataType, vm: &mut VirtualMachine) -> Value {
+        Value{Reference: vm.heap.allocate(Array{internal: arr, typ}.into())}
     }
 
     #[inline]
@@ -590,18 +579,13 @@ impl Value {
     }
 
     #[inline(always)]
-    pub fn getReference(&self) -> &Option<Rc<ViplObject>> {
-        panic!()
+    pub fn getReference(&self) -> &ViplObject {
+        self.asRef()
     }
 
     #[inline(always)]
-    pub fn getMutReference(&mut self) -> &mut Option<Rc<ViplObject>> {
-        panic!()
-    }
-
-    #[inline(always)]
-    pub fn getReferenceValue(self) -> Option<Rc<ViplObject>> {
-        panic!()
+    pub fn getMutReference(&mut self) -> &mut ViplObject {
+        self.asMutRef()
     }
 }
 
@@ -733,16 +717,9 @@ impl Value {
     }
 }
 
-#[repr(C)]
-struct RcBox<T: ?Sized> {
-    strong: Cell<usize>,
-    weak: Cell<usize>,
-    value: T,
-}
-
 impl Value {
     #[inline]
-    pub fn add(&mut self, value: Value, typ: &DataType) {
+    pub fn add(&mut self, value: Value, typ: &DataType, vm: &mut VirtualMachine) {
         match typ {
             Int => {
                 *self.getRefNum() += value.getNum();
@@ -762,7 +739,7 @@ impl Value {
                         buf.push_str(str1);
                         buf.push_str(str2);
 
-                        unsafe { *self.Reference = Rice::new(ViplObject::Str(Str { string: buf })) }
+                        unsafe { self.Reference = Value::makeString(buf, vm).asHay() }
                     }
                     _ => panic!()
                 }
@@ -828,36 +805,38 @@ impl Value {
 }
 
 #[derive(Debug)]
-#[repr(C)]
 pub struct StackFrame<'a> {
     pub localVariables: &'a mut [Value],
-    // pub name: Option<&'a str>,
-    pub objects: Option<Vec<Rc<ViplObject>>>,
+    pub objects: Option<Vec<Hay<ViplObject>>>,
+    pub previous: Option<&'a StackFrame<'a>>
 }
 
-impl Drop for StackFrame<'_> {
-    fn drop(&mut self) {
-        if let Some(objects) = &self.objects {
-            for o in objects {
-                let raw = Rc::into_raw(o.clone());
-                unsafe {
-                    Rc::decrement_strong_count(raw);
-                    Rc::decrement_strong_count(raw);
-                }
+impl StackFrame<'_> {
+    pub fn collect(&self, vm: &VirtualMachine, collector: &mut HayCollector) {
+        for local in self.localVariables.iter() {
+            if vm.heap.contains(local.asNum() as usize) {
+                collector.visit(local.asNum() as usize)
             }
+        }
+        if let Some(prev) = self.previous {
+            prev.collect(vm, collector)
         }
     }
 }
 
-impl StackFrame<'_> {
+impl Drop for StackFrame<'_> {
+    fn drop(&mut self) {}
+}
+
+/*impl StackFrame<'_> {
     #[inline]
-    pub fn addObject(&mut self, obj: Rc<ViplObject>) {
+    pub fn addObject(&mut self, obj: Hay<ViplObject>) {
         match &mut self.objects {
             None => panic!(),
             Some(v) => v.push(obj)
         }
     }
-}
+}*/
 
 impl StackFrame<'_> {
     pub fn new(localVariables: &mut [Value]) -> StackFrame {
@@ -865,6 +844,7 @@ impl StackFrame<'_> {
             localVariables,
             // name: Option::from("root"),
             objects: None,
+            previous: None,
         }
     }
 }
@@ -929,7 +909,7 @@ pub struct Func {
     pub typ: FuncType,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum FuncType {
     Runtime {
         rangeStart: usize,
@@ -972,12 +952,14 @@ pub enum CachedOpCode {
 #[derive(Debug)]
 pub struct VirtualMachine {
     pub nativeWrapper: NativeWrapper,
+
     pub functions: HashMap<MyStr, Func>,
     pub classes: HashMap<MyStr, ObjectDefinition>,
     pub stack: Vec<Value>,
     pub opCodes: Vec<OpCode>,
     pub opCodeCache: Vec<Option<CachedOpCode>>,
     pub nativeLibraries: Vec<Library>,
+    pub heap: Heap,
 
     pub cachedFunctions: Vec<Func>,
     pub cachedFunctionsLookup: HashMap<MyStr, usize>
@@ -995,6 +977,20 @@ impl VirtualMachine {
         unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
 
         buf
+    }
+
+    pub fn gc(&mut self, frame: &StackFrame) {
+        let mut collector = HayCollector{ visited: Default::default() };
+
+        for v in &self.stack {
+            println!("num {}", v.asNum() as usize);
+            if self.heap.allocations.contains(&(v.asNum() as usize)) {
+                v.asRef().collectAllocations(&mut collector);
+            }
+        }
+        frame.collect(self, &mut collector);
+        println!("{}", collector.visited.len());
+        self.heap.gc(collector);
     }
 
     #[inline(always)]
@@ -1022,9 +1018,10 @@ impl VirtualMachine {
             localVariables: &mut locals,
             // name: None,
             objects: None,
+            previous: None,
         };
 
-        let t = f.typ.clone();
+        let t = f.typ;
 
         // FIXME this is so much cursed
         // FIXME i am bypassing all rust safety guaranties :)
@@ -1044,7 +1041,7 @@ impl VirtualMachine {
             },
             Native { callback } => callback(self, &mut stack),
             Extern { callback } => {
-                stack.objects = Some(vec![]);
+                // stack.objects = Some(vec![]);
                 callback(self, &mut stack);
             },
         }
@@ -1064,9 +1061,10 @@ impl VirtualMachine {
             localVariables: &mut locals,
             // name: None,
             objects: None,
+            previous: None,
         };
 
-        let t = f.typ.clone();
+        let t = f.typ;
 
         // FIXME this is so much cursed
         // FIXME i am bypassing all rust safety guaranties :)
@@ -1086,7 +1084,7 @@ impl VirtualMachine {
             },
             Native { callback } => callback(self, &mut stack),
             Extern { callback } => {
-                stack.objects = Some(vec![]);
+                // stack.objects = Some(vec![]);
                 callback(self, &mut stack);
             },
         }
@@ -1103,6 +1101,7 @@ impl VirtualMachine {
             opCodeCache: vec![],
             nativeWrapper: NativeWrapper::new(),
             nativeLibraries: vec![],
+            heap: Default::default(),
             cachedFunctions: vec![],
             cachedFunctionsLookup: Default::default(),
         }
@@ -1313,10 +1312,10 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             }
             Dup => unsafe {
                 let val = vm.getTop();
-                vm.stack.push(val.clone());
+                vm.stack.push(*val);
             },
             PushLocal { index } => {
-                vm.stack.push(unsafe { stackFrame.localVariables.get_unchecked(*index) }.clone())
+                vm.stack.push(*unsafe { stackFrame.localVariables.get_unchecked(*index) })
             }
             SetLocal { index, typ: _ } => {
                 let x = vm.pop();
@@ -1379,7 +1378,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
 
                         vm.opCodeCache[index] = Some(CachedOpCode::CallCache {
                             locals: localVars.into(),
-                            typ: f.typ.clone(),
+                            typ: f.typ,
                             argCount: f.argAmount,
                         });
                         match vm.opCodeCache.get_unchecked(index) {
@@ -1407,6 +1406,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     localVariables: &mut cahedLocals,
                     // name: None,
                     objects: None,
+                    previous: Some(stackFrame),
                 };
 
                 match cached.1 {
@@ -1422,15 +1422,17 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     }
                     Native { callback } => callback(vm, &mut stack),
                     Extern { callback } => {
-                        stack.objects = Some(vec![]);
+                        // stack.objects = Some(vec![]);
                         callback(vm, &mut stack);
                     }
                 }
             },
             Return => return,
-            Add(v) => {
+            Add(v) => unsafe {
                 let a = vm.pop();
-                vm.getMutTop().add(a, v);
+                let c = vm.getMutTop() as *mut Value;
+
+                (&mut *c).add(a, v, vm);
             },
             Sub(v) => {
                 let a = vm.pop();
@@ -1469,7 +1471,8 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
             },
             ArrayNew(d) => {
                 let _size = vm.pop();
-                vm.stack.push(Value{Reference: ManuallyDrop::new(Rice::new(ViplObject::Arr(Array::new(d.clone()))))})
+                let a = Value::makeArray(vec![], d.clone(), vm);
+                vm.stack.push(a)
             }
             ArrayStore(_) => {
                 let index = vm.pop().getNum();
@@ -1487,13 +1490,10 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 let index = vm.pop().getNum();
                 let mut value1 = vm.pop();
                 let arr = value1.getMutArray();
-                vm.stack.push(arr.internal.get(index as usize).unwrap().clone());
+                vm.stack.push(*arr.internal.get(index as usize).unwrap());
             }
-            ArrayLength => match vm.pop().getReference() {
-                None => {}
-                Some(v) => {
-                    vm.stack.push(Value{Num: v.getArr().internal.len() as isize});
-                }
+            ArrayLength => {
+                vm.stack.push(Value{Num: vm.pop().getReference().getArr().internal.len() as isize});
             },
             // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
             Inc { typ, index } => unsafe {
@@ -1503,7 +1503,10 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                 stackFrame.localVariables.get_unchecked_mut(*index).dec(typ)
             },
             PushChar(c) => vm.stack.push((*c).into()),
-            StrNew(s) => vm.stack.push(Value::makeString(s.clone().to_string())),
+            StrNew(s) => {
+                let a = Value::makeString(s.to_string(), vm);
+                vm.stack.push(a)
+            },
             GetChar => {
                 let index = vm.pop().getNum();
 

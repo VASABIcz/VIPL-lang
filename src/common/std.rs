@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 use std::rc::Rc;
 
 use crate::lexer::TokenType::Var;
-use crate::objects::Str;
+use crate::objects::{Str, ViplObject};
 use crate::rice::Rice;
 use crate::vm::*;
 use crate::vm::DataType::*;
@@ -105,8 +105,17 @@ pub fn bootStrapVM() -> VirtualMachine {
     vm.makeNative(
         String::from("makeString"),
         Box::new([]),
-        |a, _b| {
-            a.stack.push(Value{Reference: ManuallyDrop::new(Rice::new(Str::new("".to_string()).into()))});
+        |vm, _b| {
+            vm.stack.push(Value{Reference: vm.heap.allocate(ViplObject::Str(Str::new("".to_string())))});
+        },
+        Some(DataType::str()),
+    );
+
+    vm.makeNative(
+        String::from("gc"),
+        Box::new([]),
+        |vm, frame| {
+            vm.gc(frame);
         },
         Some(DataType::str()),
     );

@@ -9,7 +9,7 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
 
             if let Some(mut a) = l && let Some(b) = r {
                 match op {
-                    Op::Add => a.add(b, &a.toDataType()),
+                    Op::Add => { todo!()/*a.add(b, &a.toDataType())*/ },
                     Op::Sub => a.sub(&b, &a.toDataType()),
                     Op::Mul => a.mul(&b, &a.toDataType()),
                     Op::Div => a.div(&b, &a.toDataType()),
@@ -50,7 +50,7 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
             let r = evalExpr(right)?;
 
             match op {
-                Op::Add => l.add(r, &l.toDataType()),
+                Op::Add => todo!()/*l.add(r, &l.toDataType())*/,
                 Op::Sub => l.sub(&r, &l.toDataType()),
                 Op::Mul => l.mul(&r, &l.toDataType()),
                 Op::Div => l.div(&r, &l.toDataType()),
