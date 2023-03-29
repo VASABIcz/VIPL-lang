@@ -1,26 +1,16 @@
 use std::{intrinsics, ptr};
-
-
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::mem::{transmute};
-
-
-
 
 use libloading::{Library, Symbol};
 
-use crate::ast::{Expression};
+use crate::ast::Expression;
 use crate::ffi::NativeWrapper;
 use crate::heap::{Allocation, Hay, HayCollector, Heap};
 use crate::objects::{Array, ObjectDefinition, ViplObject};
 use crate::objects::Str;
-
-
-
 use crate::std::bootStrapVM;
-
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
 use crate::vm::OpCode::*;
@@ -981,7 +971,7 @@ impl VirtualMachine {
     }
 
     pub fn gc(&mut self, frame: &StackFrame) {
-        let mut collector = HayCollector{ visited: Default::default() };
+        let mut collector = HayCollector::new();
 
         for v in &self.stack {
             println!("num {}", v.asNum() as usize);

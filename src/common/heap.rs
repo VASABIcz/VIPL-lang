@@ -8,11 +8,19 @@ pub trait Allocation {
     fn collectAllocations(&self, allocations: &mut HayCollector);
 }
 
+#[derive(Default)]
 pub struct HayCollector {
     pub visited: HashSet<usize>
 }
 
 impl HayCollector {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            visited: Default::default(),
+        }
+    }
+
     #[inline]
     pub fn visit(&mut self, ptr: usize) {
         self.visited.insert(ptr);
