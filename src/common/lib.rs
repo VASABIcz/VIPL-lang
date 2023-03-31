@@ -34,3 +34,4 @@ pub mod strCaching;
 pub mod rice;
 pub mod heap;
 mod tests;
+mod nativeStack;
