@@ -10,6 +10,7 @@
 #![feature(pointer_byte_offsets)]
 #![feature(dir_entry_ext2)]
 #![feature(core_intrinsics)]
+#![feature(adt_const_params)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]
@@ -34,4 +35,4 @@ pub mod strCaching;
 pub mod rice;
 pub mod heap;
 mod tests;
-mod nativeStack;
+pub mod nativeStack;

@@ -15,7 +15,7 @@ const DEBUG: bool = false;
 
 
 #[no_mangle]
-pub extern fn createVm() -> *mut VirtualMachine {
+pub extern fn createVm() -> *mut VirtualMachine<'static> {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
     forget(ptr);
@@ -155,6 +155,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
                 // name: None,
                 objects: None,
                 previous: None,
+                programCounter: 0,
             },
         )
     }

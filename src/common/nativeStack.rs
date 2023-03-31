@@ -1,3 +1,4 @@
+use std::alloc::{alloc, Global, Layout};
 use std::arch::asm;
 use std::hint::black_box;
 use std::ops::{Add, Sub};
@@ -5,30 +6,75 @@ use std::ptr;
 
 const SIZE: usize = 256+16;
 
+#[derive(Debug)]
+pub struct StackManager<const SIZE: usize> {
+    pub nativeStackBase: usize,
+    pub nativeStackOffset: usize,
+    pub cStack: usize
+}
+
+impl<const SIZE: usize> StackManager<SIZE> {
+    pub fn new() -> Self {
+        let p = Box::into_raw(Box::new([0usize; SIZE]));
+        Self {
+            nativeStackBase: p as usize,
+            nativeStackOffset: 0,
+            cStack: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub fn getRbpRsp() -> (usize, usize) {
+        let mut rbp = 0;
+        let mut rsp = 0;
+        unsafe {
+            asm!(
+            "mov {rbp}, rbp",
+            "mov {rsp}, rsp",
+            rsp = out(reg) rsp,
+            rbp = out(reg) rbp
+            )
+        }
+        return (rbp, rsp)
+    }
+
+    #[inline(always)]
+    pub fn setupStack(ptr: usize, size: usize) {
+        unsafe {
+            asm!(
+            // copy rsp and rbp to r8,9
+            "mov r8, rsp",
+            "mov r9, rbp",
+            // set rsp and rbp to new stack ptr
+            "mov rsp, {nativePtr}",
+            "mov rbp, {nativeBase}",
+            // save original rsp, rbp on new stack
+            "push r8",
+            "push r9",
+            // "push 77",
+            nativePtr = in(reg) ptr as usize+size,
+            nativeBase = in(reg) ptr as usize
+            );
+        }
+    }
+
+    #[inline(always)]
+    pub fn callNative(&mut self, f: fn () -> ()) {
+        Self::setupStack(self.nativeStackBase, SIZE);
+        f();
+        restoreStack();
+    }
+
+    #[inline(always)]
+    pub fn callC(&self, f: fn () -> ()) {
+        Self::setupStack(self.cStack, 1)
+    }
+}
+
 pub fn testProc(a: &usize, b: &usize) {
     println!("{}", a*b);
     black_box(a);
     black_box(a);
-}
-
-#[inline(always)]
-pub fn setupStack(ptr: *mut (), size: usize) {
-    unsafe {
-        asm!(
-        // copy rsp and rbp to r8,9
-        "mov r8, rsp",
-        "mov r9, rbp",
-        // set rsp and rbp to new stack ptr
-        "mov rsp, {nativePtr}",
-        "mov rbp, {nativeBase}",
-        // save original rsp, rbp on new stack
-        "push r8",
-        "push r9",
-        // "push 77",
-        nativePtr = in(reg) ptr as usize+size,
-        nativeBase = in(reg) ptr as usize
-        );
-    }
 }
 
 pub fn printRegisters() {

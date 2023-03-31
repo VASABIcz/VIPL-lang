@@ -10,7 +10,7 @@ use crate::vm::DataType::*;
 use crate::vm::OpCode::*;
 use crate::vm::Value;
 
-pub fn bootStrapVM() -> VirtualMachine {
+pub fn bootStrapVM() -> VirtualMachine<'static> {
     let mut vm = VirtualMachine::new();
 
     vm.makeNative(

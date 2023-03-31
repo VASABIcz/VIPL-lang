@@ -165,6 +165,7 @@ fn main() {
             // name: None,
             objects: None,
             previous: None,
+            programCounter: 0,
         };
 
         let mut opCodes = SeekableOpcodes {

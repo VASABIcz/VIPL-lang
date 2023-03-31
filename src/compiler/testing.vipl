@@ -1,0 +1,16 @@
+print("while test")
+x = 0
+while x < 10 {
+    print(x)
+    x += 1
+}
+print("recursion test")
+
+fn fact(n: int): int {
+    if n > 0 {
+        return n*fact(n-1)
+    }
+    return 1
+}
+
+print(fact(11))

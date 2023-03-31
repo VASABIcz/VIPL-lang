@@ -9,15 +9,15 @@ use std::mem::{ManuallyDrop, size_of};
 use std::process::exit;
 use std::rc::Rc;
 
-use rust_vm::codegen::complexBytecodeGen;
+use rust_vm::codegen::{bytecodeGen2, complexBytecodeGen};
 use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
 use rust_vm::objects::{Str, ViplObject};
-use rust_vm::parser::{parse, parseOne, parsingUnits, TokenProvider};
+use rust_vm::parser::{parse, parseOne, parseTokens, parsingUnits, TokenProvider};
 use rust_vm::parser::ParsingUnitSearchType::{Ahead, Back};
 use rust_vm::rice::Rice;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{run, SeekableOpcodes, StackFrame, Value};
+use rust_vm::vm::{evaluateBytecode2, run, SeekableOpcodes, StackFrame, Value};
 
 fn readInput() -> String {
     print!(">>> ");
@@ -39,26 +39,66 @@ fn handleError(err: Box<dyn Error>) {
 }
 
 fn main() {
-    println!("{}", size_of::<Value>());
-    /*
-    println!("{}", size_of::<usize>());
-    println!("{}", size_of::<Value>());
-    // println!("{}", size_of::<ValueC>());
-    let x = 111;
-    let y = 111;
-    println!("{:#?}", (&x as *const i32));
-    println!("{:#?}", (&y as *const i32));
-    println!("{}", size_of::<Option<Rice<ViplObject>>>());
-    {
-        for _ in 0..1000 {
-            let xVal = ValueC{Num: 69};
+    let sourceFile = std::env::args().nth(1).expect("expected source field");
+
+    let src = std::fs::read_to_string(sourceFile).expect("failed to read source");
+
+    let mut vm = bootStrapVM();
+    // let mut localTypes = vec![];
+    setupFs(&mut vm);
+
+    let tokens = match tokenizeSource(&src) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("tokenizer");
+            handleError(e);
+            return;
         }
-        let cVal = ValueC{Reference: ManuallyDrop::new(Rice::new(ViplObject::Str(Str::new("UwU".to_string()))))};
-        let cVal1 = ValueC{Num: 69};
-    }
-    {
-        println!("value should be droped already");
+    };
+
+    if tokens.is_empty() {
+        return;
     }
 
-     */
+    // println!("tokens {:?}", &tokens);
+
+    let ast = match parseTokens(tokens) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("parser");
+            handleError(e);
+            return;
+        }
+    };
+
+    // println!("{:?}", &vm.functions.keys());
+
+    let mut rets = HashMap::new();
+
+    for f in &vm.functions {
+        rets.insert(f.0.clone(), f.1.returnType.clone());
+    }
+
+    let bs = match bytecodeGen2(ast, &mut rets) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("codegen");
+            handleError(e);
+            return;
+        }
+    };
+
+    println!("{:?}", &bs.0);
+
+    vm.addBytecode(bs.0);
+
+    let mut locals = bs.1.iter().map(|it| { it.toDefaultValue() }).collect::<Vec<_>>();
+
+    vm.pushFrame(StackFrame{
+        localVariables: &mut locals,
+        objects: None,
+        previous: None,
+        programCounter: 0,
+    });
+    vm.execute()
 }

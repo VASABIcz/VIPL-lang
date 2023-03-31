@@ -8,6 +8,7 @@ use libloading::{Library, Symbol};
 use crate::ast::Expression;
 use crate::ffi::NativeWrapper;
 use crate::heap::{Allocation, Hay, HayCollector, Heap};
+use crate::nativeStack::StackManager;
 use crate::objects::{Array, ObjectDefinition, ViplObject};
 use crate::objects::Str;
 use crate::std::bootStrapVM;
@@ -799,7 +800,8 @@ impl Value {
 pub struct StackFrame<'a> {
     pub localVariables: &'a mut [Value],
     pub objects: Option<Vec<Hay<ViplObject>>>,
-    pub previous: Option<&'a StackFrame<'a>>
+    pub previous: Option<&'a StackFrame<'a>>,
+    pub programCounter: usize
 }
 
 impl StackFrame<'_> {
@@ -836,6 +838,7 @@ impl StackFrame<'_> {
             // name: Option::from("root"),
             objects: None,
             previous: None,
+            programCounter: 0,
         }
     }
 }
@@ -850,7 +853,7 @@ pub fn decodeFunctionString(_s: &str) {
     panic!()
 }
 
-impl VirtualMachine {
+impl VirtualMachine<'_> {
     pub unsafe fn loadNative(
         &mut self,
         path: &str,
@@ -906,7 +909,7 @@ pub enum FuncType {
         rangeStart: usize,
         rangeStop: usize,
     },
-    Native {
+    Builtin {
         callback: fn(&mut VirtualMachine, &mut StackFrame) -> (),
     },
     Extern {
@@ -920,7 +923,7 @@ impl Debug for FuncType {
             Runtime { rangeStart, rangeStop: _ } => {
                 write!(f, "runtime func {:?}", rangeStart)
             }
-            Native { callback } => {
+            Builtin { callback } => {
                 write!(f, "builtin func {:?}", *callback as *const ())
             }
             Extern { callback } => {
@@ -941,7 +944,7 @@ pub enum CachedOpCode {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct VirtualMachine {
+pub struct VirtualMachine<'a> {
     pub nativeWrapper: NativeWrapper,
 
     pub functions: HashMap<MyStr, Func>,
@@ -953,12 +956,16 @@ pub struct VirtualMachine {
     pub heap: Heap,
 
     pub cachedFunctions: Vec<Func>,
-    pub cachedFunctionsLookup: HashMap<MyStr, usize>
+    pub cachedFunctionsLookup: HashMap<MyStr, usize>,
+
+    pub stackManager: StackManager<2048>,
+
+    pub frames: Vec<StackFrame<'a>>
 }
 
 const DEBUG: bool = false;
 
-impl VirtualMachine {
+impl VirtualMachine<'_> {
     #[inline(always)]
     pub fn pop(&self) -> Value {
         let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
@@ -985,9 +992,9 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn getMutTop(&mut self) -> &mut Value {
+    pub fn getMutTop(&self) -> &mut Value {
         let s = self.stack.len();
-        unsafe { self.stack.get_unchecked_mut(s - 1) }
+        unsafe { (&mut *(&self.stack as *const Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1) }
     }
 
     #[inline(always)]
@@ -1010,6 +1017,7 @@ impl VirtualMachine {
             // name: None,
             objects: None,
             previous: None,
+            programCounter: 0,
         };
 
         let t = f.typ;
@@ -1030,11 +1038,30 @@ impl VirtualMachine {
                 };
                 run(&mut seekable, &mut *ptr, &mut stack);
             },
-            Native { callback } => callback(self, &mut stack),
+            Builtin { callback } => callback(self, &mut stack),
             Extern { callback } => {
                 // stack.objects = Some(vec![]);
                 callback(self, &mut stack);
             },
+        }
+    }
+
+    #[inline]
+    pub fn callRaw(&mut self, func: &Func, stack: &mut StackFrame) {
+        match func.typ {
+            Runtime { rangeStart, rangeStop } => unsafe {
+                let x = &mut *(self as *mut VirtualMachine);
+                let mut seekable = SeekableOpcodes {
+                    index: rangeStart,
+                    opCodes: &mut self.opCodes,
+                };
+                run(&mut seekable, x, stack);
+            }
+            Builtin { callback } => callback(self, stack),
+            Extern { callback } => {
+                stack.objects = Some(vec![]);
+                callback(self, stack)
+            }
         }
     }
 
@@ -1053,6 +1080,7 @@ impl VirtualMachine {
             // name: None,
             objects: None,
             previous: None,
+            programCounter: 0,
         };
 
         let t = f.typ;
@@ -1073,16 +1101,381 @@ impl VirtualMachine {
                 };
                 run(&mut seekable, &mut *ptr, &mut stack);
             },
-            Native { callback } => callback(self, &mut stack),
+            Builtin { callback } => callback(self, &mut stack),
             Extern { callback } => {
-                // stack.objects = Some(vec![]);
+                stack.objects = Some(vec![]);
                 callback(self, &mut stack);
             },
         }
     }
 }
 
-impl VirtualMachine {
+impl VirtualMachine<'_> {
+    #[inline(always)]
+    pub fn getFrame<'a>(&self) -> &'a StackFrame {
+        unsafe { self.frames.get_unchecked(self.frames.len() - 1) }
+    }
+
+    #[inline(always)]
+    pub fn getMutFrame(&self) -> &mut StackFrame {
+        let i = self.frames.len() - 1;
+        unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).frames.get_unchecked_mut(i) }
+    }
+
+    #[inline]
+    pub fn nextOpcode(&self) -> (Option<&OpCode>, usize) {
+        let x = self.getMutFrame();
+        x.programCounter += 1;
+        (self.opCodes.get(x.programCounter-1), x.programCounter-1)
+    }
+
+    #[inline]
+    pub fn getIndex(&self) -> usize {
+        unsafe { self.frames.get_unchecked(self.frames.len() - 1).programCounter }
+    }
+
+    #[inline]
+    pub fn setIndex(&mut self, index: usize) {
+        let i = self.frames.len() - 1;
+        unsafe { self.frames.get_unchecked_mut(i).programCounter = index }
+    }
+
+    #[inline]
+    pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
+        self.opCodes.get(index)
+    }
+
+    #[inline]
+    pub fn getLocal(&self, index: usize) -> &Value {
+        let f = self.getFrame();
+        unsafe { f.localVariables.get_unchecked(index) }
+    }
+
+    #[inline]
+    pub fn getMutLocal(&self, usize: usize) -> &mut Value {
+        let i = self.frames.len() - 1;
+        unsafe { (&mut *(&self.frames as *const Vec<StackFrame<'_>> as *mut Vec<StackFrame<'_>>)).get_unchecked_mut(i).localVariables.get_unchecked_mut(usize) }
+    }
+
+    #[inline]
+    pub fn setLocal(&mut self, index: usize, value: Value) {
+        let i = self.frames.len() - 1;
+        unsafe { self.frames.get_unchecked_mut(i).localVariables[index] = value }
+    }
+
+    #[inline]
+    pub fn seek(&mut self, offset: isize) {
+        let f = self.getMutFrame();
+        f.programCounter = ((f.programCounter as isize) + offset) as usize;
+    }
+
+    #[inline]
+    pub fn goto(&mut self, index: usize) {
+        self.getMutFrame().programCounter = index;
+    }
+
+    #[inline]
+    pub fn pushFrame(&mut self, frame: StackFrame) {
+        if self.frames.len() > 2048 {
+            panic!()
+        }
+        unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).frames.push(frame) };
+        let f = self.getFrame();
+    }
+
+    #[inline]
+    pub fn popFrame(&mut self) {
+        self.frames.pop();
+    }
+
+    #[inline]
+    pub fn addBytecode(&mut self, bytecode: Vec<OpCode>) {
+        for _ in 0..(bytecode.len()) {
+            self.opCodeCache.push(None)
+        }
+        self.opCodes.extend(bytecode);
+    }
+
+    #[inline]
+    pub fn execute(&mut self) {
+        loop {
+            let (op, index) = match self.nextOpcode() {
+                (None, _) => {
+                    return;
+                }
+                (Some(v), i) => (v, i),
+            };
+            // println!("evaluating {:?}", op);
+            match op {
+                FunBegin => {
+                    let mut index = self.getIndex();
+                    let name = match self.getOpcode(index).unwrap() {
+                        FunName { name } => name,
+                        v => panic!("{v:?}"),
+                    };
+                    index += 1;
+                    let (vars, argCount) = match self.getOpcode(index).unwrap() {
+                        LocalVarTable { typ, argsCount } => (typ, argsCount),
+                        v => panic!("{v:?}"),
+                    };
+                    index += 1;
+                    let ret = match self.getOpcode(index).unwrap() {
+                        FunReturn { typ } => typ,
+                        v => panic!("{v:?}"),
+                    };
+                    index += 1;
+                    let startIndex = index;
+
+                    'a: loop {
+                        let peek = self.getOpcode(index).unwrap();
+                        // println!("eee {:?}", peek);
+                        match peek {
+                            FunEnd => {
+                                index += 1;
+                                break 'a;
+                            }
+                            _ => {
+                                index += 1;
+                            }
+                        }
+                    }
+
+                    self.makeRuntime(
+                        name.to_string(),
+                        vars.clone(),
+                        startIndex,
+                        *argCount,
+                        ret.clone(),
+                        0,
+                    );
+                    self.goto(index)
+                }
+                F2I => {
+                    self.getMutTop().f2i()
+                }
+                I2F => {
+                    self.getMutTop().f2i()
+                }
+                PushInt(v) => self.stack.push(Value{Num: *v}),
+                PushIntOne() => self.stack.push(Value{Num: 1}),
+                PushIntZero() => self.stack.push(Value{Num: 0}),
+                PushFloat(v) => self.stack.push((*v).into()),
+                PushBool(v) => self.stack.push((*v).into()),
+                Pop => {
+                    self.stack.pop();
+                }
+                Dup => unsafe {
+                    let val = self.getTop();
+                    self.stack.push(*val);
+                },
+                PushLocal { index } => {
+                    self.stack.push(*self.getLocal(*index))
+                }
+                SetLocal { index, typ: _ } => {
+                    let x = self.pop();
+                    self.setLocal(*index, x);
+                }
+                Jmp { offset, jmpType } => match jmpType {
+                    JmpType::One => {
+                        self.pop();
+                        let _b = self.pop();
+                        panic!()
+                    }
+                    JmpType::Zero => {}
+                    JmpType::Jmp => {
+                        let x = *offset;
+                        self.seek(x);
+                    }
+                    JmpType::Gt => {
+                        let a = self.pop();
+                        let b = self.pop();
+                        if a.gt(&b, &DataType::Float) {
+                            let x = *offset;
+                            self.seek(x)
+                        }
+                    }
+                    JmpType::Less => {
+                        let a = self.pop();
+                        let b = self.pop();
+                        if a.less(&b, &DataType::Float) {
+                            let x = *offset;
+                            self.seek(x)
+                        }
+                    }
+                    JmpType::True => {
+                        let a = self.pop();
+                        if a.getBool() {
+                            let x = *offset;
+                            self.seek(x)
+                        }
+                    }
+                    JmpType::False => {
+                        let a = self.pop();
+                        if !a.getBool() {
+                            let x = *offset;
+                            self.seek(x)
+                        }
+                    }
+                },
+                Call { encoded } => unsafe {
+                    println!("{}", &encoded);
+                    let cached = match &self.opCodeCache.get_unchecked(index) {
+                        Some(v) => match v {
+                            CachedOpCode::CallCache {
+                                locals: stack,
+                                typ,
+                                argCount,
+                            } => (stack, typ, argCount),
+                        },
+                        None => {
+                            let f = self.functions.get(encoded).unwrap_or_else(|| panic!("function {} not found", &encoded));
+                            let localVars = vec![Value{Num: 0}; f.varTable.len()];
+
+                            self.opCodeCache[index] = Some(CachedOpCode::CallCache {
+                                locals: localVars.into(),
+                                typ: f.typ,
+                                argCount: f.argAmount,
+                            });
+                            match self.opCodeCache.get_unchecked(index) {
+                                None => panic!(),
+                                Some(v) => match v {
+                                    CachedOpCode::CallCache {
+                                        locals: ref stack,
+                                        ref typ,
+                                        ref argCount,
+                                    } => (stack, typ, argCount),
+                                },
+                            }
+                        }
+                    };
+
+                    let mut cahedLocals = cached.0.clone();
+                    for i in 0..(*cached.2) {
+                        let arg = self.pop();
+                        println!("poped {}", arg.asNum());
+                        cahedLocals[(cached.2 - 1) - i] = arg;
+                    }
+                    // FIXME
+                    let d = Box::leak(cahedLocals);
+                    // println!("len {} {} {}", cahedLocals.len(), *cached.2, cahedLocals[0].asNum());
+
+                    let mut stack = StackFrame {
+                        localVariables: d,
+                        // name: None,
+                        objects: None,
+                        previous: None,
+                        programCounter: 0,
+                    };
+
+                    match cached.1 {
+                        Runtime {
+                            rangeStart: s,
+                            rangeStop: _e,
+                        } => {
+                            stack.programCounter = *s;
+                            self.pushFrame(stack);
+                        }
+                        Builtin { callback } => callback(self, &mut stack),
+                        Extern { callback } => {
+                            // stack.objects = Some(vec![]);
+                            callback(self, &mut stack);
+                        }
+                    }
+                },
+                Return => self.popFrame(),
+                Add(v) => unsafe {
+                    let a = self.pop();
+                    self.getMutTop().add(a, v,&mut * (self as *const VirtualMachine as *mut VirtualMachine));
+                },
+                Sub(v) => {
+                    let a = self.pop();
+                    self.getMutTop().sub(&a, v);
+                },
+                Div(v) => {
+                    let a = self.pop();
+                    self.getMutTop().div(&a, v);
+                },
+                Mul(v) => {
+                    let a = self.pop();
+                    self.getMutTop().mul(&a, v);
+                },
+                Equals(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refEq(&a, v);
+                },
+                Greater(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refGt(&a, v);
+                },
+                Less(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refLess(&a, v);
+                },
+                Or => {
+                    let a = self.pop();
+                    self.getMutTop().or(&a);
+                },
+                And => {
+                    let a = self.pop();
+                    self.getMutTop().and(&a);
+                },
+                Not => {
+                    self.getMutTop().not();
+                },
+                ArrayNew(d) => {
+                    let _size = self.pop();
+                    let a = Value::makeArray(vec![], d.clone(), self);
+                    self.stack.push(a)
+                }
+                ArrayStore(_) => {
+                    let index = self.pop().getNum();
+                    let mut c = self.pop();
+                    let val = c.getMutArray();
+                    let value = self.pop();
+
+                    if index as usize == val.internal.len() {
+                        val.internal.push(value)
+                    } else {
+                        val.internal[index as usize] = value
+                    }
+                }
+                ArrayLoad(_) => {
+                    let index = self.pop().getNum();
+                    let mut value1 = self.pop();
+                    let arr = value1.getMutArray();
+                    self.stack.push(*arr.internal.get(index as usize).unwrap());
+                }
+                ArrayLength => {
+                    self.stack.push(Value{Num: self.pop().getReference().getArr().internal.len() as isize});
+                },
+                // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
+                Inc { typ, index } => unsafe {
+                    self.getMutLocal(*index).inc(typ)
+                },
+                Dec { typ, index } => unsafe {
+                    self.getMutLocal(*index).dec(typ)
+                },
+                PushChar(c) => self.stack.push((*c).into()),
+                StrNew(s) => {
+                    let a = Value::makeString(s.to_string(), self);
+                    self.stack.push(a)
+                },
+                GetChar => {
+                    let index = self.pop().getNum();
+
+                    let opIndex = self.stack.len()-1;
+
+                    let r = self.stack.get_mut(opIndex).unwrap();
+                    let c = *r.getString().as_bytes().get(index as usize).unwrap() as char;
+                    *r = c.into();
+                }
+                o => panic!("unimplemented opcode {:?}", o)
+            }
+        }
+    }
+}
+
+impl VirtualMachine<'_> {
     pub fn new() -> Self {
         Self {
             functions: Default::default(),
@@ -1095,6 +1488,8 @@ impl VirtualMachine {
             heap: Default::default(),
             cachedFunctions: vec![],
             cachedFunctionsLookup: Default::default(),
+            stackManager: StackManager::new(),
+            frames: vec![],
         }
     }
 
@@ -1119,7 +1514,7 @@ impl VirtualMachine {
             returnType: ret,
             varTable: args,
             argAmount: l,
-            typ: Native { callback: fun },
+            typ: Builtin { callback: fun },
         };
         self.registerFunc(f, n);
     }
@@ -1183,8 +1578,8 @@ impl SeekableOpcodes<'_> {
     }
 
     #[inline(always)]
-    pub fn nextOpcode(&mut self) -> (Option<&mut OpCode>, usize) {
-        let n = self.opCodes.get_mut(self.index);
+    pub fn nextOpcode(&mut self) -> (Option<&OpCode>, usize) {
+        let n = self.opCodes.get(self.index);
         let i = self.index;
         self.index += 1;
 
@@ -1398,6 +1793,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     // name: None,
                     objects: None,
                     previous: Some(stackFrame),
+                    programCounter: 0,
                 };
 
                 match cached.1 {
@@ -1411,7 +1807,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                         run(opCodes, vm, &mut stack);
                         opCodes.index = old;
                     }
-                    Native { callback } => callback(vm, &mut stack),
+                    Builtin { callback } => callback(vm, &mut stack),
                     Extern { callback } => {
                         // stack.objects = Some(vec![]);
                         callback(vm, &mut stack);
@@ -1512,7 +1908,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
     }
 }
 
-impl VirtualMachine {
+impl VirtualMachine<'_> {
     pub fn eval(&mut self, mut bytecode: Vec<OpCode>, locals: Vec<DataType>) {
         let mut vals = vec![];
         for b in &locals {
@@ -1532,13 +1928,13 @@ impl VirtualMachine {
     }
 }
 
-impl Drop for VirtualMachine {
+impl Drop for VirtualMachine<'_> {
     fn drop(&mut self) {
         println!("vm is being destroyed")
     }
 }
 
-pub fn evaluateBytecode(mut bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine {
+pub fn evaluateBytecode(mut bytecode: Vec<OpCode>, locals: Vec<DataType>) -> VirtualMachine<'static> {
     let mut vals = vec![];
     for b in &locals {
         vals.push(b.toDefaultValue())
