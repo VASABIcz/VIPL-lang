@@ -73,7 +73,7 @@ fn main() {
         }
     };
 
-    // println!("{:?}", &vm.functions.keys());
+    /// println!("{:?}", &vm.functions.keys());
 
     let mut rets = HashMap::new();
 
