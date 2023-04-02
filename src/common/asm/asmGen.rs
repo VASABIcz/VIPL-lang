@@ -6,14 +6,14 @@ use crate::vm::{DataType, JmpType, OpCode};
 
 
 fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
-    this.comment("pushLocal");
+    this.comment(&format!("pushLocal {}", index));
     this.mov(R10.into(), AsmValue::Indexing(Rbx.into(), index as isize));
     this.push(R10.into());
     this.newLine();
 }
 
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
-    this.comment("pushStr");
+    this.comment(&format!("pushStr {}", s));
     let label = this.makeString(s);
     // 25*8
     this.mov(Rdi.into(), R15.into());
@@ -26,7 +26,7 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
 }
 
 fn setLocal<T: AsmGen>(this: &mut T, index: usize) {
-    this.comment("setLocal");
+    this.comment(&format!("setLocal {}", index));
     this.pop(R10.into());
     this.mov(Location::Indexing(Rbx.into(), index as isize), R10.into());
     this.newLine();
@@ -42,7 +42,7 @@ fn popStack<T: AsmGen>(this: &mut T) {
 }
 
 fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
-    this.comment("asmCall");
+    this.comment(&format!("asmCall {}", name));
     let label = this.makeString(name);
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), label.into());

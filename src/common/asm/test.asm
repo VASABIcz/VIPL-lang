@@ -6,7 +6,7 @@ mov r15, rdi
 mov r14, rsi
 mov rbx, [r14+0]
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
@@ -16,12 +16,12 @@ pop r13
 cmp r12, r13
 jne JMP0
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
@@ -31,7 +31,7 @@ pop r13
 sub r12, r13
 push r12
 
-; asmCall
+; asmCall fact(int)
 mov rdi, r15
 mov rsi, str0
 mov rdx, rsp
@@ -49,7 +49,7 @@ push 1
 ret
 ret
 
-; pushStr
+; pushStr while test
 mov rdi, r15
 mov rsi, r14
 mov rdx, str1
@@ -58,7 +58,7 @@ call r10
 push rax
 
 
-; asmCall
+; asmCall print(String)
 mov rdi, r15
 mov rsi, str2
 mov rdx, rsp
@@ -69,12 +69,12 @@ add rsp, rax
 push 0
 JMP2:
 
-; setLocal
+; setLocal 0
 pop r10
 mov [rbx+0], r10
 
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
@@ -84,12 +84,12 @@ pop r13
 cmp r12, r13
 jne JMP1
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
 
-; asmCall
+; asmCall print(int)
 mov rdi, r15
 mov rsi, str3
 mov rdx, rsp
@@ -98,7 +98,7 @@ call r10
 add rsp, rax
 
 
-; pushLocal
+; pushLocal 0
 mov r10, [rbx+0]
 push r10
 
@@ -108,14 +108,14 @@ pop r13
 add r12, r13
 push r12
 
-; setLocal
+; setLocal 0
 pop r10
 mov [rbx+0], r10
 
 JMP1:
 jmp JMP2
 
-; pushStr
+; pushStr recursion test
 mov rdi, r15
 mov rsi, r14
 mov rdx, str4
@@ -124,7 +124,7 @@ call r10
 push rax
 
 
-; asmCall
+; asmCall print(String)
 mov rdi, r15
 mov rsi, str5
 mov rdx, rsp
@@ -134,7 +134,7 @@ add rsp, rax
 
 push 11
 
-; asmCall
+; asmCall fact(int)
 mov rdi, r15
 mov rsi, str6
 mov rdx, rsp
@@ -143,7 +143,7 @@ call r10
 add rsp, rax
 
 
-; asmCall
+; asmCall print(int)
 mov rdi, r15
 mov rsi, str7
 mov rdx, rsp
