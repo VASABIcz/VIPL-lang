@@ -8,6 +8,8 @@ use std::io::{BufRead, Write};
 use std::mem::{ManuallyDrop, size_of};
 use std::process::exit;
 use std::rc::Rc;
+use rust_vm::asm::asmGen::generateAssembly;
+use rust_vm::asm::asmLib::NasmGen;
 
 use rust_vm::codegen::{bytecodeGen2, complexBytecodeGen};
 use rust_vm::fs::setupFs;
@@ -89,6 +91,10 @@ fn main() {
     };
 
     println!("{:?}", &bs.0);
+
+    let mut nasm = NasmGen::new();
+    generateAssembly(&mut nasm, &bs.0);
+    println!("{}", nasm.generate());
 
     vm.addBytecode(bs.0);
 

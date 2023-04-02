@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::asm::asmLib::{AsmGen, AsmValue, Location, Register};
 use crate::asm::asmLib::Register::{R10, R12, R13, R14, R15, Rax, Rbx, Rdi, Rdx, Rsi, Rsp};
 use crate::value::Value;
@@ -5,23 +6,43 @@ use crate::vm::{DataType, JmpType, OpCode};
 
 
 fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
+    this.comment("pushLocal");
     this.mov(R10.into(), AsmValue::Indexing(Rbx.into(), index as isize));
-    this.push(R10.into())
+    this.push(R10.into());
+    this.newLine();
+}
+
+fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
+    this.comment("pushStr");
+    let label = this.makeString(s);
+    // 25*8
+    this.mov(Rdi.into(), R15.into());
+    this.mov(Rsi.into(), R14.into());
+    this.mov(Rdx.into(), label.into());
+    this.mov(R10.into(), AsmValue::Indexing(R15.into(), 5*16));
+    this.call(R10.into());
+    this.push(Rax.into());
+    this.newLine();
 }
 
 fn setLocal<T: AsmGen>(this: &mut T, index: usize) {
+    this.comment("setLocal");
     this.pop(R10.into());
     this.mov(Location::Indexing(Rbx.into(), index as isize), R10.into());
+    this.newLine();
 }
 
 fn popStack<T: AsmGen>(this: &mut T) {
+    this.comment("popStack");
     this.mov(Rdi.into(), R15.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 5*8));
     this.call(R10.into());
     this.push(Rax.into());
+    this.newLine();
 }
 
 fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
+    this.comment("asmCall");
     let label = this.makeString(name);
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), label.into());
@@ -29,6 +50,7 @@ fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 22*8));
     this.call(R10.into());
     this.add(Rsp.into(), Rax.into());
+    this.newLine();
 }
 
 pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
@@ -36,9 +58,34 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
     generator.mov(R15.into(), Rdi.into()); // vm ptr
     generator.mov(R14.into(), Rsi.into()); // frame ptr
     generator.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+    let mut jmpCounter = 0usize;
 
+    let mut makeLabelsGreatAgain = HashMap::new();
+    let mut jmpLookup = HashMap::new();
 
-    for op in opCodes {
+    for (i, op) in opCodes.iter().enumerate() {
+        if let OpCode::Jmp { offset, jmpType } = op {
+            let o = *offset;
+            let xd = (i as isize+o) as usize;
+            let label = match makeLabelsGreatAgain.get(&xd) {
+                None => {
+                    let a = format!("JMP{}", jmpCounter);
+                    makeLabelsGreatAgain.insert(xd, a.clone());
+                    jmpCounter += 1;
+                    a
+                }
+                Some(v) => {
+                    v.clone()
+                }
+            };
+            jmpLookup.insert(i, label);
+        }
+    }
+
+    for (i, op) in opCodes.iter().enumerate() {
+        if let Some(v) = makeLabelsGreatAgain.get(&i) {
+            generator.makeLabel(v)
+        }
         match op {
             OpCode::F2I => todo!(),
             OpCode::I2F => todo!(),
@@ -57,15 +104,15 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
             OpCode::PushLocal { index } => pushLocal(generator, *index),
             OpCode::SetLocal { index, typ } => setLocal(generator, *index),
             OpCode::Jmp { offset, jmpType } => {
-                todo!();
+                let l = jmpLookup.get(&i).unwrap().clone();
                 match jmpType {
-                    JmpType::One => {}
-                    JmpType::Zero => {}
-                    JmpType::Jmp => {}
-                    JmpType::Gt => {}
-                    JmpType::Less => {}
-                    JmpType::True => {}
-                    JmpType::False => {}
+                    JmpType::One => generator.jmpIfZero(l.into()),
+                    JmpType::Zero => generator.jmpIfOne(l.into()),
+                    JmpType::Jmp => generator.jmp(l.into()),
+                    JmpType::Gt => generator.jmpIfGt(l.into()),
+                    JmpType::Less => generator.jmpIfLess(l.into()),
+                    JmpType::True => generator.jmpIfZero(l.into()),
+                    JmpType::False => generator.jmpIfOne(l.into()),
                 }
             }
             // FIXME not sure
@@ -147,9 +194,9 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
             OpCode::ArrayLength => todo!(),
             OpCode::Inc { .. } => todo!(),
             OpCode::Dec { .. } => todo!(),
-            OpCode::StrNew(_) => todo!(),
+            OpCode::StrNew(v) => pushStr(generator, v.as_str()),
             OpCode::GetChar => todo!(),
-            _ => panic!()
+            _ => {}
         }
     }
 }

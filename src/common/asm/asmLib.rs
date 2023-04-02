@@ -197,6 +197,12 @@ pub trait AsmGen {
     fn xor(&mut self, dest: Location, src: AsmValue);
 
     fn call(&mut self, location: Location);
+
+    fn makeLabel(&mut self, label: &str);
+
+    fn comment(&mut self, txt: &str);
+
+    fn newLine(&mut self);
 }
 
 pub struct NasmGen {
@@ -244,7 +250,15 @@ impl NasmGen {
                 buf += &c.to_string();
             }
         }
-
+        if isInString {
+            buf += "\"";
+        }
+        if buf.is_empty() {
+            buf += "0";
+        }
+        else {
+            buf += ", 0";
+        }
         buf
     }
 
@@ -266,7 +280,8 @@ impl NasmGen {
     }
 
     pub fn writeComment(&mut self, data: &str) {
-        self.executable.push_str(";;");
+        self.executable.push('\n');
+        self.executable.push_str("; ");
         self.executable.push_str(data);
         self.executable.push('\n');
     }
@@ -383,7 +398,7 @@ impl AsmGen for NasmGen {
     }
 
     fn jmpIfOne(&mut self, dest: Location) {
-        todo!()
+        self.writeOp1("jne", &dest.toString())
     }
 
     fn jmpIfZero(&mut self, dest: Location) {
@@ -404,6 +419,19 @@ impl AsmGen for NasmGen {
 
     fn call(&mut self, location: Location) {
         self.writeOp1("call", &location.toString())
+    }
+
+    fn makeLabel(&mut self, label: &str) {
+        self.executable += label;
+        self.executable += ":\n";
+    }
+
+    fn comment(&mut self, txt: &str) {
+        self.writeComment(txt);
+    }
+
+    fn newLine(&mut self) {
+        self.executable += "\n";
     }
 }
 
