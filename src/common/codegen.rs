@@ -676,6 +676,7 @@ pub fn complexBytecodeGen(
                         v.fields.clone(),
                     );
                 }
+                Node::Import(_) => todo!()
             },
             Operation::Statement(v) => {
                 if let Variable(c) = v {
@@ -716,6 +717,7 @@ pub fn complexBytecodeGen(
                 Node::StructDef(v) => {
                     genStructDef(v.clone(), &mut ops, functionReturns, structs)?;
                 }
+                Node::Import(_) => todo!()
             }
         }
     }

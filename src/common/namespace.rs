@@ -78,7 +78,7 @@ impl FunctionMeta {
 #[derive(Debug)]
 pub enum LoadedFunction {
     BuiltIn(fn (&mut VirtualMachine, &mut StackFrame)),
-    Native(fn (&mut VirtualMachine, &mut StackFrame)),
+    Native(extern fn (&mut VirtualMachine, &mut StackFrame)),
     Virtual(Vec<OpCode>)
 }
 
@@ -89,6 +89,7 @@ impl LoadedFunction {
                 b(vm, &mut frame)
             }
             LoadedFunction::Native(n) => {
+                println!("before call");
                 n(vm, &mut frame)
             }
             LoadedFunction::Virtual(v) => {
@@ -149,6 +150,10 @@ impl Namespace {
         }
     }
 
+    pub fn lookupNamespace(vm: &mut VirtualMachine, name: Vec<String>) {
+
+    }
+
     pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine) -> Namespace {
         let mut n = Namespace::new(name);
         let mut initFunction = FunctionDef{
@@ -167,7 +172,8 @@ impl Namespace {
                         Node::FunctionDef(d) => {
                             n.registerFunctionDef(d.into());
                         }
-                        Node::StructDef(_) => todo!()
+                        Node::StructDef(_) => todo!(),
+                        Node::Import(_) => todo!()
                     }
                 }
                 Operation::Statement(v) => {

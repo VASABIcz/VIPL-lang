@@ -4,13 +4,9 @@ use std::mem::{size_of, transmute, forget};
 use std::alloc::{alloc, dealloc, Layout};
 use std::arch::asm;
 use std::fs;
-use crate::vm::ExternFn;
+use crate::vm::{ExternFn, StackFrame, VirtualMachine};
 
-struct VirtualMachine {
-
-}
-
-fn allocateBinFunction(machineCode: &mut [u8]) -> fn(&mut VirtualMachine) -> () {
+pub fn allocateBinFunction(machineCode: &mut [u8]) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> () {
     // https://man7.org/linux/man-pages/man2/pkey_mprotect.2.html
     // linux page size = 4096
     let layout = Layout::from_size_align(machineCode.len(), 4096).unwrap();

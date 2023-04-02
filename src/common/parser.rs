@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::ast::Expression::{IntLiteral, NamespaceAccess};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Import, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 
@@ -1433,6 +1433,37 @@ impl ParsingUnit for StructParsingUnit {
     }
 }
 
+struct ImportParsingUnit;
+
+impl ParsingUnit for ImportParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Import)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Import)?;
+        let mut buf = vec![];
+
+        let f = tokenProvider.getIdentifier()?;
+        buf.push(f);
+
+        while tokenProvider.isPeekType(Namespace) {
+            tokenProvider.getAssert(Namespace)?;
+            buf.push(tokenProvider.getIdentifier()?);
+        }
+
+        Ok(Operation::Global(Node::Import(buf)))
+    }
+
+    fn getPriority(&self) -> usize { todo!() }
+
+    fn setPriority(&mut self, priority: usize) { todo!() }
+}
+
 struct NamespaceParsingUnit;
 
 impl ParsingUnit for NamespaceParsingUnit {
@@ -1485,6 +1516,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(BreakParsingUnit),
         Box::new(NotParsingUnit),
         Box::new(ContinueParsingUnit),
+        Box::new(ImportParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: Op::Mul,
             typ: TokenType::Mul,

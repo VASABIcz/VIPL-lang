@@ -524,6 +524,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
                         v.fields.clone(),
                     );
                 }
+                Node::Import(_) => todo!()
             },
             Operation::Statement(v) => {
                 if let Variable(c) = v {
@@ -560,6 +561,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
                     panic!()
                     //genStructDef(v.clone(), &mut out, &functionReturns, &mut structs)?;
                 }
+                Node::Import(_) => todo!()
             }
         }
     }
@@ -686,6 +688,7 @@ pub fn bytecodeGen2(
                     panic!();
                     // genStructDef(v.clone(), &mut out, functionReturns, &mut structs)?;
                 }
+                Node::Import(_) => todo!()
             }
         }
     }

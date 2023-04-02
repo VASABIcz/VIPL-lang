@@ -12,6 +12,17 @@ fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
     this.newLine();
 }
 
+fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
+    this.comment(&format!("debugPrint {}", text));
+    this.mov(Rax.into(), 1.into());
+    this.mov(Rdi.into(), 1.into());
+    let lejbl = this.makeString(text);
+    this.mov(Rsi.into(), lejbl.into());
+    this.mov(Rdx.into(), (text.len()).into());
+    this.sysCall();
+    this.newLine();
+}
+
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.comment(&format!("pushStr {}", s));
     let label = this.makeString(s);
@@ -53,11 +64,13 @@ fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
     this.newLine();
 }
 
-pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
+pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
+    debugPrint(generator, "I am in");
     // INIT CODE
     generator.mov(R15.into(), Rdi.into()); // vm ptr
     generator.mov(R14.into(), Rsi.into()); // frame ptr
     generator.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+    debugPrint(generator, "after init");
     let mut jmpCounter = 0usize;
 
     let mut makeLabelsGreatAgain = HashMap::new();

@@ -4,12 +4,15 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 use libloading::{Library, Symbol};
+use crate::asm::asmGen::generateAssembly;
+use crate::asm::asmLib::NasmGen;
+use crate::asm::jitCompiler::JITCompiler;
 
 use crate::ast::{Expression, Op};
 use crate::betterGen::genFunctionDef;
 use crate::ffi::NativeWrapper;
 use crate::heap::{Allocation, Hay, HayCollector, Heap};
-use crate::namespace::{FunctionTypeMeta, LoadedFunction, Namespace, NamespaceState};
+use crate::namespace::{FunctionMeta, FunctionTypeMeta, LoadedFunction, Namespace, NamespaceState};
 use crate::namespace::NamespaceState::Loaded;
 use crate::nativeStack::StackManager;
 use crate::objects::{Array, ObjectDefinition, ViplObject};
@@ -563,6 +566,35 @@ pub enum CachedOpCode {
     },
 }
 
+#[derive(Debug)]
+pub struct NamespaceLoader {
+    pub lookupPaths: Vec<String>,
+    pub lookupBuiltin: Vec<fn(&mut VirtualMachine)>
+}
+
+impl NamespaceLoader {
+    pub fn registerPath(&mut self, path: &str, depth: usize) {
+        todo!()
+    }
+
+    pub fn registerBuiltin(&mut self, name: Vec<String>, init: fn (&mut VirtualMachine)) {
+        todo!()
+    }
+
+    pub fn loadNamespace(&self, path: Vec<String>) -> Namespace {
+        todo!()
+    }
+
+    pub fn new() -> Self {
+        let s = Self {
+            lookupPaths: vec![],
+            lookupBuiltin: vec![],
+        };
+
+        s
+    }
+}
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct VirtualMachine<'a> {
@@ -584,7 +616,10 @@ pub struct VirtualMachine<'a> {
     pub frames: Vec<StackFrame<'a>>,
 
     pub namespaceLookup: HashMap<String, usize>,
-    pub namespaces: Vec<Namespace>
+    pub namespaces: Vec<Namespace>,
+
+    pub namespaceLoader: NamespaceLoader,
+    pub jitCompiler: JITCompiler
 }
 
 const DEBUG: bool = false;
@@ -1537,7 +1572,8 @@ impl VirtualMachine<'_> {
                     let mut ops = vec![];
                     let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
                     f.localsMeta = res.into_boxed_slice();
-                    n.functions.push(LoadedFunction::Virtual(ops));
+                    let nf = self.jitCompiler.compile(ops);
+                    n.functions.push(LoadedFunction::Native(nf));
                 }
             }
             n.state = Loaded;
@@ -1560,6 +1596,8 @@ impl VirtualMachine<'_> {
             frames: vec![],
             namespaceLookup: Default::default(),
             namespaces: vec![],
+            namespaceLoader: NamespaceLoader::new(),
+            jitCompiler: JITCompiler {},
         }
     }
 

@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
 use crate::bytecodeChecker::InvalidTypeException;
+use crate::objects::Str;
 use crate::vm::{DataType, Func, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 use crate::vm::Generic::Any;
@@ -261,6 +262,7 @@ pub struct StructDef {
 pub enum Node {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
+    Import(Vec<String>)
 }
 
 #[derive(Debug, Clone)]
