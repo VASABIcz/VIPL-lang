@@ -1,4 +1,5 @@
 use std::arch::x86_64::_rdrand64_step;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Stderr;
 use std::ops::Deref;
@@ -176,6 +177,7 @@ pub trait AsmGen {
     fn add(&mut self, dest: Location, src: AsmValue);
     fn sub(&mut self, dest: Location, src: AsmValue);
     fn mul(&mut self, dest: Location, src: AsmValue);
+    fn imul(&mut self, dest: Location, src: AsmValue);
 
     fn sysCall(&mut self);
     fn makeString(&mut self, str: &str) -> String;
@@ -209,7 +211,8 @@ pub struct NasmGen {
     pub executable: String,
     pub readOnly: String,
     pub stringCounter: usize,
-    pub jmpCounter: usize
+    pub jmpCounter: usize,
+    pub stringCache: HashMap<String, String>
 }
 
 impl NasmGen {
@@ -219,6 +222,7 @@ impl NasmGen {
             readOnly: String::new(),
             stringCounter: 0,
             jmpCounter: 0,
+            stringCache: Default::default(),
         }
     }
 
@@ -344,21 +348,30 @@ impl AsmGen for NasmGen {
         self.writeOp2("mul", &dest.toString(), &src.toString())
     }
 
+    fn imul(&mut self, dest: Location, src: AsmValue) {
+        self.writeOp2("imul", &dest.toString(), &src.toString())
+    }
+
     fn sysCall(&mut self) {
         self.writeLine("syscall")
     }
 
     fn makeString(&mut self, str: &str) -> String {
-        // FIXME sanitaze str
-        let id = format!("str{}", self.stringCounter);
-        self.stringCounter += 1;
+        match self.stringCache.get(str) {
+            None => {
+                // FIXME sanitaze str
+                let id = format!("str{}", self.stringCounter);
+                self.stringCounter += 1;
 
-        self.readOnly.push_str(&id.clone());
-        self.readOnly.push_str(": db ");
-        self.readOnly += &NasmGen::createEscapedString(str);
-        self.readOnly.push('\n');
-
-        id
+                self.readOnly.push_str(&id.clone());
+                self.readOnly.push_str(": db ");
+                self.readOnly += &NasmGen::createEscapedString(str);
+                self.readOnly.push('\n');
+                self.stringCache.insert(str.to_string(), id.clone());
+                id
+            }
+            Some(v) => v.clone()
+        }
     }
 
     fn ret(&mut self) {

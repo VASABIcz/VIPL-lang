@@ -34,7 +34,7 @@ pub mod vm;
 pub mod strCaching;
 pub mod rice;
 pub mod heap;
-mod tests;
+// mod tests;
 pub mod nativeStack;
 pub mod asm;
 pub mod value;

@@ -95,6 +95,7 @@ fn main() {
     let mut nasm = NasmGen::new();
     generateAssembly(&mut nasm, &bs.0);
     println!("{}", nasm.generate());
+    panic!();
 
     vm.addBytecode(bs.0);
 
