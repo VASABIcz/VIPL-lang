@@ -11,6 +11,7 @@ pub fn allocateBinFunction(machineCode: &mut [u8]) -> extern fn(&mut VirtualMach
     // linux page size = 4096
     let layout = Layout::from_size_align(machineCode.len(), 4096).unwrap();
     let ptr = unsafe { alloc(layout) };
+    println!("orig ptr {:?}", ptr);
 
     // todo handle more pages
     unsafe { mprotect(ptr as *mut c_void, layout.size(), PROT_READ | PROT_WRITE | PROT_EXEC) };

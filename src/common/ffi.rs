@@ -14,7 +14,7 @@ use crate::value::Value;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
 use crate::vm::FuncType::{Builtin, Extern, Runtime};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 
 #[no_mangle]
@@ -412,12 +412,13 @@ pub extern fn callFast(vm: &mut VirtualMachine, id: usize) {
 }
 
 #[no_mangle]
-pub extern fn stringNew(vm: &mut VirtualMachine, _locals: &mut StackFrame, s: *const c_char) -> *mut ViplObject {
+pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject {
+    println!("AIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIDS");
     if DEBUG {
         println!("ffi-stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
-    let mut a = Value::makeString(st, vm);
+    let mut a = Value::makeString(st, unsafe { &mut *vm });
 
     a.asMutRef() as *mut ViplObject
 }
@@ -544,7 +545,7 @@ pub struct NativeWrapper {
     pub call: extern fn(&mut VirtualMachine, *const c_char),
     pub callFast: extern fn(&mut VirtualMachine, usize),
     pub callAsm: extern fn(&mut VirtualMachine, *const c_char, *mut Value) -> usize,
-    pub stringNew: extern fn(&mut VirtualMachine, &mut StackFrame, *const c_char) -> *mut ViplObject,
+    pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
 }

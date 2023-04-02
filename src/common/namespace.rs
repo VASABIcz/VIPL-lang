@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::mem::transmute;
 use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
 use crate::betterGen::genFunctionDef;
 use crate::codegen::complexBytecodeGen;
@@ -88,8 +89,9 @@ impl LoadedFunction {
             LoadedFunction::BuiltIn(b) => {
                 b(vm, &mut frame)
             }
-            LoadedFunction::Native(n) => {
-                println!("before call");
+            LoadedFunction::Native(n) => unsafe {
+                let x: *const () = transmute(n.clone());
+                println!("before call {:?}", x);
                 n(vm, &mut frame)
             }
             LoadedFunction::Virtual(v) => {

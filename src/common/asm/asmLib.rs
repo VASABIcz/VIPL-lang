@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::ptr::write;
 use crate::asm::asmLib::Register::{R13, Rax, Rdi, Rdx, Rsi};
 
+#[derive(Clone)]
 pub enum Register {
     Rax,
     Rbx,
@@ -80,20 +81,24 @@ impl Location {
     }
 }
 
+#[derive(Clone)]
 pub enum Concrete {
     Number(usize),
     Register(Register),
+    Lejbl(String)
 }
 
 impl Concrete {
     pub fn toString(&self) -> String {
         match self {
             Concrete::Number(v) => v.to_string(),
-            Concrete::Register(v) => v.toStr().to_string()
+            Concrete::Register(v) => v.toStr().to_string(),
+            Concrete::Lejbl(v) => v.to_string()
         }
     }
 }
 
+#[derive(Clone)]
 pub enum AsmValue {
     Indexing(Concrete, isize),
     Concrete(Concrete),
@@ -240,7 +245,6 @@ impl NasmGen {
                     buf.push('\"');
                     isInString = true;
                 }
-
                 buf.push(c as char);
             }
             else {

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::asm::asmLib::{AsmGen, AsmValue, Location, Register};
+use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
 use crate::asm::asmLib::Register::{R10, R12, R13, R14, R15, Rax, Rbx, Rdi, Rdx, Rsi, Rsp};
 use crate::value::Value;
 use crate::vm::{DataType, JmpType, OpCode};
@@ -13,25 +13,39 @@ fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
 }
 
 fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
+    let t = text.replace("\"", "");
     this.comment(&format!("debugPrint {}", text));
     this.mov(Rax.into(), 1.into());
     this.mov(Rdi.into(), 1.into());
-    let lejbl = this.makeString(text);
-    this.mov(Rsi.into(), lejbl.into());
-    this.mov(Rdx.into(), (text.len()).into());
+    let lejbl = this.makeString(&t);
+    this.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
+    this.mov(Rdx.into(), (t.len()).into());
+    this.sysCall();
+    this.newLine();
+}
+
+fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
+    this.comment(&format!("debugCrash {}", asmValue.clone().toString()));
+    this.mov(Rax.into(), 1.into());
+    this.mov(Rdi.into(), 1.into());
+    this.lea(Rsi.into(), asmValue.clone());
+    this.mov(Rdx.into(), asmValue);
     this.sysCall();
     this.newLine();
 }
 
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
-    this.comment(&format!("pushStr {}", s));
+    this.comment(&format!("pushStr {}\n", s));
     let label = this.makeString(s);
     // 25*8
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), R14.into());
-    this.mov(Rdx.into(), label.into());
-    this.mov(R10.into(), AsmValue::Indexing(R15.into(), 5*16));
+    this.lea(Rdx.into(), label.into());
+    this.mov(R10.into(), AsmValue::Indexing(R15.into(), 23*8));
+    // FIXME issue with this
+    debugPrint(this, "pre\n");
     this.call(R10.into());
+    debugPrint(this, "post\n");
     this.push(Rax.into());
     this.newLine();
 }
@@ -56,7 +70,7 @@ fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
     this.comment(&format!("asmCall {}", name));
     let label = this.makeString(name);
     this.mov(Rdi.into(), R15.into());
-    this.mov(Rsi.into(), label.into());
+    this.lea(Rsi.into(), label.into());
     this.mov(Rdx.into(), Rsp.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 22*8));
     this.call(R10.into());
@@ -65,12 +79,12 @@ fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
 }
 
 pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
-    debugPrint(generator, "I am in");
     // INIT CODE
     generator.mov(R15.into(), Rdi.into()); // vm ptr
     generator.mov(R14.into(), Rsi.into()); // frame ptr
     generator.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
-    debugPrint(generator, "after init");
+
+    debugPrint(generator, "after init\n");
     let mut jmpCounter = 0usize;
 
     let mut makeLabelsGreatAgain = HashMap::new();
@@ -96,6 +110,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
     }
 
     for (i, op) in opCodes.iter().enumerate() {
+        debugPrint(generator, &format!("executing {:?}", op));
         if let Some(v) = makeLabelsGreatAgain.get(&i) {
             generator.makeLabel(v)
         }
