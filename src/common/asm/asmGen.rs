@@ -141,7 +141,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: &Vec<OpCode>) {
                 DataType::Int => {
                     generator.pop(R12);
                     generator.pop(R13);
-                    generator.mul(R12.into(), R13.into());
+                    generator.imul(R12.into(), R13.into());
                     generator.push(R12.into());
                 }
                 _ => todo!()
