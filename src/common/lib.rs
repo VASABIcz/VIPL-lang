@@ -36,3 +36,5 @@ pub mod rice;
 pub mod heap;
 mod tests;
 pub mod nativeStack;
+pub mod asm;
+pub mod value;

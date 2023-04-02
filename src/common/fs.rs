@@ -2,8 +2,9 @@
 use std::fs;
 
 use std::os::unix::fs::DirEntryExt2;
+use crate::value::Value;
 
-use crate::vm::{DataType, Generic, MyStr, Value, VariableMetadata, VirtualMachine};
+use crate::vm::{DataType, Generic, MyStr, VariableMetadata, VirtualMachine};
 
 pub fn setupFs(vm: &mut VirtualMachine) {
     vm.makeNative(

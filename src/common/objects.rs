@@ -3,8 +3,9 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use crate::heap::{Allocation, HayCollector};
+use crate::value::Value;
 
-use crate::vm::{DataType, Value};
+use crate::vm::{DataType};
 
 #[derive(Debug, Clone)]
 pub enum ViplObject {

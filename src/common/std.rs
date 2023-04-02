@@ -4,11 +4,11 @@
 
 
 use crate::objects::{Str, ViplObject};
+use crate::value::Value;
 
 use crate::vm::*;
 use crate::vm::DataType::*;
 use crate::vm::OpCode::*;
-use crate::vm::Value;
 
 pub fn bootStrapVM() -> VirtualMachine<'static> {
     let mut vm = VirtualMachine::new();

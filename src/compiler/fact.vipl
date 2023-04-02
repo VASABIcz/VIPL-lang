@@ -9,6 +9,5 @@ x = 0
 
 while x < 10_000_000 {
     fact(20)
-    print(x)
     x += 1
 }

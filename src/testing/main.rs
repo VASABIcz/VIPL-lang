@@ -17,7 +17,7 @@ use rust_vm::parser::{parse, parseOne, parseTokens, parsingUnits, TokenProvider}
 use rust_vm::parser::ParsingUnitSearchType::{Ahead, Back};
 use rust_vm::rice::Rice;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{evaluateBytecode2, run, SeekableOpcodes, StackFrame, Value};
+use rust_vm::vm::{evaluateBytecode2, run, SeekableOpcodes, StackFrame};
 
 fn readInput() -> String {
     print!(">>> ");

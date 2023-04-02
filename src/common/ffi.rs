@@ -9,7 +9,9 @@ use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::objects::{ViplObject};
 use crate::std::bootStrapVM;
-use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, Value, VirtualMachine};
+use crate::value::Value;
+use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
+use crate::vm::FuncType::{Builtin, Extern, Runtime};
 
 const DEBUG: bool = false;
 
@@ -429,6 +431,67 @@ pub extern fn strConcat(
     ptr.asHay().inner
 }
 
+#[no_mangle]
+pub extern fn asmCall(vm: &mut VirtualMachine, name: *const c_char, rsp: *mut Value) -> usize {
+    let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
+    if DEBUG {
+        println!("ffi-call: {}", name);
+    }
+    let f = vm.functions.get(&MyStr::Static(name)).unwrap();
+    let argsCount = f.argAmount;
+    let doesReturn = f.returnType != None;
+    let mut locals = vec![Value{Num: 0}; f.varTable.len()];
+
+    for i in 0..(f.argAmount) {
+        let v = unsafe {
+            ptr::read(rsp.add(i))
+        };
+        locals[(f.argAmount - 1) - i] = v;
+    }
+
+    let mut stack = StackFrame {
+        localVariables: &mut locals,
+        // name: None,
+        objects: None,
+        previous: None,
+        programCounter: 0,
+    };
+
+    let t = f.typ;
+
+    // FIXME this is so much cursed
+    // FIXME i am bypassing all rust safety guaranties :)
+
+    let ptr = vm as *const VirtualMachine as *mut VirtualMachine;
+
+    match t {
+        Runtime {
+            rangeStart: s,
+            rangeStop: _e,
+        } => unsafe {
+            let mut seekable = SeekableOpcodes {
+                index: s,
+                opCodes: &mut (*ptr).opCodes,
+            };
+            run(&mut seekable, &mut *ptr, &mut stack);
+        },
+        Builtin { callback } => callback(vm, &mut stack),
+        Extern { callback } => {
+            stack.objects = Some(vec![]);
+            callback(vm, &mut stack);
+        },
+    };
+
+    if doesReturn {
+        let v = (*vm).pop();
+        unsafe { *rsp.add(argsCount - 1) = v; }
+        argsCount*8-8
+    }
+    else {
+        argsCount*8
+    }
+}
+
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushInt: extern fn(&mut VirtualMachine, isize) -> (),
@@ -457,6 +520,7 @@ pub struct NativeWrapper {
 
     pub call: extern fn(&mut VirtualMachine, *const c_char),
     pub callFast: extern fn(&mut VirtualMachine, usize),
+    pub callAsm: extern fn(&mut VirtualMachine, *const c_char, *mut Value) -> usize,
     pub stringNew: extern fn(&mut VirtualMachine, &mut StackFrame, *const c_char) -> *mut ViplObject,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
@@ -493,6 +557,7 @@ impl NativeWrapper {
             arrGetRef,
             call,
             callFast,
+            callAsm: asmCall,
             stringNew,
             stringGetChar,
             strConcat,
