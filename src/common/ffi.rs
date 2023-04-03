@@ -7,6 +7,7 @@ use std::ptr;
 use crate::codegen::bytecodeGen;
 use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
+use crate::namespace::{Namespace, NamespaceState};
 use crate::objects::{ViplObject};
 use crate::std::bootStrapVM;
 use crate::value::Value;
@@ -145,6 +146,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
     }
 
     unsafe {
+        todo!();
         run(
             &mut SeekableOpcodes {
                 index: 0,
@@ -158,6 +160,16 @@ pub extern fn test(vm: *mut VirtualMachine) {
                 objects: None,
                 previous: None,
                 programCounter: 0,
+                namespace: &Namespace{
+                    name: "".to_string(),
+                    state: NamespaceState::Loaded,
+                    functionsLookup: Default::default(),
+                    globalsLookup: Default::default(),
+                    functionsMeta: vec![],
+                    functions: vec![],
+                    globalsMeta: vec![],
+                    globals: vec![],
+                },
             },
         )
     }
@@ -449,12 +461,23 @@ pub extern fn asmCall(vm: &mut VirtualMachine, name: *const c_char, rsp: *mut Va
         locals[(f.argAmount - 1) - i] = v;
     }
 
+    todo!();
     let mut stack = StackFrame {
         localVariables: &mut locals,
         // name: None,
         objects: None,
         previous: None,
         programCounter: 0,
+        namespace: &Namespace {
+            name: "".to_string(),
+            state: NamespaceState::Loaded,
+            functionsLookup: Default::default(),
+            globalsLookup: Default::default(),
+            functionsMeta: vec![],
+            functions: vec![],
+            globalsMeta: vec![],
+            globals: vec![],
+        },
     };
 
     let t = f.typ;

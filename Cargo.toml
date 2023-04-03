@@ -30,6 +30,10 @@ path = "src/native/main.rs"
 name = "testing"
 path = "src/testing/main.rs"
 
+[[bin]]
+name = "namespaced"
+path = "src/namespaced/main.rs"
+
 [lib]
 mame = "common"
 path = "src/common/lib.rs"

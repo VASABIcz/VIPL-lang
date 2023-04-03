@@ -501,6 +501,7 @@ pub fn checkBytecode<'a>(
             PushIntZero() => {
                 abstractStack.push(Int)
             }
+            _ => panic!()
         }
     }
 }

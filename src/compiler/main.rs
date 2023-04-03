@@ -10,7 +10,7 @@ use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
 use rust_vm::parser::parseTokens;
 use rust_vm::std::bootStrapVM;
-use rust_vm::vm::evaluateBytecode2;
+use rust_vm::vm::{evaluateBytecode2, StackFrame};
 
 fn handleError(err: Box<dyn Error>) {
     eprintln!("ERROR: {err}");
@@ -59,7 +59,7 @@ fn main() {
         rets.insert(f.0.clone(), f.1.returnType.clone());
     }
 
-    let bs = match bytecodeGen2(ast, &mut rets) {
+    let mut bs = match bytecodeGen2(ast, &mut rets) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("codegen");
@@ -86,12 +86,18 @@ fn main() {
     }
 
      */
+    vm.addOpcodes(bs.0);
+    let mut res = bs.1.iter().map(|it| {
+        it.toDefaultValue()
+    }).collect::<Vec<_>>();
+    vm.pushFrame(StackFrame::new(&mut res));
+
     let e = now.elapsed();
     println!("compiled in: {e:.2?}");
 
     let a = Instant::now();
 
-    evaluateBytecode2(bs.0, bs.1, &mut vm);
+    vm.execute();
 
     let elapsed = a.elapsed();
     println!("finished in: {elapsed:.2?}");

@@ -38,3 +38,5 @@ pub mod heap;
 pub mod nativeStack;
 pub mod asm;
 pub mod value;
+pub mod namespace;
+pub mod betterGen;
