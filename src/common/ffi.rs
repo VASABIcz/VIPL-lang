@@ -9,7 +9,7 @@ use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::namespace::{Namespace, NamespaceState};
 use crate::objects::{ViplObject};
-use crate::std::bootStrapVM;
+use crate::std::std::bootStrapVM;
 use crate::value::Value;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
 use crate::vm::FuncType::{Builtin, Extern, Runtime};

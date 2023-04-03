@@ -1,18 +1,78 @@
 use std::collections::HashMap;
 use std::error::Error;
-use crate::ast::{FunctionDef, Node, Op};
+use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
 use crate::betterGen::genFunctionDef;
 use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
-use crate::std::bootStrapVM;
 use crate::value::Value;
-use crate::vm::{Func, OpCode, StackFrame, VariableMetadata, VirtualMachine};
+use crate::vm::{DataType, Func, genFunName, genFunNameMeta, MyStr, OpCode, StackFrame, VariableMetadata, VirtualMachine};
+use crate::vm::FuncType::Builtin;
 
 #[derive(Debug, PartialEq)]
 pub enum NamespaceState {
     Loaded,
     PartiallyLoaded,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionTypeMeta {
+    Runtime(Vec<Statement>),
+    Builtin,
+    Native
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionMeta {
+    pub name: String,
+    pub argsCount: usize,
+    pub functionType: FunctionTypeMeta,
+    pub localsMeta: Box<[VariableMetadata]>,
+    pub returnType: Option<DataType>,
+}
+
+impl Into<FunctionMeta> for FunctionDef {
+    fn into(self) -> FunctionMeta {
+        FunctionMeta::makeRuntime(self.name, self.localsMeta.into_boxed_slice(), self.argsCount, self.returnType, self.body)
+    }
+}
+
+impl FunctionMeta {
+    pub fn genName(&self) -> String {
+        genFunName(&self.name, &self.localsMeta.iter().map(|it| {
+            it.typ.clone()
+        }).collect::<Vec<_>>())
+    }
+
+    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>) -> Self {
+        Self {
+            name,
+            argsCount,
+            functionType: FunctionTypeMeta::Native,
+            localsMeta: locals,
+            returnType: ret,
+        }
+    }
+
+    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>) -> Self {
+        Self {
+            name,
+            argsCount,
+            functionType: FunctionTypeMeta::Native,
+            localsMeta: locals,
+            returnType: ret,
+        }
+    }
+
+    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, body: Vec<Statement>) -> Self {
+        Self {
+            name,
+            argsCount,
+            functionType: FunctionTypeMeta::Runtime(body),
+            localsMeta: locals,
+            returnType: ret,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -33,7 +93,7 @@ impl LoadedFunction {
             }
             LoadedFunction::Virtual(v) => {
                 vm.pushFrame(frame);
-                vm.execute2(v)
+                vm.execute2(v);
             }
         }
     }
@@ -47,7 +107,7 @@ pub struct Namespace {
     pub functionsLookup: HashMap<String, usize>,
     pub globalsLookup: HashMap<String, usize>,
 
-    pub functionsMeta: Vec<FunctionDef>,
+    pub functionsMeta: Vec<FunctionMeta>,
     pub functions: Vec<LoadedFunction>,
 
     pub globalsMeta: Vec<VariableMetadata>,
@@ -55,14 +115,29 @@ pub struct Namespace {
 }
 
 impl Namespace {
-    pub fn registerFunctionDef(&mut self, d: FunctionDef) {
+    pub fn makeNative(
+        &mut self,
+        name: String,
+        args: Box<[VariableMetadata]>,
+        fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        ret: Option<DataType>,
+    ) {
+        let genName = genFunNameMeta(&name, &args, args.len());
+        let argsCount = args.len();
+
+        self.functionsLookup.insert(genName, self.functionsMeta.len());
+        self.functionsMeta.push(FunctionMeta::makeBuiltin(name, args, argsCount, ret));
+        self.functions.push(LoadedFunction::BuiltIn(fun));
+    }
+
+    pub fn registerFunctionDef(&mut self, d: FunctionMeta) {
         let index = self.functionsMeta.len();
-        self.functionsLookup.insert(d.name.clone(), index);
+        self.functionsLookup.insert(d.genName(), index);
         self.functionsMeta.push(d);
     }
 
-    pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine) -> Namespace {
-        let mut n = Namespace {
+    pub fn new(name: String) -> Self {
+        Self {
             name,
             state: NamespaceState::PartiallyLoaded,
             functionsLookup: Default::default(),
@@ -71,11 +146,15 @@ impl Namespace {
             functions: vec![],
             globalsMeta: vec![],
             globals: vec![],
-        };
+        }
+    }
+
+    pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine) -> Namespace {
+        let mut n = Namespace::new(name);
         let mut initFunction = FunctionDef{
             name: String::from("__init"),
-            args: vec![],
-            argCount: 0,
+            localsMeta: vec![],
+            argsCount: 0,
             body: vec![],
             returnType: None,
             isNative: false,
@@ -86,32 +165,34 @@ impl Namespace {
                 Operation::Global(g) => {
                     match g {
                         Node::FunctionDef(d) => {
-                            n.registerFunctionDef(d);
+                            n.registerFunctionDef(d.into());
                         }
                         Node::StructDef(_) => todo!()
                     }
                 }
                 Operation::Statement(v) => {
-                    initFunction.body.push(v)
+                    initFunction.body.push(v);
                 }
-                Operation::Expr(_) => todo!()
+                Operation::Expr(e) => {
+                    match e {
+                        Expression::FunctionCall(c) => {
+                            initFunction.body.push(Statement::FunctionExpr(c));
+                        }
+                        Expression::NamespaceAccess(c, v) => {
+                            match *v {
+                                Expression::FunctionCall(d) => {
+                                    initFunction.body.push(Statement::NamespaceFunction(c, d));
+                                }
+                                _ => panic!()
+                            }
+                        }
+                        c => panic!("{:?}", c)
+                    }
+                }
             }
         }
-        n.registerFunctionDef(initFunction);
+        n.registerFunctionDef(initFunction.into());
         n
-    }
-}
-
-pub fn link(vm: &mut VirtualMachine) {
-    for n in &vm.namespaces {
-        if n.state == NamespaceState::Loaded {
-            continue
-        }
-
-        for f in &n.functionsMeta {
-            let mut ops = vec![];
-            genFunctionDef(f.clone(), &mut ops)
-        }
     }
 }
 
@@ -134,7 +215,7 @@ pub fn loadSourceFile(src: &str, vm: &mut VirtualMachine) -> Result<Vec<Operatio
         Ok(v) => v,
         Err(e) => {
             eprintln!("parser");
-            todo!()
+            todo!("{}", e)
         }
     };
 

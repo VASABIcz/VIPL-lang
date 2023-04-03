@@ -40,6 +40,7 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
         Expression::Variable(_) => None,
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
+        Expression::NamespaceAccess(_, _) => None
     }
 }
 
@@ -75,5 +76,6 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
         Expression::NotExpression(_) => Some(false.into()),
+        Expression::NamespaceAccess(_, _) => None
     }
 }

@@ -278,6 +278,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             genExpression(r.constructCtx(e))?;
             ctx.ops.push(Not)
         }
+        Expression::NamespaceAccess(_, _) => {}
     }
     Ok(())
 }
@@ -295,7 +296,7 @@ impl Display for VariableNotFound {
 
 impl Error for VariableNotFound {}
 
-fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
+pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
     match ctx.statement {
         Statement::FunctionExpr(ref e) => {
             let mut argTypes = vec![];
@@ -503,6 +504,7 @@ fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 jmpType: JmpType::Jmp,
             });
         }
+        Statement::NamespaceFunction(_, _) => todo!()
     }
     Ok(())
 }
@@ -513,16 +515,16 @@ fn genFunctionDef(
     functionReturns: &HashMap<MyStr, Option<DataType>>,
 ) -> Result<(), Box<dyn Error>> {
     if fun.isNative {
-        let c = fun.argCount;
+        let c = fun.argsCount;
         let mut buf = String::new();
         crate::cGen::genFunctionDef(fun.clone(), &mut buf, functionReturns)?;
         let resPath = crate::gccWrapper::compile(&buf)?;
 
         ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));
         ops.push(StrNew(MyStr::Runtime(
-            genFunNameMeta(&fun.name, &fun.args, c).into_boxed_str(),
+            genFunNameMeta(&fun.name, &fun.localsMeta, c).into_boxed_str(),
         )));
-        ops.push(OpCode::PushInt(fun.argCount as isize));
+        ops.push(OpCode::PushInt(fun.argsCount as isize));
         ops.push(OpCode::Call {
             encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")),
         });
@@ -538,7 +540,7 @@ fn genFunctionDef(
     let mut idk1 = HashMap::new();
     let mut idk2 = vec![];
 
-    for arg in fun.args {
+    for arg in fun.localsMeta {
         idk1.insert(arg.name.clone(), (arg.typ.clone(), idk2.len()));
         idk2.push(arg)
     }
@@ -550,7 +552,7 @@ fn genFunctionDef(
     // let vTable = constructVarTable(&fun, functionReturns)?;
     ops.push(LocalVarTable {
         typ: idk2.into_boxed_slice(),
-        argsCount: fun.argCount,
+        argsCount: fun.argsCount,
     });
     ops.push(FunReturn {
         typ: fun.returnType,
@@ -640,6 +642,7 @@ pub fn buildLocalsTable(
         Statement::ArrayAssign { .. } => {}
         Statement::Continue => {}
         Statement::Break => {}
+        Statement::NamespaceFunction(_, _) => {}
     }
 
     Ok(())
@@ -662,7 +665,7 @@ pub fn complexBytecodeGen(
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
                         MyStr::Runtime(
-                            genFunNameMeta(v.name.as_str(), &v.args, v.argCount).into_boxed_str(),
+                            genFunNameMeta(v.name.as_str(), &v.localsMeta, v.argsCount).into_boxed_str(),
                         ),
                         v.returnType.clone(),
                     );

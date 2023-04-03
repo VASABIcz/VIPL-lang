@@ -6,13 +6,14 @@ use std::hash::{Hash, Hasher};
 use libloading::{Library, Symbol};
 
 use crate::ast::{Expression, Op};
+use crate::betterGen::genFunctionDef;
 use crate::ffi::NativeWrapper;
 use crate::heap::{Allocation, Hay, HayCollector, Heap};
-use crate::namespace::{Namespace, NamespaceState};
+use crate::namespace::{FunctionTypeMeta, LoadedFunction, Namespace, NamespaceState};
+use crate::namespace::NamespaceState::Loaded;
 use crate::nativeStack::StackManager;
 use crate::objects::{Array, ObjectDefinition, ViplObject};
-use crate::objects::Str;
-use crate::std::bootStrapVM;
+use crate::std::std::bootStrapVM;
 use crate::value::Value;
 use crate::vm::DataType::*;
 use crate::vm::FuncType::*;
@@ -589,6 +590,22 @@ pub struct VirtualMachine<'a> {
 const DEBUG: bool = false;
 
 impl VirtualMachine<'_> {
+    pub fn builtdFuncgtionReturn(&self) -> HashMap<MyStr, Option<DataType>> {
+        let mut x = HashMap::new();
+
+        for n in &self.namespaces {
+            for f in &n.functionsMeta {
+                let mut buf = String::new();
+                buf += &n.name;
+                buf += "::";
+                buf += &f.genName();
+                x.insert(buf.into(), f.returnType.clone());
+            }
+        }
+
+        x
+    }
+
     pub fn registerNamespace(&mut self, namespace: Namespace) -> usize {
         let index = self.namespaces.len();
         self.namespaceLookup.insert(namespace.name.clone(), index);
@@ -858,13 +875,16 @@ impl VirtualMachine<'_> {
     #[inline]
     pub fn execute2(&mut self, opCodes: &Vec<OpCode>) {
         loop {
-            let (op, index) = match self.nextOpcode() {
-                (None, _) => {
+            let index = self.getIndex();
+            let op = match opCodes.get(index) {
+                None => {
                     self.popFrame();
                     return;
                 }
-                (Some(v), i) => (v, i),
+                Some(v) => v
             };
+            self.getMutFrame().programCounter += 1;
+
             // println!("evaluating {:?}", op);
             unsafe {
                 match op {
@@ -979,7 +999,8 @@ impl VirtualMachine<'_> {
                         }
                     },
                     Call { encoded } => unsafe {
-                        println!("{}", &encoded);
+                        todo!("deprecated");
+                        println!("{} {} {}", &encoded, self.opCodeCache.len(), index);
                         let cached = match &self.opCodeCache.get_unchecked(index) {
                             Some(v) => match v {
                                 CachedOpCode::CallCache {
@@ -1054,7 +1075,10 @@ impl VirtualMachine<'_> {
                             }
                         }
                     },
-                    Return => self.popFrame(),
+                    Return => {
+                        self.popFrame();
+                        return;
+                    },
                     Add(v) => unsafe {
                         let a = self.pop();
                         self.getMutTop().add(a, v, &mut *(self as *const VirtualMachine as *mut VirtualMachine));
@@ -1148,10 +1172,15 @@ impl VirtualMachine<'_> {
                         let f = frame.namespace.functions.get_unchecked(*id);
 
 
-                        let mut locals = fMeta.args.iter().map(|it| {
+                        let mut locals = fMeta.localsMeta.iter().map(|it| {
                             it.typ.toDefaultValue()
                         }).collect::<Vec<_>>();
 
+                        for i in 0..fMeta.argsCount {
+                            let arg = self.pop();
+                            // println!("poped {}", arg.asNum());
+                            locals[(fMeta.argsCount - 1) - i] = arg;
+                        }
 
                         let mut fs = StackFrame{
                             localVariables: &mut locals,
@@ -1163,16 +1192,22 @@ impl VirtualMachine<'_> {
 
                         f.call(&mut *r, fs)
                     }
-                    LCall { namespace, id, } => {
+                    LCall { namespace, id} => {
                         let r = self as *const VirtualMachine as *mut VirtualMachine;
                         let frame = self.getFrame();
-                        let namespace = self.namespaces.get_unchecked(*namespace);
-                        let fMeta = namespace.functionsMeta.get_unchecked(*id);
-                        let f = namespace.functions.get_unchecked(*id);
+                        let namespace = self.namespaces.get(*namespace).unwrap();
+                        let fMeta = namespace.functionsMeta.get(*id).unwrap();
+                        let f = namespace.functions.get(*id).unwrap();
 
-                        let mut locals = fMeta.args.iter().map(|it| {
+                        let mut locals = fMeta.localsMeta.iter().map(|it| {
                             it.typ.toDefaultValue()
                         }).collect::<Vec<_>>();
+
+                        for i in 0..fMeta.argsCount {
+                            let arg = self.pop();
+                            // println!("poped {}", arg.asNum());
+                            locals[(fMeta.argsCount - 1) - i] = arg;
+                        }
 
                         let mut fs = StackFrame{
                             localVariables: &mut locals,
@@ -1348,7 +1383,7 @@ impl VirtualMachine<'_> {
                         let mut cahedLocals = cached.0.clone();
                         for i in 0..(*cached.2) {
                             let arg = self.pop();
-                            println!("poped {}", arg.asNum());
+                            // println!("poped {}", arg.asNum());
                             cahedLocals[(cached.2 - 1) - i] = arg;
                         }
                         // FIXME
@@ -1488,6 +1523,27 @@ impl VirtualMachine<'_> {
 }
 
 impl VirtualMachine<'_> {
+    pub fn link(&mut self) {
+        let idk = self.builtdFuncgtionReturn();
+        let v = self as *mut VirtualMachine as *const VirtualMachine;
+        for n in &mut self.namespaces {
+            let nn = n as *mut Namespace;
+            if n.state == Loaded {
+                continue
+            }
+
+            for f in &mut n.functionsMeta[n.functions.len()..] {
+                if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                    let mut ops = vec![];
+                    let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
+                    f.localsMeta = res.into_boxed_slice();
+                    n.functions.push(LoadedFunction::Virtual(ops));
+                }
+            }
+            n.state = Loaded;
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             functions: Default::default(),

@@ -1,10 +1,12 @@
-print("while test")
+out::print("while test")
+
 x = 0
 while x < 10 {
-    print(x)
+    out::print(x)
     x += 1
 }
-print("recursion test")
+
+out::print("recursion test")
 
 fn fact(n: int): int {
     if n > 0 {
@@ -13,4 +15,5 @@ fn fact(n: int): int {
     return 1
 }
 
-print(fact(11))
+x = fact(11)
+out::print(x)

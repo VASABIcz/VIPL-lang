@@ -4,13 +4,13 @@ use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
 use crate::bytecodeChecker::InvalidTypeException;
-use crate::vm::{DataType, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
+use crate::vm::{DataType, Func, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 use crate::vm::Generic::Any;
 
 #[derive(Debug)]
 pub(crate) struct TypeNotFound {
-    typ: String,
+    pub(crate) typ: String,
 }
 
 impl Display for TypeNotFound {
@@ -53,6 +53,7 @@ pub enum Expression {
     ArrayLiteral(Vec<Expression>),
     ArrayIndexing(Box<ArrayAccess>),
     NotExpression(Box<Expression>),
+    NamespaceAccess(Vec<String>, Box<Expression>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,8 +107,6 @@ impl Expression {
             }
             Expression::StringLiteral(_) => Ok(Some(DataType::str())),
             Expression::FunctionCall(f) => {
-                // println!("{:?}", &f.arguments);
-                // println!("{:?}", typesMapping);
                 let types = f
                     .arguments
                     .iter()
@@ -156,9 +155,9 @@ impl Expression {
                             }
                         }
                         v => Err(Box::new(InvalidTypeException {
-                                                    expected: DataType::arr(Any),
-                                                    actual: Some(v),
-                                                })),
+                            expected: DataType::arr(Any),
+                            actual: Some(v),
+                        })),
                     }
                 } else {
                     let t = e
@@ -200,6 +199,9 @@ impl Expression {
                     }
                 }
             }
+            Expression::NamespaceAccess(n, i) => {
+                i.toDataType(typesMapping, functionReturns, typeHint)
+            }
         }
     }
 }
@@ -219,6 +221,7 @@ pub enum Statement {
     Continue,
     Break,
     Loop(Vec<Statement>),
+    NamespaceFunction(Vec<String>, FunctionCall)
 }
 
 #[derive(Debug, Clone)]
@@ -263,11 +266,19 @@ pub enum Node {
 #[derive(Debug, Clone)]
 pub struct FunctionDef {
     pub name: String,
-    pub args: Vec<VariableMetadata>,
-    pub argCount: usize,
+    pub localsMeta: Vec<VariableMetadata>,
+    pub argsCount: usize,
     pub body: Vec<Statement>,
     pub returnType: Option<DataType>,
     pub isNative: bool,
+}
+
+impl FunctionDef {
+    pub fn genName(&self) -> String {
+        genFunName(&self.name, &self.localsMeta.iter().map(|it| {
+            it.typ.clone()
+        }).collect::<Vec<_>>())
+    }
 }
 
 #[derive(Debug, Clone)]

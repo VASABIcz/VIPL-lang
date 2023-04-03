@@ -9,12 +9,9 @@ use crate::ast::{
     ArrayAccess, Expression, FunctionCall, ModType, Node, Op, Statement, StructDef, VariableCreate,
     VariableMod, While,
 };
-use crate::ast::Expression::IntLiteral;
+use crate::ast::Expression::{IntLiteral, NamespaceAccess};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{
-    CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus,
-    Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct,
-};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Equals, Identifier, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 
@@ -268,7 +265,6 @@ impl TokenProvider {
         self.consume();
         let t = match self.tokens.get(i) {
             None => {
-                panic!("SADGE");
                 return Err(Box::new(InvalidToken {
                     msg: format!("invalid token got None expected {typ:?}"),
                 }))
@@ -276,7 +272,6 @@ impl TokenProvider {
             Some(v) => v,
         };
         if t.typ != typ {
-            panic!("SADGE");
             return Err(Box::new(InvalidToken {
                 msg: format!("invalid token got {t:?} expected {typ:?}"),
             }));
@@ -347,10 +342,18 @@ impl Operation {
             Operation::Statement(s) => Ok(s),
             Operation::Expr(e) => match e {
                 Expression::FunctionCall(f) => Ok(Statement::FunctionExpr(f)),
-                _ => Err(Box::new(InvalidOperation {
-                    operation: clone,
-                    expected: String::from("Statement"),
-                })),
+                Expression::NamespaceAccess(f, e) => {
+                    match *e {
+                        Expression::FunctionCall(v) => Ok(Statement::NamespaceFunction(f, v)),
+                        _ => panic!()
+                    }
+                },
+                _ => {
+                    Err(Box::new(InvalidOperation {
+                        operation: clone,
+                        expected: String::from("Statement"),
+                    }))
+                },
             },
             _ => Err(Box::new(InvalidOperation {
                 operation: clone,
@@ -444,8 +447,8 @@ impl ParsingUnit for FunctionParsingUnit {
         Ok(Operation::Global(Node::FunctionDef(
             crate::ast::FunctionDef {
                 name,
-                args,
-                argCount,
+                localsMeta: args,
+                argsCount: argCount,
                 body: statements,
                 returnType,
                 isNative,
@@ -1430,8 +1433,43 @@ impl ParsingUnit for StructParsingUnit {
     }
 }
 
+struct NamespaceParsingUnit;
+
+impl ParsingUnit for NamespaceParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(Namespace, 1)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        let mut buf = vec![];
+
+        while tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(Namespace, 1) {
+            let i = tokenProvider.getIdentifier()?;
+            buf.push(i);
+            tokenProvider.getAssert(Namespace)?;
+        }
+
+        let e = parseExpr(tokenProvider, parser)?;
+
+        Ok(Operation::Expr(NamespaceAccess(buf, Box::new(e))))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
+        Box::new(NamespaceParsingUnit),
         Box::new(VarModParsingUnit),
         Box::new(WhileParsingUnit),
         Box::new(LoopParsingUnit),

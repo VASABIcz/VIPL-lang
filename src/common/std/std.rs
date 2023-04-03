@@ -1,48 +1,11 @@
-
-
-
-
-
 use crate::objects::{Str, ViplObject};
+use crate::std::out::registerOut;
 use crate::value::Value;
+use crate::vm::{DataType, Generic, MyStr, run, SeekableOpcodes, VariableMetadata, VirtualMachine};
+use crate::vm::DataType::{Bool, Float, Int};
+use crate::vm::OpCode::{Call, Pop, PushInt};
 
-use crate::vm::*;
-use crate::vm::DataType::*;
-use crate::vm::OpCode::*;
-
-pub fn bootStrapVM() -> VirtualMachine<'static> {
-    let mut vm = VirtualMachine::new();
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Int,
-        }]),
-        |_a, b| println!("{}", b.localVariables[0].getNumRef()),
-        None,
-    );
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Bool,
-        }]),
-        |_a, b| println!("{}", b.localVariables[0].getBool()),
-        None,
-    );
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Float,
-        }]),
-        |_a, b| println!("{}", b.localVariables[0].getFlo()),
-        None,
-    );
-
+pub fn registerStd(vm: &mut VirtualMachine) {
     vm.makeNative(
         String::from("assert"),
         Box::new([
@@ -63,12 +26,6 @@ pub fn bootStrapVM() -> VirtualMachine<'static> {
         String::from("exec"),
         Box::default(),
         |a, b| {
-            /*
-            let stack = match b.previous {
-                None => b,
-                Some(v) => v
-            };
-             */
             let mut genOps = [
                 PushInt(1),
                 Pop,
@@ -84,20 +41,6 @@ pub fn bootStrapVM() -> VirtualMachine<'static> {
             };
 
             run(&mut seek, a, b);
-        },
-        None,
-    );
-
-    vm.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::str(),
-        }]),
-        |_a, b| {
-            let c = b.localVariables.get(0).unwrap();
-            let str = c.asRef().getStr();
-            println!("{}", str.string);
         },
         None,
     );
@@ -211,10 +154,10 @@ pub fn bootStrapVM() -> VirtualMachine<'static> {
     vm.makeNative(
         String::from("loadNative"),
         Box::new([
-                    VariableMetadata::from(DataType::str()), // path
-                    VariableMetadata::from(DataType::str()), // name
-                    VariableMetadata::from(DataType::Int),   // arg count
-                ]),
+            VariableMetadata::from(DataType::str()), // path
+            VariableMetadata::from(DataType::str()), // name
+            VariableMetadata::from(DataType::Int),   // arg count
+        ]),
         |vm, locals| unsafe {
             let path = locals.localVariables.get(0).unwrap().getString();
             let name = locals.localVariables.get(1).unwrap().getString();
@@ -224,6 +167,12 @@ pub fn bootStrapVM() -> VirtualMachine<'static> {
         },
         None,
     );
+}
+
+pub fn bootStrapVM() -> VirtualMachine<'static> {
+    let mut vm = VirtualMachine::new();
+
+    registerOut(&mut vm);
 
     vm
 }

@@ -17,8 +17,8 @@ use crate::vm::DataType::{Bool, Int};
 use crate::vm::OpCode::*;
 
 #[derive(Debug)]
-struct NoValue {
-    msg: String,
+pub struct NoValue {
+    pub msg: String,
 }
 
 impl Display for NoValue {
@@ -205,13 +205,14 @@ fn genExpression(
             out.push('!');
             genExpression(*e, out, functionReturns, vTable)?;
         }
+        Expression::NamespaceAccess(_, i) => todo!()
     }
     Ok(())
 }
 
 #[derive(Debug)]
-struct VariableNotFound {
-    name: String,
+pub struct VariableNotFound {
+    pub name: String,
 }
 
 impl Display for VariableNotFound {
@@ -409,6 +410,7 @@ fn genStatement(
             }
             out.push_str(" }");
         }
+        Statement::NamespaceFunction(_, _) => todo!()
     }
     Ok(())
 }
@@ -434,7 +436,7 @@ pub fn genFunctionDef(
     let mut e = HashMap::new();
 
     let mut idk2 = vec![];
-    for (it, arg) in fun.args.iter().enumerate() {
+    for (it, arg) in fun.localsMeta.iter().enumerate() {
         out.push_str(arg.typ.toCString());
         out.push(' ');
         out.push_str(arg.name.as_str());
@@ -511,7 +513,7 @@ pub fn bytecodeGen(operations: Vec<Operation>) -> Result<String, Box<dyn Error>>
                 Node::FunctionDef(v) => {
                     functionReturns.insert(
                         MyStr::Runtime(
-                            genFunNameMeta(&v.name, &v.args.clone(), v.argCount).into_boxed_str(),
+                            genFunNameMeta(&v.name, &v.localsMeta.clone(), v.argsCount).into_boxed_str(),
                         ),
                         v.returnType.clone(),
                     );
@@ -623,6 +625,7 @@ pub fn buildLocalsTable(
         Statement::ArrayAssign { .. } => {}
         Statement::Continue => {}
         Statement::Break => {}
+        Statement::NamespaceFunction(_, _) => {}
     }
 
     Ok(())
@@ -667,7 +670,7 @@ pub fn bytecodeGen2(
             inlineMain.push(op);
         } else if let Operation::Global(Node::FunctionDef(d)) = op {
             functionReturns.insert(
-                genFunNameMeta(d.name.as_str(), &d.args, d.argCount).into(),
+                genFunNameMeta(d.name.as_str(), &d.localsMeta, d.argsCount).into(),
                 d.returnType.clone(),
             );
         }
