@@ -1,7 +1,8 @@
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, c_int, CStr};
 use std::fmt::{Debug, Formatter};
 use std::mem::{forget};
 use std::ptr;
+use libc::exit;
 
 
 use crate::codegen::bytecodeGen;
@@ -14,7 +15,7 @@ use crate::value::Value;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
 use crate::vm::FuncType::{Builtin, Extern, Runtime};
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 
 #[no_mangle]
@@ -413,7 +414,7 @@ pub extern fn callFast(vm: &mut VirtualMachine, id: usize) {
 
 #[no_mangle]
 pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject {
-    println!("AIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIDS");
+    // println!("AIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIDS");
     if DEBUG {
         println!("ffi-stringNew");
     }

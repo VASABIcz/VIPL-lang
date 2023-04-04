@@ -5,8 +5,10 @@ use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
 use crate::betterGen::genFunctionDef;
 use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
+use crate::objects::ViplObject;
 use crate::parser::{Operation, parseTokens};
 use crate::value::Value;
+use crate::vm;
 use crate::vm::{DataType, Func, genFunName, genFunNameMeta, MyStr, OpCode, StackFrame, VariableMetadata, VirtualMachine};
 use crate::vm::FuncType::Builtin;
 
@@ -91,7 +93,8 @@ impl LoadedFunction {
             }
             LoadedFunction::Native(n) => unsafe {
                 let x: *const () = transmute(n.clone());
-                println!("before call {:?}", x);
+                let d: usize = transmute(vm.nativeWrapper.stringNew);
+                println!("before call {:?} {:?} {:?}", x, vm as *const VirtualMachine as usize, d);
                 n(vm, &mut frame)
             }
             LoadedFunction::Virtual(v) => {

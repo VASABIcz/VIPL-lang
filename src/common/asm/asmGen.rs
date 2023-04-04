@@ -28,7 +28,7 @@ fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
     this.comment(&format!("debugCrash {}", asmValue.clone().toString()));
     this.mov(Rax.into(), 1.into());
     this.mov(Rdi.into(), 1.into());
-    this.lea(Rsi.into(), asmValue.clone());
+    this.mov(Rsi.into(), 0.into());
     this.mov(Rdx.into(), asmValue);
     this.sysCall();
     this.newLine();
@@ -43,9 +43,10 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.lea(Rdx.into(), label.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 23*8));
     // FIXME issue with this
-    debugPrint(this, "pre\n");
+    //debugCrash(this, R10.into());
+    // debugPrint(this, "pre\n");
     this.call(R10.into());
-    debugPrint(this, "post\n");
+    // debugPrint(this, "post\n");
     this.push(Rax.into());
     this.newLine();
 }
