@@ -26,4 +26,4 @@ out::print(n[0].x)
 
 n[0] = n[2]
 
-print(n[0].x)
+out::print(n[0].x)

@@ -1,222 +1,24 @@
 use std::{intrinsics, ptr};
 use std::alloc::{alloc, Layout};
 use std::collections::HashMap;
-use std::env::var;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
-
-use libloading::{Library, Symbol};
-
-use crate::asm::asmGen::generateAssembly;
-use crate::asm::asmLib::NasmGen;
+use std::fmt::{Debug, Formatter};
+use libloading::os::unix::Library;
 use crate::asm::jitCompiler::JITCompiler;
-use crate::ast::{Expression, Op};
 use crate::bytecodeGen::genFunctionDef;
 use crate::ffi::NativeWrapper;
-use crate::heap::{Allocation, Hay, HayCollector, Heap};
-use crate::lexer::tokenizeSource;
-use crate::namespace::{FunctionMeta, FunctionTypeMeta, LoadedFunction, Namespace, NamespaceState};
-use crate::namespace::NamespaceState::Loaded;
-use crate::nativeStack::StackManager;
-use crate::objects::{Array, ObjectDefinition, ViplObject};
-use crate::parser::{parseDataType, TokenProvider};
-use crate::std::std::bootStrapVM;
-use crate::value::Value;
-use crate::vm::DataType::*;
-use crate::vm::FuncType::*;
-use crate::vm::OpCode::*;
-
-struct FastVec<T> {
-    cap: usize,
-    ptr: *mut T,
-    size: usize
-}
-
-#[derive(Debug, Clone, Eq)]
-pub enum MyStr {
-    Static(&'static str),
-    Runtime(Box<str>),
-}
-
-impl PartialEq for MyStr {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.as_str() == other.as_str()
-    }
-}
-
-impl Hash for MyStr {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_str().hash(state)
-    }
-}
-
-impl From<Box<str>> for MyStr {
-    #[inline]
-    fn from(value: Box<str>) -> Self {
-        Self::Runtime(value)
-    }
-}
-
-impl From<String> for MyStr {
-    #[inline]
-    fn from(value: String) -> Self {
-        Self::Runtime(value.into_boxed_str())
-    }
-}
-
-impl From<&'static str> for MyStr {
-    #[inline]
-    fn from(value: &'static str) -> Self {
-        Self::Static(value)
-    }
-}
-
-impl Display for MyStr {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MyStr::Static(v) => {
-                write!(f, "{v}")
-            }
-            MyStr::Runtime(v) => {
-                write!(f, "{v}")
-            }
-        }
-    }
-}
-
-impl MyStr {
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        match self {
-            MyStr::Static(s) => s,
-            MyStr::Runtime(v) => v,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
-pub enum DataType {
-    Int,
-    Float,
-    Bool,
-    Char,
-    Object(ObjectMeta),
-    Function{
-        args: Vec<DataType>,
-        ret: Box<DataType>
-    },
-    Void
-}
-
-impl DataType {
-    pub fn asArray(&self) -> Result<&ObjectMeta,Box<dyn Error>>  {
-        match self {
-            Object(o) => {
-                if o.name.as_str() == "Array" {
-                    Ok(o)
-                }
-                else {
-                    Err(format!("expected Array got: {:?}", o.name).into())
-                }
-            }
-            v => Err(format!("expected Array got: {:?}", v).into())
-        }
-    }
-
-    pub fn str() -> Self {
-        Object(ObjectMeta {
-            name: MyStr::Static("String"),
-            generics: Box::new([]),
-        })
-    }
-    pub fn arr(inner: Generic) -> Self {
-        Object(ObjectMeta {
-            name: MyStr::Static("Array"),
-            generics: Box::new([inner]),
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
-pub enum Generic {
-    Any,
-    Type(DataType),
-}
-
-impl Generic {
-    pub fn ok_or<E>(self, err: E) -> Result<DataType, E> {
-        match self {
-            Generic::Any => Err(err),
-            Generic::Type(v) => Ok(v),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
-pub struct ObjectMeta {
-    pub name: MyStr,
-    pub generics: Box<[Generic]>,
-}
-
-#[repr(u8)]
-#[derive(Debug)]
-pub enum RawDataType {
-    Int,
-    Float,
-    Bool,
-    Object,
-}
-
-impl DataType {
-    pub fn toString(&self) -> String {
-        match self {
-            Int => "int".to_string(),
-            Float => "float".to_string(),
-            Bool => "bool".to_string(),
-            Object(x) => x.name.clone().to_string(),
-            Char => "char".to_string(),
-            Void => "!".to_string(),
-            Function { args, ret } =>
-                format!("({}): {}", args.iter().map(|it| {
-                    it.toString()
-                }).collect::<Vec<_>>().join(", "), ret.toString())
-        }
-    }
-
-    pub fn toCString(&self) -> &str {
-        match self {
-            Int => "long",
-            Float => "float",
-            Bool => "bool",
-            Object(_) => "ViplObject*",
-            Char => "char",
-            Void => "void",
-            Function { .. } => todo!()
-        }
-    }
-}
-
-impl DataType {
-    #[inline]
-    pub fn toDefaultValue(&self) -> Value {
-        match self {
-            Int => 0.into(),
-            Float => 0.0.into(),
-            Bool => false.into(),
-            Char => 0.into(),
-            Object(_) => 0.into(),
-            Function { .. } => 0.into(),
-            Void => unreachable!(),
-        }
-    }
-}
+use crate::utils::FastVec;
+use crate::variableMetadata::VariableMetadata;
+use crate::vm::dataType::DataType;
+use crate::vm::heap::{Allocation, HayCollector, Heap};
+use crate::vm::myStr::MyStr;
+use crate::vm::namespace::{FunctionTypeMeta, LoadedFunction, Namespace};
+use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::namespaceLoader::NamespaceLoader;
+use crate::vm::nativeStack::StackManager;
+use crate::vm::stackFrame::StackFrame;
+use crate::vm::value::Value;
+use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
+use crate::vm::vm::OpCode::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JmpType {
@@ -231,47 +33,13 @@ pub enum JmpType {
 
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
-pub struct VariableMetadata {
-    pub name: MyStr,
-    pub typ: DataType,
-}
-
-impl From<DataType> for VariableMetadata {
-    fn from(value: DataType) -> Self {
-        Self {
-            name: "unknown".into(),
-            typ: value,
-        }
-    }
-}
-
-impl VariableMetadata {
-    pub fn f(name: MyStr) -> Self {
-        Self { name, typ: Float }
-    }
-
-    pub fn i(name: MyStr) -> Self {
-        Self { name, typ: Int }
-    }
-
-    pub fn c(name: MyStr) -> Self {
-        Self { name, typ: Char }
-    }
-
-    pub fn b(name: MyStr) -> Self {
-        Self { name, typ: Bool }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
 pub enum OpCode {
     F2I,
     I2F,
     PushInt(isize),
     PushFunction(u32, u32),
-    PushIntOne(),
-    PushIntZero(),
+    PushIntOne,
+    PushIntZero,
     PushFloat(f64),
     PushBool(bool),
     PushChar(char),
@@ -344,116 +112,6 @@ pub enum OpCode {
     GetChar,
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub enum RawOpCode {
-    FunBegin,
-    FunName,
-    FunReturn,
-    LocalVarTable,
-    FunEnd,
-    F2I,
-    I2F,
-    PushInt,
-    PushFloat,
-    PushBool,
-    Pop,
-    Dup,
-    PushLocal,
-    SetLocal,
-    Jmp,
-    Call,
-    Return,
-    Add,
-    Sub,
-    Div,
-    Mul,
-
-    Equals,
-    Greater,
-    Less,
-
-    Or,
-    And,
-    Not,
-
-    ClassBegin,
-    ClassName,
-    ClassField,
-    ClassEnd,
-    New,
-    GetField,
-    SetField,
-
-    ArrayNew,
-    ArrayStore,
-    ArrayLoad,
-    ArrayLength,
-    Inc,
-    Dec,
-}
-
-pub struct MyObjectField {
-    pub typ: DataType,
-    pub value: Value,
-}
-
-pub enum MyObject {
-    ArrayObj {
-        values: Vec<Value>,
-        typ: DataType,
-        size: usize,
-    },
-    RuntimeObj {
-        name: String,
-        fields: Option<HashMap<String, MyObjectField>>,
-    },
-}
-
-#[derive(Clone)]
-pub struct MyClassField {
-    pub name: String,
-    pub typ: DataType,
-}
-
-#[derive(Clone)]
-pub struct MyClass {
-    pub name: String,
-    pub fields: HashMap<String, MyClassField>,
-}
-
-#[derive(Debug)]
-pub struct StackFrame<'a> {
-    pub localVariables: &'a mut [Value],
-    pub objects: Option<Vec<Hay<ViplObject>>>,
-    pub previous: Option<&'a StackFrame<'a>>,
-    pub programCounter: usize,
-    pub namespace: &'a Namespace,
-    pub functionID: usize
-}
-
-impl StackFrame<'_> {
-    pub fn collect(&self, vm: &VirtualMachine, collector: &mut HayCollector) {
-        for local in self.localVariables.iter() {
-            if vm.heap.contains(local.asNum() as usize) {
-                collector.visit(local.asNum() as usize)
-            }
-        }
-        if let Some(prev) = self.previous {
-            prev.collect(vm, collector)
-        }
-    }
-}
-
-impl Drop for StackFrame<'_> {
-    fn drop(&mut self) {}
-}
-
-pub fn parseDataTypeFromStr(s: &str) -> Result<DataType, Box<dyn Error>> {
-    let p = tokenizeSource(s)?;
-    parseDataType(&mut TokenProvider::new(p))
-}
-
 #[derive(Debug, Clone)]
 pub struct Func {
     pub name: String,
@@ -496,59 +154,14 @@ impl Debug for FuncType {
     }
 }
 
-#[derive(Debug)]
-pub enum CachedOpCode {
-    CallCache {
-        locals: Box<[Value]>,
-        typ: FuncType,
-        argCount: usize,
-    },
-}
-
-#[derive(Debug)]
-pub struct NamespaceLoader {
-    pub lookupPaths: Vec<String>,
-    pub lookupBuiltin: Vec<fn(&mut VirtualMachine)>
-}
-
-impl NamespaceLoader {
-    pub fn registerPath(&mut self, path: &str, depth: usize) {
-        todo!()
-    }
-
-    pub fn registerBuiltin(&mut self, name: Vec<String>, init: fn (&mut VirtualMachine)) {
-        todo!()
-    }
-
-    pub fn loadNamespace(&self, path: Vec<String>) -> Namespace {
-        todo!()
-    }
-
-    pub fn new() -> Self {
-        let s = Self {
-            lookupPaths: vec![],
-            lookupBuiltin: vec![],
-        };
-
-        s
-    }
-}
-
 #[repr(C)]
 #[derive(Debug)]
 pub struct VirtualMachine<'a> {
     pub nativeWrapper: NativeWrapper,
 
-    // pub functions: HashMap<MyStr, Func>,
-    // pub classes: HashMap<MyStr, ObjectDefinition>,
     pub stack: Vec<Value>,
-    // pub opCodes: Vec<OpCode>,
-    // pub opCodeCache: Vec<Option<CachedOpCode>>,
     pub nativeLibraries: Vec<Library>,
     pub heap: Heap,
-
-    // pub cachedFunctions: Vec<Func>,
-    // pub cachedFunctionsLookup: HashMap<MyStr, usize>,
 
     pub stackManager: StackManager<2048>,
 
@@ -731,8 +344,8 @@ impl VirtualMachine<'_> {
                         self.getMutTop().f2i()
                     }
                     PushInt(v) => self.stack.push(Value { Num: *v }),
-                    PushIntOne() => self.stack.push(Value { Num: 1 }),
-                    PushIntZero() => self.stack.push(Value { Num: 0 }),
+                    PushIntOne => self.stack.push(Value { Num: 1 }),
+                    PushIntZero => self.stack.push(Value { Num: 0 }),
                     PushFloat(v) => self.stack.push((*v).into()),
                     PushBool(v) => self.stack.push((*v).into()),
                     Pop => {
@@ -1085,215 +698,6 @@ impl SeekableOpcodes<'_> {
     #[inline(always)]
     pub fn getOpcode(&self, index: usize) -> Option<&OpCode> {
         self.opCodes.get(index)
-    }
-}
-
-#[inline]
-pub fn argsToString(args: &[DataType]) -> String {
-    let mut buf = String::new();
-
-    for (i, arg) in args.iter().enumerate() {
-        buf.push_str(&arg.toString());
-        if i != args.len() - 1 {
-            buf.push_str(", ")
-        }
-    }
-    buf
-}
-
-#[inline]
-pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
-    let mut buf = String::new();
-
-    for (i, arg) in args.iter().enumerate() {
-        buf.push_str(&arg.typ.toString());
-        if i != args.len() - 1 {
-            buf.push_str(", ")
-        }
-    }
-    buf
-}
-
-#[inline]
-pub fn genFunName(name: &str, args: &[DataType]) -> String {
-    format!("{}({})", name, argsToString(args))
-}
-
-#[inline]
-pub fn genFunNameMeta(name: &str, args: &[VariableMetadata], argsLen: usize) -> String {
-    format!("{}({})", name, argsToStringMeta(&args[0..argsLen]))
-}
-
-#[inline]
-pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &mut StackFrame) {
-    loop {
-        let (op, index) = match opCodes.nextOpcode() {
-            (None, _) => {
-                return;
-            }
-            (Some(v), i) => (v, i),
-        };
-        // println!("evaluating {:?}", op);
-        match op {
-            F2I => {
-                vm.getMutTop().f2i()
-            }
-            I2F => {
-                vm.getMutTop().f2i()
-            }
-            PushInt(v) => vm.stack.push(Value{Num: *v}),
-            PushIntOne() => vm.stack.push(Value{Num: 1}),
-            PushIntZero() => vm.stack.push(Value{Num: 0}),
-            PushFloat(v) => vm.stack.push((*v).into()),
-            PushBool(v) => vm.stack.push((*v).into()),
-            Pop => {
-                vm.stack.pop();
-            }
-            Dup => unsafe {
-                let val = vm.getTop();
-                vm.stack.push(*val);
-            },
-            PushLocal { index } => {
-                vm.stack.push(*unsafe { stackFrame.localVariables.get_unchecked(*index) })
-            }
-            SetLocal { index, typ: _ } => {
-                let x = vm.pop();
-                *unsafe { stackFrame.localVariables.get_unchecked_mut(*index) } = x;
-            }
-            Jmp { offset, jmpType } => match jmpType {
-                JmpType::One => {
-                    vm.pop();
-                    let _b = vm.pop();
-                    panic!()
-                }
-                JmpType::Zero => {}
-                JmpType::Jmp => {
-                    let x = *offset;
-                    opCodes.seek(x);
-                }
-                JmpType::Gt => {
-                    let a = vm.pop();
-                    let b = vm.pop();
-                    if a.gt(&b, &DataType::Float) {
-                        let x = *offset;
-                        opCodes.seek(x)
-                    }
-                }
-                JmpType::Less => {
-                    let a = vm.pop();
-                    let b = vm.pop();
-                    if a.less(&b, &DataType::Float) {
-                        let x = *offset;
-                        opCodes.seek(x)
-                    }
-                }
-                JmpType::True => {
-                    let a = vm.pop();
-                    if a.getBool() {
-                        let x = *offset;
-                        opCodes.seek(x)
-                    }
-                }
-                JmpType::False => {
-                    let a = vm.pop();
-                    if !a.getBool() {
-                        let x = *offset;
-                        opCodes.seek(x)
-                    }
-                }
-            },
-            Call { encoded } => panic!("deprecated"),
-            Return => return,
-            Add(v) => unsafe {
-                let a = vm.pop();
-                let c = vm.getMutTop() as *mut Value;
-
-                (*c).add(a, v, vm);
-            },
-            Sub(v) => {
-                let a = vm.pop();
-                vm.getMutTop().sub(&a, v);
-            },
-            Div(v) => {
-                let a = vm.pop();
-                vm.getMutTop().div(&a, v);
-            },
-            Mul(v) => {
-                let a = vm.pop();
-                vm.getMutTop().mul(&a, v);
-            },
-            Equals(v) => {
-                let a = vm.pop();
-                vm.getMutTop().refEq(&a, v);
-            },
-            Greater(v) => {
-                let a = vm.pop();
-                vm.getMutTop().refGt(&a, v);
-            },
-            Less(v) => {
-                let a = vm.pop();
-                vm.getMutTop().refLess(&a, v);
-            },
-            Or => {
-                let a = vm.pop();
-                vm.getMutTop().or(&a);
-            },
-            And => {
-                let a = vm.pop();
-                vm.getMutTop().and(&a);
-            },
-            Not => {
-                vm.getMutTop().not();
-            },
-            ArrayNew(d) => {
-                let _size = vm.pop();
-                let a = Value::makeArray(vec![], d.clone(), vm);
-                vm.stack.push(a)
-            }
-            ArrayStore(_) => {
-                let index = vm.pop().getNum();
-                let mut c = vm.pop();
-                let val = c.getMutArray();
-                let value = vm.pop();
-
-                if index as usize == val.internal.len() {
-                    val.internal.push(value)
-                } else {
-                    val.internal[index as usize] = value
-                }
-            }
-            ArrayLoad(_) => {
-                let index = vm.pop().getNum();
-                let mut value1 = vm.pop();
-                let arr = value1.getMutArray();
-                vm.stack.push(*arr.internal.get(index as usize).unwrap());
-            }
-            ArrayLength => {
-                vm.stack.push(Value{Num: vm.pop().getReference().getArr().internal.len() as isize});
-            },
-            // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
-            Inc { typ, index } => unsafe {
-                stackFrame.localVariables.get_unchecked_mut(*index).inc(typ)
-            },
-            Dec { typ, index } => unsafe {
-                stackFrame.localVariables.get_unchecked_mut(*index).dec(typ)
-            },
-            PushChar(c) => vm.stack.push((*c).into()),
-            StrNew(s) => {
-                let a = Value::makeString(s.to_string(), vm);
-                vm.stack.push(a)
-            },
-            GetChar => {
-                let index = vm.pop().getNum();
-
-                let opIndex = vm.stack.len()-1;
-
-                let r = vm.stack.get_mut(opIndex).unwrap();
-                let c = *r.getString().as_bytes().get(index as usize).unwrap() as char;
-                *r = c.into();
-            }
-            o => panic!("unimplemented opcode {:?}", o)
-        }
     }
 }
 

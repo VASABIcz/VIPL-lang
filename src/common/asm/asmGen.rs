@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
 use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
-use crate::namespace::Namespace;
-use crate::value::Value;
-use crate::vm::{DataType, JmpType, OpCode, VirtualMachine};
+use crate::vm::dataType::DataType;
+use crate::vm::namespace::Namespace;
+use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
 /*
 rax - FFI return value
@@ -223,8 +223,8 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::F2I => todo!(),
             OpCode::I2F => todo!(),
             OpCode::PushInt(v) => generator.push((*v).into()),
-            OpCode::PushIntOne() => generator.push(1.into()),
-            OpCode::PushIntZero() => generator.push(0.into()),
+            OpCode::PushIntOne => generator.push(1.into()),
+            OpCode::PushIntZero => generator.push(0.into()),
             OpCode::PushFloat(_) => todo!(),
             OpCode::PushBool(b) => generator.push((*b as isize).into()),
             OpCode::PushChar(c) => generator.push((*c as isize).into()),

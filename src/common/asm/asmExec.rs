@@ -4,7 +4,8 @@ use std::mem::{size_of, transmute, forget};
 use std::alloc::{alloc, dealloc, Layout};
 use std::arch::asm;
 use std::fs;
-use crate::vm::{ExternFn, StackFrame, VirtualMachine};
+use crate::vm::stackFrame::StackFrame;
+use crate::vm::vm::{ExternFn, VirtualMachine};
 
 pub fn allocateBinFunction(machineCode: &mut [u8]) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> () {
     // https://man7.org/linux/man-pages/man2/pkey_mprotect.2.html

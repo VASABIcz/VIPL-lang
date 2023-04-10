@@ -4,11 +4,13 @@ use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
 use crate::errors::{InvalidTypeException, TypeNotFound};
-use crate::namespace::StructMeta;
-use crate::objects::Str;
-use crate::vm::{DataType, Func, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
-use crate::vm::DataType::{Bool, Char, Object};
-use crate::vm::Generic::Any;
+use crate::utils::genFunName;
+use crate::variableMetadata::VariableMetadata;
+use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::DataType::{Bool, Char, Object};
+use crate::vm::dataType::Generic::Any;
+use crate::vm::myStr::MyStr;
+use crate::vm::namespace::StructMeta;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {

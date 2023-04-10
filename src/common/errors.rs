@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use crate::vm::DataType;
+use crate::vm::dataType::DataType;
 
 #[derive(Debug)]
 pub struct NoValue {

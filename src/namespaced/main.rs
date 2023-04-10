@@ -1,8 +1,9 @@
 use std::{env, fs};
 use libc::link;
-use vipl::namespace::{loadSourceFile, Namespace};
 use vipl::std::std::bootStrapVM;
-use vipl::vm::{StackFrame, VirtualMachine};
+use vipl::vm::namespace::{loadSourceFile, Namespace};
+use vipl::vm::stackFrame::StackFrame;
+use vipl::vm::vm::VirtualMachine;
 
 pub fn namespacePath(path: &str) -> Vec<String> {
     let mut con123 = fs::canonicalize(path).unwrap();

@@ -2,9 +2,7 @@
 use std::fs;
 
 use std::os::unix::fs::DirEntryExt2;
-use crate::value::Value;
-
-use crate::vm::{DataType, Generic, MyStr, VariableMetadata, VirtualMachine};
+use crate::vm::vm::VirtualMachine;
 
 pub fn setupFs(vm: &mut VirtualMachine) {
     todo!("needs to be ported to namespaces");

@@ -6,7 +6,6 @@ use std::ops::Index;
 use crate::errors::UnknownToken;
 use crate::lexer;
 use crate::lexer::TokenType::Identifier;
-use crate::vm::DataType;
 
 pub fn tokenize<T: Debug + Send + Sync>(
     lexingUnits: &mut [Box<dyn LexingUnit<T>>],

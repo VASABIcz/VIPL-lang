@@ -6,8 +6,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::asm::asmExec::allocateBinFunction;
 use crate::asm::asmGen::generateAssembly;
 use crate::asm::asmLib::NasmGen;
-use crate::namespace::Namespace;
-use crate::vm::{OpCode, StackFrame, VirtualMachine};
+use crate::vm::namespace::Namespace;
+use crate::vm::stackFrame::StackFrame;
+use crate::vm::vm::{OpCode, VirtualMachine};
 
 pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     let dir = temp_dir();

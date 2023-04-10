@@ -1,9 +1,5 @@
-use crate::objects::{Str, ViplObject};
 use crate::std::out::registerOut;
-use crate::value::Value;
-use crate::vm::{DataType, Generic, MyStr, run, SeekableOpcodes, VariableMetadata, VirtualMachine};
-use crate::vm::DataType::{Bool, Float, Int};
-use crate::vm::OpCode::{Call, Pop, PushInt};
+use crate::vm::vm::VirtualMachine;
 
 pub fn registerStd(vm: &mut VirtualMachine) {
     /*

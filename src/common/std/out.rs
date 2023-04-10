@@ -1,7 +1,10 @@
-use crate::namespace::Namespace;
-use crate::namespace::NamespaceState::Loaded;
-use crate::vm::{DataType, MyStr, VariableMetadata, VirtualMachine};
-use crate::vm::DataType::{Bool, Float, Int};
+use crate::variableMetadata::VariableMetadata;
+use crate::vm::dataType::DataType;
+use crate::vm::dataType::DataType::{Bool, Float, Int};
+use crate::vm::myStr::MyStr;
+use crate::vm::namespace::Namespace;
+use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {
     let mut namespace = Namespace::new("out".to_string());

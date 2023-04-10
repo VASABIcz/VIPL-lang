@@ -1,9 +1,12 @@
 use std::fmt::{Debug, Formatter};
 use crate::ast::Expression;
-use crate::heap::Hay;
-use crate::objects::{Array, Str, ViplObject};
-use crate::vm::{DataType, VirtualMachine};
-use crate::vm::DataType::*;
+use crate::vm;
+use crate::vm::dataType::DataType;
+use crate::vm::dataType::DataType::*;
+
+use crate::vm::heap::Hay;
+use crate::vm::objects::{Array, Str, ViplObject};
+use crate::vm::vm::VirtualMachine;
 
 #[derive(Copy, Clone)]
 pub union Value {
@@ -438,7 +441,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn makeObject(_obj: Box<dyn crate::objects::Object>) -> Value {
+    pub fn makeObject(_obj: Box<dyn vm::objects::Object>) -> Value {
         todo!();
         // Value{Reference: ManuallyDrop::new(Rice::new(ViplObject::Runtime(Box::leak(obj))))}
     }

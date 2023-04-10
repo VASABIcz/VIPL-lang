@@ -3,6 +3,64 @@ use std::mem::transmute;
 use crate::vm::{DataType, JmpType, MyStr, OpCode, RawDataType, RawOpCode, VariableMetadata};
 use crate::vm::OpCode::*;
 
+#[repr(u8)]
+#[derive(Debug)]
+pub enum RawDataType {
+    Int,
+    Float,
+    Bool,
+    Object,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub enum RawOpCode {
+    FunBegin,
+    FunName,
+    FunReturn,
+    LocalVarTable,
+    FunEnd,
+    F2I,
+    I2F,
+    PushInt,
+    PushFloat,
+    PushBool,
+    Pop,
+    Dup,
+    PushLocal,
+    SetLocal,
+    Jmp,
+    Call,
+    Return,
+    Add,
+    Sub,
+    Div,
+    Mul,
+
+    Equals,
+    Greater,
+    Less,
+
+    Or,
+    And,
+    Not,
+
+    ClassBegin,
+    ClassName,
+    ClassField,
+    ClassEnd,
+    New,
+    GetField,
+    SetField,
+
+    ArrayNew,
+    ArrayStore,
+    ArrayLoad,
+    ArrayLength,
+    Inc,
+    Dec,
+}
+
 impl DataType {
     pub fn toBytes(&self, bytes: &mut Vec<u8>) {
         let opId: [u8; 48] = unsafe { transmute((*self).clone()) };

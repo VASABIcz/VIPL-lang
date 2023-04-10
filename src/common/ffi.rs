@@ -8,12 +8,13 @@ use std::time::Duration;
 use libc::{exit, sleep};
 
 use crate::lexer::{lexingUnits, SourceProvider};
-use crate::namespace::{Namespace, NamespaceState};
-use crate::objects::{Str, ViplObject};
 use crate::std::std::bootStrapVM;
-use crate::value::Value;
-use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
-use crate::vm::FuncType::{Builtin, Extern, Runtime};
+use crate::vm::myStr::MyStr;
+use crate::vm::namespace::Namespace;
+use crate::vm::objects::{Str, ViplObject};
+use crate::vm::stackFrame::StackFrame;
+use crate::vm::value::Value;
+use crate::vm::vm::VirtualMachine;
 
 const DEBUG: bool = true;
 

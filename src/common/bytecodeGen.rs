@@ -11,14 +11,17 @@ use Statement::Variable;
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
 use crate::errors::{InvalidTypeException, NoValue, TypeNotFound, SymbolNotFound};
 use crate::lexer::*;
-use crate::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::optimizer::{evalE};
 use crate::parser::*;
-use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode, VariableMetadata, VirtualMachine};
-use crate::vm::DataType::{Bool, Char, Int, Object};
-use crate::vm::Generic::Any;
-use crate::vm::OpCode::*;
-
+use crate::utils::genFunName;
+use crate::variableMetadata::VariableMetadata;
+use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::DataType::{Bool, Char, Int, Object};
+use crate::vm::dataType::Generic::Any;
+use crate::vm::myStr::MyStr;
+use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
+use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, PushLocal, Return, SCall, SetField, SetLocal, StrNew, Sub, Swap};
 
 
 #[derive(Debug)]
@@ -284,10 +287,10 @@ pub struct PartialExprCtx<'a> {
 impl PartialExprCtx<'_> {
     pub fn genPushInt(&mut self, value: isize) {
         if value == 1 {
-            self.ops.push(PushIntOne())
+            self.ops.push(PushIntOne)
         }
         else if value == 0 {
-            self.ops.push(PushIntZero())
+            self.ops.push(PushIntZero)
         }
         else {
             self.ops.push(PushInt(value))
@@ -818,7 +821,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             let varID = ctx.vTable.get(&var.clone().into()).unwrap().1;
 
             // BEGIN
-            ctx.ops.push(PushIntZero());
+            ctx.ops.push(PushIntZero);
 
             let beginIndex = ctx.ops.len();
 
@@ -831,7 +834,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
 
             // dec array length bcs less-eq is not implemented
             bodyOps.push(ArrayLength);
-            bodyOps.push(PushIntOne());
+            bodyOps.push(PushIntOne);
             bodyOps.push(Sub(Int));
 
             bodyOps.push(Less(Int));
@@ -859,7 +862,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
 
             bodyOps.extend(buf);
 
-            bodyOps.push(PushIntOne());
+            bodyOps.push(PushIntOne);
             bodyOps.push(Add(DataType::Int));
             // jmp to begining
             bodyOps.push(Jmp { offset: (bodyOps.len() as isize+1)*-1, jmpType: JmpType::Jmp });

@@ -16,8 +16,9 @@ use crate::ast::Statement::{StatementExpression, VariableMod};
 use crate::lexer::{LexingUnit, Token, TokenType};
 use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, Equals, For, Global, Gt, Identifier, Import, In, LambdaBegin, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
-use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
-use crate::vm::RawOpCode::Inc;
+use crate::variableMetadata::VariableMetadata;
+use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::myStr::MyStr;
 
 #[derive(Debug)]
 struct NoSuchParsingUnit<T> {
