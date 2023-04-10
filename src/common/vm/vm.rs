@@ -20,6 +20,8 @@ use crate::vm::value::Value;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
+const DEBUG: bool = false;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum JmpType {
     One,
@@ -173,8 +175,6 @@ pub struct VirtualMachine<'a> {
     pub namespaceLoader: NamespaceLoader,
     pub jitCompiler: JITCompiler
 }
-
-const DEBUG: bool = false;
 
 impl VirtualMachine<'_> {
     pub fn buildFunctionReturn(&self) -> HashMap<MyStr, Option<DataType>> {
