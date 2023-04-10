@@ -2,20 +2,21 @@ use std::ffi::{c_char, c_int, CStr};
 use std::fmt::{Debug, Formatter};
 use std::mem::{forget};
 use std::ptr;
-use libc::exit;
+use std::time::Duration;
+use libc::{exit, sleep};
 
 
 use crate::codegen::bytecodeGen;
 use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::namespace::{Namespace, NamespaceState};
-use crate::objects::{ViplObject};
+use crate::objects::{Str, ViplObject};
 use crate::std::std::bootStrapVM;
 use crate::value::Value;
 use crate::vm::{DataType, MyStr, OpCode, run, SeekableOpcodes, StackFrame, VirtualMachine};
 use crate::vm::FuncType::{Builtin, Extern, Runtime};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 
 #[no_mangle]
@@ -414,12 +415,15 @@ pub extern fn callFast(vm: &mut VirtualMachine, id: usize) {
 
 #[no_mangle]
 pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject {
-    // println!("AIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIDS");
     if DEBUG {
         println!("ffi-stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
-    let mut a = Value::makeString(st, unsafe { &mut *vm });
+    let d = unsafe { &mut *vm };
+    let a1 = Str::new(st);
+    let aw = a1.into();
+    let all = d.heap.allocate(aw);
+    let mut a = Value{Reference: all};
 
     a.asMutRef() as *mut ViplObject
 }
@@ -555,6 +559,28 @@ impl Debug for NativeWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
+}
+
+
+// TODO
+#[repr(C)]
+pub struct NativeWrapper2 {
+    pub pushValue: extern fn(&mut VirtualMachine, isize) -> (),
+
+    pub popValue: extern fn(&mut VirtualMachine) -> isize,
+
+    pub getLocalsValue: extern fn(&mut StackFrame, usize) -> isize,
+
+    pub arrGetValue: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> isize,
+
+    pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject, usize, isize),
+
+    pub call: extern fn(&mut VirtualMachine, *const c_char),
+    pub callFast: extern fn(&mut VirtualMachine, usize),
+    pub callAsm: extern fn(&mut VirtualMachine, *const c_char, *mut Value) -> usize,
+    pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject,
+    pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
+    pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
 }
 
 impl NativeWrapper {

@@ -86,16 +86,19 @@ pub enum LoadedFunction {
 }
 
 impl LoadedFunction {
+    #[inline(never)]
     pub fn call(&self, vm: &mut VirtualMachine, mut frame: StackFrame) {
         match self {
             LoadedFunction::BuiltIn(b) => {
-                b(vm, &mut frame)
+                b(vm, &mut frame);
             }
             LoadedFunction::Native(n) => unsafe {
                 let x: *const () = transmute(n.clone());
                 let d: usize = transmute(vm.nativeWrapper.stringNew);
-                println!("before call {:?} {:?} {:?}", x, vm as *const VirtualMachine as usize, d);
-                n(vm, &mut frame)
+                println!("before call");
+                println!("vm: {:?} {}", vm as *const VirtualMachine, vm as *const VirtualMachine as usize);
+                println!("proc: {:?} {}", x, x as usize);
+                n(vm, &mut frame);
             }
             LoadedFunction::Virtual(v) => {
                 vm.pushFrame(frame);

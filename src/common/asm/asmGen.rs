@@ -1,9 +1,34 @@
 use std::collections::HashMap;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
-use crate::asm::asmLib::Register::{R10, R12, R13, R14, R15, Rax, Rbx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rdi, Rdx, Rsi, Rsp};
 use crate::value::Value;
 use crate::vm::{DataType, JmpType, OpCode};
 
+/*
+rax - FFI return value
+
+rbx - VIPL locals ptr
+
+rcx - FFI fourth argument
+rdx - FFI third argument
+rsi - FFI second argument
+rdi - FFI first argument
+
+rbp - STACK base
+rsp - STACK ptr
+
+r8  - FFI fith argument
+r9  - FFI sixth argument
+
+r10 - general register
+r11 - general register
+
+r12 - VIPL opcode arg1
+r13 - VIPL opcode arg2
+
+r14 - VIPL stack ptr
+r15 - VIPL vm ptr
+ */
 
 fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
     this.comment(&format!("pushLocal {}", index));
@@ -15,12 +40,39 @@ fn pushLocal<T: AsmGen>(this: &mut T, index: usize) {
 fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     let t = text.replace("\"", "");
     this.comment(&format!("debugPrint {}", text));
+    this.push(Rax.into());
+    this.push(Rdi.into());
+    this.push(Rsi.into());
+    this.push(Rdx.into());
     this.mov(Rax.into(), 1.into());
     this.mov(Rdi.into(), 1.into());
     let lejbl = this.makeString(&t);
     this.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
     this.mov(Rdx.into(), (t.len()).into());
     this.sysCall();
+    this.pop(Rdx.into());
+    this.pop(Rsi.into());
+    this.pop(Rdi.into());
+    this.pop(Rax.into());
+    this.newLine();
+}
+
+fn alignStack<T: AsmGen>(this: &mut T) {
+    this.comment("alignStack");
+    let finishLabel = this.nextLabel();
+
+    this.push(R10.into());
+
+    this.mov(R10.into(), Rsp.into());
+    this.and(R10.into(), 15.into());
+    this.compare(R10.into(), 0.into());
+    this.jmpIfNotEqual(finishLabel.clone().into());
+
+    this.sub(Rsp.into(), 8.into());
+
+    this.makeLabel(&finishLabel);
+
+    this.pop(R10);
     this.newLine();
 }
 
@@ -34,19 +86,36 @@ fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
     this.newLine();
 }
 
+fn debugProgram<T: AsmGen>(this: &mut T) {
+    initCode(this);
+    debugPrint(this, "debug program\n");
+
+    pushStr(this, "UwU");
+    this.pop(R11);
+
+    debugPrint(this, "returning\n");
+    this.ret();
+}
+
+fn popNoStore<T: AsmGen>(this: &mut T) {
+    this.add(Rsp.into(), 8.into());
+}
+
+fn pushNoStore<T: AsmGen>(this: &mut T) {
+    this.sub(Rsp.into(), 8.into());
+}
+
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.comment(&format!("pushStr {}\n", s));
     let label = this.makeString(s);
-    // 25*8
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), R14.into());
     this.lea(Rdx.into(), label.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 23*8));
-    // FIXME issue with this
-    //debugCrash(this, R10.into());
-    // debugPrint(this, "pre\n");
+    // alignStack(this);
+    pushNoStore(this);
     this.call(R10.into());
-    // debugPrint(this, "post\n");
+    popNoStore(this);
     this.push(Rax.into());
     this.newLine();
 }
@@ -67,6 +136,12 @@ fn popStack<T: AsmGen>(this: &mut T) {
     this.newLine();
 }
 
+fn pushStack<T: AsmGen>(this: &mut T) {
+    todo!();
+    this.comment("pushStack");
+    // this.pop()
+}
+
 fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
     this.comment(&format!("asmCall {}", name));
     let label = this.makeString(name);
@@ -79,13 +154,19 @@ fn asmCall<T: AsmGen>(this: &mut T, name: &str) {
     this.newLine();
 }
 
-pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
-    // INIT CODE
-    generator.mov(R15.into(), Rdi.into()); // vm ptr
-    generator.mov(R14.into(), Rsi.into()); // frame ptr
-    generator.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+fn initCode<T: AsmGen>(this: &mut T) {
+    this.comment("init code");
+    this.mov(R15.into(), Rdi.into()); // vm ptr
+    this.mov(R14.into(), Rsi.into()); // frame ptr
+    this.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+    this.newLine();
+}
 
-    debugPrint(generator, "after init\n");
+pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
+    // debugProgram(generator);
+    initCode(generator);
+
+    // debugPrint(generator, "after init\n");
     let mut jmpCounter = 0usize;
 
     let mut makeLabelsGreatAgain = HashMap::new();
@@ -111,7 +192,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
     }
 
     for (i, op) in opCodes.iter().enumerate() {
-        debugPrint(generator, &format!("executing {:?}", op));
+        // debugPrint(generator, &format!("executing {:?}\n", op));
         if let Some(v) = makeLabelsGreatAgain.get(&i) {
             generator.makeLabel(v)
         }

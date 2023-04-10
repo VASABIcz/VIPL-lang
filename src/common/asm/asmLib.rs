@@ -206,6 +206,7 @@ pub trait AsmGen {
     fn call(&mut self, location: Location);
 
     fn makeLabel(&mut self, label: &str);
+    fn nextLabel(&mut self) -> String;
 
     fn comment(&mut self, txt: &str);
 
@@ -217,6 +218,7 @@ pub struct NasmGen {
     pub readOnly: String,
     pub stringCounter: usize,
     pub jmpCounter: usize,
+    pub labelCounter: usize,
     pub stringCache: HashMap<String, String>
 }
 
@@ -227,6 +229,7 @@ impl NasmGen {
             readOnly: String::new(),
             stringCounter: 0,
             jmpCounter: 0,
+            labelCounter: 0,
             stringCache: Default::default(),
         }
     }
@@ -441,6 +444,12 @@ impl AsmGen for NasmGen {
     fn makeLabel(&mut self, label: &str) {
         self.executable += label;
         self.executable += ":\n";
+    }
+
+    fn nextLabel(&mut self) -> String {
+        let s = format!("label{}", self.labelCounter);
+        self.labelCounter += 1;
+        s
     }
 
     fn comment(&mut self, txt: &str) {

@@ -387,7 +387,7 @@ impl Value {
         self.asMutRef().getMutArr()
     }
 
-    #[inline]
+    #[inline(never)]
     pub fn makeString(str: String, vm: &mut VirtualMachine) -> Value {
         Value{Reference: vm.heap.allocate(Str::new(str).into())}
     }
