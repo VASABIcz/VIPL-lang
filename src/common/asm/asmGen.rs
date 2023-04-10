@@ -57,7 +57,13 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     this.newLine();
 }
 
+fn genSCall<T: AsmGen>(this: &mut T) {
+    // get args ptr (Rsp)
+    //
+}
+
 fn alignStack<T: AsmGen>(this: &mut T) {
+    // FIXME where does the stack get restored?????
     this.comment("alignStack");
     let finishLabel = this.nextLabel();
 
@@ -113,9 +119,10 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.lea(Rdx.into(), label.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 23*8));
     // alignStack(this);
-    pushNoStore(this);
+    // pushNoStore(this);
+    debugPrint(this, "push str\n");
     this.call(R10.into());
-    popNoStore(this);
+    // popNoStore(this);
     this.push(Rax.into());
     this.newLine();
 }
@@ -174,7 +181,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
 
     for (i, op) in opCodes.iter().enumerate() {
         if let OpCode::Jmp { offset, jmpType } = op {
-            let o = *offset;
+            let o = *offset + 1;
             let xd = (i as isize+o) as usize;
             let label = match makeLabelsGreatAgain.get(&xd) {
                 None => {
@@ -306,7 +313,20 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
             OpCode::Dec { .. } => todo!(),
             OpCode::StrNew(v) => pushStr(generator, v.as_str()),
             OpCode::GetChar => todo!(),
-            _ => {}
+
+            OpCode::FunBegin => {}
+            OpCode::FunName { .. } => {}
+            OpCode::FunReturn { .. } => {}
+            OpCode::LocalVarTable { .. } => {}
+            OpCode::FunEnd => {}
+            OpCode::SCall { id } => {}//todo!(),
+            OpCode::LCall { namespace, id } => {} // todo!(),
+            OpCode::ClassBegin => {}
+            OpCode::ClassName { .. } => {}
+            OpCode::ClassField { .. } => {}
+            OpCode::ClassEnd => {}
+            OpCode::GetField { .. } => {}
+            OpCode::SetField { .. } => {}
         }
     }
 }

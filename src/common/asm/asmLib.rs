@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Stderr;
 use std::ops::Deref;
 use std::ptr::write;
-use crate::asm::asmLib::Register::{R13, Rax, Rdi, Rdx, Rsi};
+use crate::asm::asmLib::Register::{R13, Rax, Rdi, Rdx, Rsi, Rsp};
 
 #[derive(Clone)]
 pub enum Register {
@@ -219,7 +219,8 @@ pub struct NasmGen {
     pub stringCounter: usize,
     pub jmpCounter: usize,
     pub labelCounter: usize,
-    pub stringCache: HashMap<String, String>
+    pub stringCache: HashMap<String, String>,
+    pub stackSize: usize
 }
 
 impl NasmGen {
@@ -231,6 +232,7 @@ impl NasmGen {
             jmpCounter: 0,
             labelCounter: 0,
             stringCache: Default::default(),
+            stackSize: 0,
         }
     }
 
@@ -324,10 +326,12 @@ impl AsmGen for NasmGen {
     }
 
     fn push(&mut self, reg: AsmValue) {
+        self.stackSize += 1;
         self.writeOp1("push", &reg.toString());
     }
 
     fn pop(&mut self, reg: Register) {
+        self.stackSize -= 1;
         self.writeOp1("pop", reg.toStr());
     }
 
@@ -438,7 +442,14 @@ impl AsmGen for NasmGen {
     }
 
     fn call(&mut self, location: Location) {
-        self.writeOp1("call", &location.toString())
+        println!("size: {}", self.stackSize);
+        if self.stackSize % 2 == 0 {
+            self.sub(Rsp.into(), 8.into());
+        }
+        self.writeOp1("call", &location.toString());
+        if self.stackSize % 2 == 0 {
+            self.add(Rsp.into(), 8.into());
+        }
     }
 
     fn makeLabel(&mut self, label: &str) {

@@ -1,3 +1,4 @@
+use std::arch::asm;
 use std::ffi::{c_char, c_int, CStr};
 use std::fmt::{Debug, Formatter};
 use std::mem::{forget};
@@ -448,6 +449,40 @@ pub extern fn strConcat(
 
     ptr.asHay().inner
 }
+
+
+#[no_mangle]
+pub extern fn SCall(vm: &mut VirtualMachine, functionID: usize, rsp: *mut Value) {
+    let frame = vm.getFrame();
+    let meta = frame.namespace.functionsMeta.get(functionID).unwrap();
+    let func = frame.namespace.functions.get(functionID).unwrap();
+    let mut buf = vec![];
+
+    for x in 0..meta.argsCount {
+        let v = unsafe { rsp.add(x).read() };
+        buf.push(v);
+    }
+
+    for _ in 0..meta.localsMeta.len()-meta.argsCount {
+        buf.push(Value::from(0))
+    }
+
+    let frame = StackFrame::new(&mut buf);
+    func.call(vm, &mut frame);
+
+    let retValue = Value::from(false); // FIXME
+    let returnValueAddr = 0usize; // FIXME
+    unsafe {
+        asm!(
+        "pop r10",
+        "mov {returnValueAddr}, {retValue}",
+        "jmp r10"
+        retValue = out(reg) retValue,
+        returnValueAddr = out(reg) returnValueAddr
+        )
+    }
+}
+
 
 #[no_mangle]
 pub extern fn asmCall(vm: &mut VirtualMachine, name: *const c_char, rsp: *mut Value) -> usize {
