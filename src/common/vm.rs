@@ -451,6 +451,7 @@ impl StackFrame<'_> {
             previous: None,
             programCounter: 0,
             namespace: &Namespace {
+                id: 0,
                 name: "".to_string(),
                 state: NamespaceState::Loaded,
                 functionsLookup: Default::default(),
@@ -641,8 +642,10 @@ impl VirtualMachine<'_> {
         x
     }
 
-    pub fn registerNamespace(&mut self, namespace: Namespace) -> usize {
+    pub fn registerNamespace(&mut self, mut namespace: Namespace) -> usize {
         let index = self.namespaces.len();
+        namespace.id = index;
+
         self.namespaceLookup.insert(namespace.name.clone(), index);
         self.namespaces.push(namespace);
         index
@@ -702,6 +705,7 @@ impl VirtualMachine<'_> {
             previous: None,
             programCounter: 0,
             namespace: &Namespace {
+                id: 0,
                 name: "".to_string(),
                 state: NamespaceState::Loaded,
                 functionsLookup: Default::default(),
@@ -776,6 +780,7 @@ impl VirtualMachine<'_> {
             previous: None,
             programCounter: 0,
             namespace: &Namespace {
+                id: 0,
                 name: "".to_string(),
                 state: NamespaceState::Loaded,
                 functionsLookup: Default::default(),
@@ -1084,6 +1089,7 @@ impl VirtualMachine<'_> {
                             previous: None,
                             programCounter: 0,
                             namespace: &Namespace {
+                                id: 0,
                                 name: "".to_string(),
                                 state: NamespaceState::Loaded,
                                 functionsLookup: Default::default(),
@@ -1433,6 +1439,7 @@ impl VirtualMachine<'_> {
                             previous: None,
                             programCounter: 0,
                             namespace: &Namespace {
+                                id: 0,
                                 name: "".to_string(),
                                 state: NamespaceState::Loaded,
                                 functionsLookup: Default::default(),
@@ -1568,12 +1575,14 @@ impl VirtualMachine<'_> {
             }
 
             for f in &mut n.functionsMeta[n.functions.len()..] {
-                if let FunctionTypeMeta::Runtime(_) = f.functionType {
-                    let mut ops = vec![];
-                    let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
-                    f.localsMeta = res.into_boxed_slice();
-                    let nf = self.jitCompiler.compile(ops);
-                    n.functions.push(LoadedFunction::Native(nf));
+                unsafe {
+                    if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                        let mut ops = vec![];
+                        let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
+                        f.localsMeta = res.into_boxed_slice();
+                        let nf = self.jitCompiler.compile(ops, &*v, &*nn);
+                        n.functions.push(LoadedFunction::Native(nf));
+                    }
                 }
             }
             n.state = Loaded;
@@ -1912,6 +1921,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     previous: Some(stackFrame),
                     programCounter: 0,
                     namespace: &Namespace {
+                        id: 0,
                         name: "".to_string(),
                         state: NamespaceState::Loaded,
                         functionsLookup: Default::default(),

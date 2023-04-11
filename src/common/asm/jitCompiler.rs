@@ -6,6 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::asm::asmExec::allocateBinFunction;
 use crate::asm::asmGen::generateAssembly;
 use crate::asm::asmLib::NasmGen;
+use crate::namespace::Namespace;
 use crate::vm::{OpCode, StackFrame, VirtualMachine};
 
 pub fn compileAssembly(asm: &str) -> Box<[u8]> {
@@ -42,9 +43,9 @@ pub fn compileAssembly(asm: &str) -> Box<[u8]> {
 pub struct JITCompiler {}
 
 impl JITCompiler {
-    pub fn compile(&self, ops: Vec<OpCode>) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> () {
+    pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> () {
         let mut nasm = NasmGen::new();
-        generateAssembly(&mut nasm, ops);
+        generateAssembly(&mut nasm, ops, vm, namespace);
 
         let genAsm = nasm.generate();
         println!("genAsm");

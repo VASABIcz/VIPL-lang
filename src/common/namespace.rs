@@ -110,6 +110,7 @@ impl LoadedFunction {
 
 #[derive(Debug)]
 pub struct Namespace {
+    pub id: usize,
     pub name: String,
     pub state: NamespaceState,
 
@@ -147,6 +148,7 @@ impl Namespace {
 
     pub fn new(name: String) -> Self {
         Self {
+            id: 0,
             name,
             state: NamespaceState::PartiallyLoaded,
             functionsLookup: Default::default(),

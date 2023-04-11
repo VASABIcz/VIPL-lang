@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
-use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
+use crate::namespace::Namespace;
 use crate::value::Value;
-use crate::vm::{DataType, JmpType, OpCode};
+use crate::vm::{DataType, JmpType, OpCode, VirtualMachine};
 
 /*
 rax - FFI return value
@@ -57,9 +58,23 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     this.newLine();
 }
 
-fn genSCall<T: AsmGen>(this: &mut T) {
-    // get args ptr (Rsp)
-    //
+fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
+    this.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
+
+    this.mov(Rdi.into(), R15.into());
+    this.mov(Rsi.into(), functionID.into());
+    this.mov(Rdx.into(), namespaceID.into());
+    this.mov(Rcx.into(), Rsp.into());
+    this.mov(R10.into(), AsmValue::Indexing(R15.into(), 26*8));
+
+    this.call(R10.into());
+
+    this.offsetStack(argsCount as isize);
+
+    if returns {
+        this.push(Rax.into());
+    }
+    this.newLine();
 }
 
 fn alignStack<T: AsmGen>(this: &mut T) {
@@ -169,7 +184,7 @@ fn initCode<T: AsmGen>(this: &mut T) {
     this.newLine();
 }
 
-pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
+pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace) {
     // debugProgram(generator);
     initCode(generator);
 
@@ -319,8 +334,20 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>) {
             OpCode::FunReturn { .. } => {}
             OpCode::LocalVarTable { .. } => {}
             OpCode::FunEnd => {}
-            OpCode::SCall { id } => {}//todo!(),
-            OpCode::LCall { namespace, id } => {} // todo!(),
+            OpCode::SCall { id } => {
+                let f = namespace.functionsMeta.get(*id).unwrap();
+                let argsCount = f.argsCount;
+                let returns = f.returnType != None;
+
+                genCall(generator, namespace.id, *id, returns, argsCount)
+            },
+            OpCode::LCall { namespace, id } => {
+                let f = vm.namespaces.get(*namespace).unwrap().functionsMeta.get(*id).unwrap();
+                let returns = f.returnType != None;
+                let argsCount = f.argsCount;
+
+                genCall(generator, *namespace, *id, returns, argsCount)
+            }
             OpCode::ClassBegin => {}
             OpCode::ClassName { .. } => {}
             OpCode::ClassField { .. } => {}

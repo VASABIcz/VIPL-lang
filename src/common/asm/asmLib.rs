@@ -211,6 +211,8 @@ pub trait AsmGen {
     fn comment(&mut self, txt: &str);
 
     fn newLine(&mut self);
+
+    fn offsetStack(&mut self, offset: isize);
 }
 
 pub struct NasmGen {
@@ -469,6 +471,17 @@ impl AsmGen for NasmGen {
 
     fn newLine(&mut self) {
         self.executable += "\n";
+    }
+
+    fn offsetStack(&mut self, offset: isize) {
+        if offset < 0 {
+            self.stackSize += (offset*-1) as usize;
+            self.sub(Rsp.into(), (offset*-1).into())
+        }
+        else if offset > 0 {
+            self.add(Rsp.into(), offset.into());
+            self.stackSize -= offset as usize;
+        }
     }
 }
 

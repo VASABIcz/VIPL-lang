@@ -164,6 +164,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
                 previous: None,
                 programCounter: 0,
                 namespace: &Namespace{
+                    id: 0,
                     name: "".to_string(),
                     state: NamespaceState::Loaded,
                     functionsLookup: Default::default(),
@@ -452,10 +453,11 @@ pub extern fn strConcat(
 
 
 #[no_mangle]
-pub extern fn SCall(vm: &mut VirtualMachine, functionID: usize, rsp: *mut Value) {
-    let frame = vm.getFrame();
-    let meta = frame.namespace.functionsMeta.get(functionID).unwrap();
-    let func = frame.namespace.functions.get(functionID).unwrap();
+pub extern fn LCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
+    let d =unsafe { &mut *(vm as *mut VirtualMachine) };
+    let namespace = vm.namespaces.get(namespaceID).unwrap();
+    let meta = namespace.functionsMeta.get(functionID).unwrap();
+    let func = namespace.functions.get(functionID).unwrap();
     let mut buf = vec![];
 
     for x in 0..meta.argsCount {
@@ -467,19 +469,19 @@ pub extern fn SCall(vm: &mut VirtualMachine, functionID: usize, rsp: *mut Value)
         buf.push(Value::from(0))
     }
 
-    let frame = StackFrame::new(&mut buf);
-    func.call(vm, &mut frame);
-
-    let retValue = Value::from(false); // FIXME
-    let returnValueAddr = 0usize; // FIXME
-    unsafe {
-        asm!(
-        "pop r10",
-        "mov {returnValueAddr}, {retValue}",
-        "jmp r10"
-        retValue = out(reg) retValue,
-        returnValueAddr = out(reg) returnValueAddr
-        )
+    let fr = StackFrame {
+        localVariables: &mut buf,
+        objects: None,
+        previous: None,
+        programCounter: 0,
+        namespace,
+    };
+    func.call(d, fr);
+    if meta.returnType != None {
+        vm.pop()
+    }
+    else {
+        Value::from(0)
     }
 }
 
@@ -510,6 +512,7 @@ pub extern fn asmCall(vm: &mut VirtualMachine, name: *const c_char, rsp: *mut Va
         previous: None,
         programCounter: 0,
         namespace: &Namespace {
+            id: 0,
             name: "".to_string(),
             state: NamespaceState::Loaded,
             functionsLookup: Default::default(),
@@ -588,6 +591,7 @@ pub struct NativeWrapper {
     pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
+    pub LCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value
 }
 
 impl Debug for NativeWrapper {
@@ -647,6 +651,7 @@ impl NativeWrapper {
             stringNew,
             stringGetChar,
             strConcat,
+            LCall,
         }
     }
 }

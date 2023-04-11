@@ -53,7 +53,7 @@ fn main() {
     println!("{:?}", nn.functions);
     let f = nn.functions.last().unwrap();
     let fMeta = nn.functionsMeta.last().unwrap();
-    println!("KYS {} {}", fMeta.localsMeta.len(), fMeta.name);
+    println!("calling {} {}", fMeta.localsMeta.len(), fMeta.name);
     let mut xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     unsafe {
         f.call(&mut *c, StackFrame {
