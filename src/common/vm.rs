@@ -1580,6 +1580,7 @@ impl VirtualMachine<'_> {
                         let mut ops = vec![];
                         let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
                         f.localsMeta = res.into_boxed_slice();
+                        println!("f ops {:?}", ops);
                         let nf = self.jitCompiler.compile(ops, &*v, &*nn);
                         n.functions.push(LoadedFunction::Native(nf));
                     }

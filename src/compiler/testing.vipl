@@ -6,6 +6,8 @@ while x < 10 {
     x += 1
 }
 
+out::print(x)
+
 out::print("recursion test")
 
 fn fact(n: int): int {
@@ -15,5 +17,5 @@ fn fact(n: int): int {
     return 1
 }
 
-x = fact(11)
+x = fact(3)
 out::print(x)

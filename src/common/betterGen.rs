@@ -314,6 +314,12 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
             let res = c.init.clone().ok_or("variable expected initializer")?;
             let t = ctx.makeExpressionCtx(&res, None).toDataType()?;
 
+
+            let k = MyStr::Runtime(c.name.clone().into_boxed_str());
+            if vTable.contains_key(&k) {
+               return Ok(());
+            }
+
             vTable.insert(
                 MyStr::Runtime(c.name.clone().into_boxed_str()),
                 (t.clone().unwrap(), locals.len()),
@@ -459,7 +465,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     Some(ve) => {
                         genExpression(ctx.makeExpressionCtx(e, Some(ve.clone())))?;
                         println!("{}", &v.name);
-                        println!("{:?}", ctx.vTable);
+                        println!("vTable {:?}", ctx.vTable);
                         ctx.ops.push(OpCode::SetLocal {
                             index: ctx.vTable.get(&MyStr::Runtime(v.name.clone().into_boxed_str())).unwrap().1,
                             typ: ve.clone(),

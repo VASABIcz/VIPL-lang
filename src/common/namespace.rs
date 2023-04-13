@@ -161,7 +161,7 @@ impl Namespace {
     }
 
     pub fn lookupNamespace(vm: &mut VirtualMachine, name: Vec<String>) {
-
+        todo!()
     }
 
     pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine) -> Namespace {

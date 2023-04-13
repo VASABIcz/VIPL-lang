@@ -213,6 +213,12 @@ pub trait AsmGen {
     fn newLine(&mut self);
 
     fn offsetStack(&mut self, offset: isize);
+
+    fn setle(&mut self, reg: Register);
+    fn setge(&mut self, reg: Register);
+
+    fn setg(&mut self, reg: Register);
+    fn setl(&mut self, reg: Register);
 }
 
 pub struct NasmGen {
@@ -234,7 +240,7 @@ impl NasmGen {
             jmpCounter: 0,
             labelCounter: 0,
             stringCache: Default::default(),
-            stackSize: 0,
+            stackSize: 10,
         }
     }
 
@@ -476,12 +482,32 @@ impl AsmGen for NasmGen {
     fn offsetStack(&mut self, offset: isize) {
         if offset < 0 {
             self.stackSize += (offset*-1) as usize;
-            self.sub(Rsp.into(), (offset*-1).into())
+            self.sub(Rsp.into(), (8*offset*-1).into())
         }
         else if offset > 0 {
-            self.add(Rsp.into(), offset.into());
             self.stackSize -= offset as usize;
+            self.add(Rsp.into(), (8*offset).into());
         }
+    }
+
+    fn setle(&mut self, reg: Register) {
+        self.writeOp1("setle", "al");
+        self.mov(reg.into(), Rax.into());
+    }
+
+    fn setge(&mut self, reg: Register) {
+        self.writeOp1("setge", "al");
+        self.mov(reg.into(), Rax.into());
+    }
+
+    fn setg(&mut self, reg: Register) {
+        self.writeOp1("setg", "al");
+        self.mov(reg.into(), Rax.into());
+    }
+
+    fn setl(&mut self, reg: Register) {
+        self.writeOp1("setl", "al");
+        self.mov(reg.into(), Rax.into());
     }
 }
 

@@ -109,12 +109,12 @@ fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
 
 fn debugProgram<T: AsmGen>(this: &mut T) {
     initCode(this);
-    debugPrint(this, "debug program\n");
+    debugPrint(this, "debug program");
 
     pushStr(this, "UwU");
     this.pop(R11);
 
-    debugPrint(this, "returning\n");
+    debugPrint(this, "returning");
     this.ret();
 }
 
@@ -127,7 +127,7 @@ fn pushNoStore<T: AsmGen>(this: &mut T) {
 }
 
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
-    this.comment(&format!("pushStr {}\n", s));
+    this.comment(&format!("pushStr {}", s));
     let label = this.makeString(s);
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), R14.into());
@@ -135,7 +135,7 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), 23*8));
     // alignStack(this);
     // pushNoStore(this);
-    debugPrint(this, "push str\n");
+    // debugPrint(this, "push str");
     this.call(R10.into());
     // popNoStore(this);
     this.push(Rax.into());
@@ -238,8 +238,16 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::Jmp { offset, jmpType } => {
                 let l = jmpLookup.get(&i).unwrap().clone();
                 match jmpType {
-                    JmpType::One => generator.jmpIfZero(l.into()),
-                    JmpType::Zero => generator.jmpIfOne(l.into()),
+                    JmpType::One | JmpType::True => {
+                        generator.pop(R12.into());
+                        generator.compare(R12.into(), 1.into());
+                        generator.jmpIfOne(l.into())
+                    },
+                    JmpType::Zero | JmpType::False => {
+                        generator.pop(R12.into());
+                        generator.compare(R12.into(), 0.into());
+                        generator.jmpIfZero(l.into())
+                    },
                     JmpType::Jmp => generator.jmp(l.into()),
                     JmpType::Gt => generator.jmpIfGt(l.into()),
                     JmpType::Less => generator.jmpIfLess(l.into()),
@@ -290,7 +298,9 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 DataType::Int | DataType::Bool | DataType::Char => {
                     generator.pop(R12);
                     generator.pop(R13);
-                    generator.compare(R12.into(), R13.into());
+                    generator.compare(R13.into(), R12.into());
+                    generator.setl(R12);
+                    generator.push(R12.into())
                 }
                 _ => todo!()
             }
@@ -298,7 +308,9 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 DataType::Int | DataType::Bool | DataType::Char => {
                     generator.pop(R12);
                     generator.pop(R13);
-                    generator.compare(R12.into(), R13.into());
+                    generator.compare(R13.into(), R12.into());
+                    generator.setg(R12);
+                    generator.push(R12.into())
                 }
                 _ => todo!()
             }
