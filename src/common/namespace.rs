@@ -34,6 +34,13 @@ pub struct FunctionMeta {
     pub returnType: Option<DataType>,
 }
 
+#[derive(Clone, Debug)]
+pub struct GlobalMeta {
+    pub name: String,
+    pub default: Expression,
+    pub typ: DataType
+}
+
 #[derive(Debug, Clone)]
 pub struct StructMeta {
     pub name: String,
@@ -135,7 +142,7 @@ pub struct Namespace {
     pub functionsMeta: Vec<FunctionMeta>,
     pub functions: Vec<LoadedFunction>,
 
-    pub globalsMeta: Vec<VariableMetadata>,
+    pub globalsMeta: Vec<GlobalMeta>,
     pub globals: Vec<Value>,
 
     pub structs: Vec<StructMeta>,
@@ -179,6 +186,13 @@ impl Namespace {
         self.structs.push(d);
     }
 
+    pub fn registerGlobal(&mut self, global: GlobalMeta) {
+        let index = self.globals.len();
+        self.globalsLookup.insert(global.name.as_str().to_string(), index);
+        self.globalsMeta.push(global);
+        self.globals.push(Value::from(0))
+    }
+
     pub fn new(name: String) -> Self {
         Self {
             id: 0,
@@ -219,7 +233,13 @@ impl Namespace {
                             n.registerFunctionDef(d.into());
                         }
                         Node::StructDef(v) => n.registerStruct(v.into()),
-                        Node::Import(_) => todo!()
+                        Node::Import(_) => todo!(),
+                        // TODO default value
+                        Node::GlobalVarDef(name, default) => n.registerGlobal(GlobalMeta{
+                            name,
+                            default,
+                            typ: DataType::Void,
+                        })
                     }
                 }
                 Operation::Statement(v) => {

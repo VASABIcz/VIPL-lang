@@ -31,4 +31,6 @@ n = AnotherStruct {
 y = x
 c = y.x
 
-out::print(n.oldPos.z)
+n.oldPos.x = 69
+
+out::print(n.oldPos.x)

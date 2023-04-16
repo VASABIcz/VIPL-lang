@@ -291,6 +291,7 @@ impl Into<StructMeta> for StructDef {
 pub enum Node {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
+    GlobalVarDef(String, Expression),
     Import(Vec<String>)
 }
 

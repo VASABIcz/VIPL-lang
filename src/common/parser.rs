@@ -14,7 +14,7 @@ use crate::ast::{
 use crate::ast::Expression::{IntLiteral, NamespaceAccess};
 use crate::ast::Statement::{StatementExpression, VariableMod};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, Equals, Gt, Identifier, Import, LambdaBegin, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, Equals, Global, Gt, Identifier, Import, LambdaBegin, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::RawOpCode::Inc;
@@ -1801,6 +1801,52 @@ impl ParsingUnit for FieldAccessParsingUnit {
     }
 }
 
+#[derive(Debug)]
+struct GlobalParsingUnit;
+
+impl ParsingUnit for GlobalParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(TokenType::Global)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Global)?;
+
+        let name = tokenProvider.getIdentifier()?;
+        let mut typeHint = None;
+
+        if tokenProvider.isPeekType(Colon) {
+            tokenProvider.getAssert(Colon)?;
+            typeHint = Some(parseDataType(tokenProvider)?);
+        }
+
+        tokenProvider.getAssert(TokenType::Equals)?;
+
+        // tokens.getAssert(TokenType::Semicolon);
+        let res = parseOne(tokenProvider, Ahead, parser, None)?;
+        let par = getParsingUnit(tokenProvider, Around, parser);
+
+        let op = match par {
+            None => res.asExpr()?,
+            Some(p) => p.parse(tokenProvider, Some(res), parser)?.asExpr()?,
+        };
+
+        Ok(Operation::Global(Node::GlobalVarDef(name, op)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
         Box::new(StructInitParsingUnit),
@@ -1874,6 +1920,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ReturnParsingUnit),
         Box::new(StructParsingUnit),
         Box::new(IncParsingUnit),
-        Box::new(FieldAccessParsingUnit)
+        Box::new(FieldAccessParsingUnit),
+        Box::new(GlobalParsingUnit)
     ]
 }

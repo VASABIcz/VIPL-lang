@@ -1616,6 +1616,7 @@ impl VirtualMachine<'_> {
                     }
                 }
             }
+
             n.state = Loaded;
         }
     }
