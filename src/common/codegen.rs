@@ -7,6 +7,8 @@ use std::io::Write;
 use Statement::Variable;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
+use crate::betterGen::genFunctionDef;
+use crate::errors::{NoValue, SymbolNotFound};
 use crate::lexer::*;
 use crate::optimizer::{evalE};
 use crate::parser::*;
@@ -16,19 +18,6 @@ use crate::vm::{
 };
 use crate::vm::DataType::{Bool};
 use crate::vm::OpCode::*;
-
-#[derive(Debug)]
-struct NoValue {
-    msg: String,
-}
-
-impl Display for NoValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for NoValue {}
 
 pub struct ExpressionCtx<'a> {
     pub exp: &'a Expression,
@@ -202,11 +191,11 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         Expression::Variable(v) => {
             let _res = match r.vTable.get(&MyStr::Runtime(v.clone().into_boxed_str())) {
                 None => {
-                    return Err(Box::new(VariableNotFound { name: v.clone() }));
+                    return Err(Box::new(SymbolNotFound { name: v.clone() }));
                 }
                 Some(v) => v,
             };
-            r.ops.push(OpCode::PushLocal {
+            r.ops.push(PushLocal {
                 index: r
                     .vTable
                     .get(&MyStr::Runtime(v.clone().into_boxed_str()))
@@ -278,23 +267,12 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             genExpression(r.constructCtx(e))?;
             ctx.ops.push(Not)
         }
-        Expression::NamespaceAccess(_, _) => {}
+        Expression::NamespaceAccess(_) => todo!(),
+        Expression::Lambda(_, _) => todo!(),
+        Expression::Callable(prev, args) => panic!()
     }
     Ok(())
 }
-
-#[derive(Debug)]
-struct VariableNotFound {
-    name: String,
-}
-
-impl Display for VariableNotFound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "variable {} not found", self.name)
-    }
-}
-
-impl Error for VariableNotFound {}
 
 pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
     match ctx.statement {
@@ -446,7 +424,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         Statement::VariableMod(m) => {
             match ctx.vTable.get(&MyStr::Runtime(m.clone().varName.into_boxed_str())) {
                 None => {
-                    return Err(Box::new(VariableNotFound { name: m.varName.clone() }));
+                    return Err(Box::new(SymbolNotFound { name: m.varName.clone() }));
                 }
                 Some(local) => {
                     let dataType = m.expr.toDataType(ctx.vTable, ctx.functionReturns, None)?.expect("expected return value");
@@ -504,73 +482,12 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 jmpType: JmpType::Jmp,
             });
         }
-        Statement::NamespaceFunction(_, _) => todo!()
+        Statement::NamespaceFunction(_, _) => todo!(),
+        Statement::StatementExpression(e) => {
+            let eCtx = ctx.makeExpressionCtx(e, None);
+            genExpression(eCtx)?;
+        }
     }
-    Ok(())
-}
-
-fn genFunctionDef(
-    fun: FunctionDef,
-    ops: &mut Vec<OpCode>,
-    functionReturns: &HashMap<MyStr, Option<DataType>>,
-) -> Result<(), Box<dyn Error>> {
-    if fun.isNative {
-        let c = fun.argsCount;
-        let mut buf = String::new();
-        crate::cGen::genFunctionDef(fun.clone(), &mut buf, functionReturns)?;
-        let resPath = crate::gccWrapper::compile(&buf)?;
-
-        ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));
-        ops.push(StrNew(MyStr::Runtime(
-            genFunNameMeta(&fun.name, &fun.localsMeta, c).into_boxed_str(),
-        )));
-        ops.push(OpCode::PushInt(fun.argsCount as isize));
-        ops.push(OpCode::Call {
-            encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")),
-        });
-
-        return Ok(());
-    }
-
-    ops.push(OpCode::FunBegin);
-    ops.push(FunName {
-        name: MyStr::Runtime(fun.name.clone().into_boxed_str()),
-    });
-
-    let mut idk1 = HashMap::new();
-    let mut idk2 = vec![];
-
-    for arg in fun.localsMeta {
-        idk1.insert(arg.name.clone(), (arg.typ.clone(), idk2.len()));
-        idk2.push(arg)
-    }
-
-    for s in &fun.body {
-        buildLocalsTable(s, &mut idk1, &mut idk2, functionReturns)?;
-    }
-
-    // let vTable = constructVarTable(&fun, functionReturns)?;
-    ops.push(LocalVarTable {
-        typ: idk2.into_boxed_slice(),
-        argsCount: fun.argsCount,
-    });
-    ops.push(FunReturn {
-        typ: fun.returnType,
-    });
-
-    for statement in fun.body {
-        let ctx = StatementCtx {
-            statement: &statement,
-            ops,
-            functionReturns,
-            vTable: &idk1,
-            loopContext: None,
-            clearStack: true,
-        };
-        genStatement(ctx)?;
-    }
-    ops.push(OpCode::Return);
-    ops.push(OpCode::FunEnd);
     Ok(())
 }
 
@@ -643,6 +560,7 @@ pub fn buildLocalsTable(
         Statement::Continue => {}
         Statement::Break => {}
         Statement::NamespaceFunction(_, _) => {}
+        Statement::StatementExpression(_) => {}
     }
 
     Ok(())
@@ -712,7 +630,8 @@ pub fn complexBytecodeGen(
         if let Operation::Global(f) = op {
             match f {
                 Node::FunctionDef(v) => {
-                    genFunctionDef(v.clone(), &mut ops, functionReturns)?;
+                    todo!()
+                    //genFunctionDef(&v.clone().into(), &mut ops, functionReturns, vm, )?;
                 }
                 Node::StructDef(v) => {
                     genStructDef(v.clone(), &mut ops, functionReturns, structs)?;

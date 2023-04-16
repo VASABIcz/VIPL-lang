@@ -1,4 +1,5 @@
 use std::{intrinsics, ptr};
+use std::alloc::{alloc, Layout};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -101,6 +102,11 @@ pub enum DataType {
     Bool,
     Char,
     Object(ObjectMeta),
+    Function{
+        args: Vec<DataType>,
+        ret: Box<DataType>
+    },
+    Void
 }
 
 impl DataType {
@@ -151,13 +157,18 @@ pub enum RawDataType {
 }
 
 impl DataType {
-    pub fn toString(&self) -> &str {
+    pub fn toString(&self) -> String {
         match self {
-            Int => "int",
-            Float => "float",
-            Bool => "bool",
-            Object(x) => x.name.as_str(),
-            Char => "char",
+            Int => "int".to_string(),
+            Float => "float".to_string(),
+            Bool => "bool".to_string(),
+            Object(x) => x.name.clone().to_string(),
+            Char => "char".to_string(),
+            Void => "!".to_string(),
+            Function { args, ret } =>
+                format!("({}): {}", args.iter().map(|it| {
+                    it.toString()
+                }).collect::<Vec<_>>().join(", "), ret.toString())
         }
     }
 
@@ -168,6 +179,8 @@ impl DataType {
             Bool => "bool",
             Object(_) => "ViplObject*",
             Char => "char",
+            Void => "void",
+            Function { .. } => todo!()
         }
     }
 }
@@ -180,7 +193,9 @@ impl DataType {
             Float => 0.0.into(),
             Bool => false.into(),
             Char => 0.into(),
-            Object(_) => 0.into()
+            Object(_) => 0.into(),
+            Function { .. } => 0.into(),
+            Void => unreachable!(),
         }
     }
 }
@@ -248,6 +263,7 @@ pub enum OpCode {
     F2I,
     I2F,
     PushInt(isize),
+    PushFunction(u32, u32),
     PushIntOne(),
     PushIntZero(),
     PushFloat(f64),
@@ -276,6 +292,7 @@ pub enum OpCode {
         namespace: usize,
         id: usize
     },
+    DynamicCall,
     Return,
 
     Add(DataType),
@@ -301,15 +318,18 @@ pub enum OpCode {
     },
     ClassEnd,
     New {
-        name: MyStr,
+        namespaceID: usize,
+        structID: usize
     },
     GetField {
-        name: MyStr,
-        typ: DataType,
+        namespaceID: usize,
+        structID: usize,
+        fieldID: usize
     },
     SetField {
-        name: MyStr,
-        typ: DataType,
+        namespaceID: usize,
+        structID: usize,
+        fieldID: usize
     },
     ArrayNew(DataType),
     ArrayStore(DataType),
@@ -450,17 +470,7 @@ impl StackFrame<'_> {
             objects: None,
             previous: None,
             programCounter: 0,
-            namespace: &Namespace {
-                id: 0,
-                name: "".to_string(),
-                state: NamespaceState::Loaded,
-                functionsLookup: Default::default(),
-                globalsLookup: Default::default(),
-                functionsMeta: vec![],
-                functions: vec![],
-                globalsMeta: vec![],
-                globals: vec![],
-            },
+            namespace: &Namespace::new("".to_string()),
         }
     }
 }
@@ -704,17 +714,7 @@ impl VirtualMachine<'_> {
             objects: None,
             previous: None,
             programCounter: 0,
-            namespace: &Namespace {
-                id: 0,
-                name: "".to_string(),
-                state: NamespaceState::Loaded,
-                functionsLookup: Default::default(),
-                globalsLookup: Default::default(),
-                functionsMeta: vec![],
-                functions: vec![],
-                globalsMeta: vec![],
-                globals: vec![],
-            },
+            namespace: &Namespace::new("".to_string()),
         };
 
         let t = f.typ;
@@ -779,17 +779,7 @@ impl VirtualMachine<'_> {
             objects: None,
             previous: None,
             programCounter: 0,
-            namespace: &Namespace {
-                id: 0,
-                name: "".to_string(),
-                state: NamespaceState::Loaded,
-                functionsLookup: Default::default(),
-                globalsLookup: Default::default(),
-                functionsMeta: vec![],
-                functions: vec![],
-                globalsMeta: vec![],
-                globals: vec![],
-            },
+            namespace: &Namespace::new("".to_string()),
         };
 
         let t = f.typ;
@@ -1088,17 +1078,7 @@ impl VirtualMachine<'_> {
                             objects: None,
                             previous: None,
                             programCounter: 0,
-                            namespace: &Namespace {
-                                id: 0,
-                                name: "".to_string(),
-                                state: NamespaceState::Loaded,
-                                functionsLookup: Default::default(),
-                                globalsLookup: Default::default(),
-                                functionsMeta: vec![],
-                                functions: vec![],
-                                globalsMeta: vec![],
-                                globals: vec![],
-                            },
+                            namespace: &Namespace::new("".to_string()),
                         };
 
                         match cached.1 {
@@ -1259,6 +1239,66 @@ impl VirtualMachine<'_> {
                         };
 
                         f.call(&mut *r, fs)
+                    }
+                    PushFunction(namespaceID, functionID) => {
+                        self.stack.push(Value::makeFunction(*namespaceID, *functionID));
+                    }
+                    DynamicCall => {
+                        let (namespaceRaw, idRaw) = self.stack.pop().unwrap().asFunction();
+                        let namespace = namespaceRaw as usize;
+                        let id = idRaw as usize;
+
+
+                        let r = self as *const VirtualMachine as *mut VirtualMachine;
+                        let frame = self.getFrame();
+                        let namespace = self.namespaces.get(namespace).unwrap();
+                        let fMeta = namespace.functionsMeta.get(id).unwrap();
+                        let f = namespace.functions.get(id).unwrap();
+
+                        let mut locals = fMeta.localsMeta.iter().map(|it| {
+                            it.typ.toDefaultValue()
+                        }).collect::<Vec<_>>();
+
+                        for i in 0..fMeta.argsCount {
+                            let arg = self.pop();
+                            // println!("poped {}", arg.asNum());
+                            locals[(fMeta.argsCount - 1) - i] = arg;
+                        }
+
+                        let mut fs = StackFrame{
+                            localVariables: &mut locals,
+                            objects: None,
+                            previous: None,
+                            programCounter: 0,
+                            namespace: frame.namespace
+                        };
+
+                        f.call(&mut *r, fs)
+                    }
+                    New { namespaceID, structID } => {
+                        let n = self.namespaces.get(*namespaceID).unwrap();
+                        let s = n.structs.get(*structID).unwrap();
+
+                        let alloc = alloc(Layout::array::<Value>(s.fields.len()).unwrap()) as *mut Value;
+                        let d = vec![Value::from(0); s.fields.len()];
+
+                        let ptr = Box::into_raw(d.into_boxed_slice());
+                        self.heap.allocations.insert(ptr as *mut Value as usize);
+
+
+                        self.stack.push(Value::from(ptr as *mut Value as usize))
+                    }
+                    SetField { namespaceID, structID, fieldID } => {
+                        let value = self.pop();
+                        let ptr = self.pop().Reference.inner as *mut Value;
+
+                        *ptr.add(*fieldID) = value;
+                    }
+                    GetField { namespaceID, structID, fieldID } => {
+                        let ptr = self.pop().Reference.inner as *mut Value;
+
+                        let v = ptr.add(*fieldID).read();
+                        self.stack.push(v);
                     }
                     o => panic!("unimplemented opcode {:?}", o)
                 }
@@ -1438,17 +1478,7 @@ impl VirtualMachine<'_> {
                             objects: None,
                             previous: None,
                             programCounter: 0,
-                            namespace: &Namespace {
-                                id: 0,
-                                name: "".to_string(),
-                                state: NamespaceState::Loaded,
-                                functionsLookup: Default::default(),
-                                globalsLookup: Default::default(),
-                                functionsMeta: vec![],
-                                functions: vec![],
-                                globalsMeta: vec![],
-                                globals: vec![],
-                            },
+                            namespace: &Namespace::new("".to_string()),
                         };
 
                         match cached.1 {
@@ -1581,8 +1611,8 @@ impl VirtualMachine<'_> {
                         let res = unsafe { genFunctionDef(f, &mut ops, &idk, &*v, &mut *nn).unwrap() };
                         f.localsMeta = res.into_boxed_slice();
                         println!("f ops {:?}", ops);
-                        let nf = self.jitCompiler.compile(ops, &*v, &*nn);
-                        n.functions.push(LoadedFunction::Native(nf));
+                        // let nf = self.jitCompiler.compile(ops, &*v, &*nn);
+                        n.functions.push(LoadedFunction::Virtual(ops));
                     }
                 }
             }
@@ -1723,7 +1753,7 @@ pub fn argsToString(args: &[DataType]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
-        buf.push_str(arg.toString());
+        buf.push_str(&arg.toString());
         if i != args.len() - 1 {
             buf.push_str(", ")
         }
@@ -1736,7 +1766,7 @@ pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
-        buf.push_str(arg.typ.toString());
+        buf.push_str(&arg.typ.toString());
         if i != args.len() - 1 {
             buf.push_str(", ")
         }
@@ -1921,17 +1951,7 @@ pub fn run(opCodes: &mut SeekableOpcodes, vm: &mut VirtualMachine, stackFrame: &
                     objects: None,
                     previous: Some(stackFrame),
                     programCounter: 0,
-                    namespace: &Namespace {
-                        id: 0,
-                        name: "".to_string(),
-                        state: NamespaceState::Loaded,
-                        functionsLookup: Default::default(),
-                        globalsLookup: Default::default(),
-                        functionsMeta: vec![],
-                        functions: vec![],
-                        globalsMeta: vec![],
-                        globals: vec![],
-                    },
+                    namespace: &Namespace::new("".to_string()),
                 };
 
                 match cached.1 {

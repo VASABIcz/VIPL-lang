@@ -20,8 +20,8 @@ extern crate core;
 
 pub mod ast;
 pub mod bytecodeChecker;
-pub mod cGen;
-pub mod codegen;
+// pub mod cGen;
+// pub mod codegen;
 pub mod ffi;
 pub mod fs;
 pub mod gccWrapper;
@@ -40,3 +40,4 @@ pub mod value;
 pub mod namespace;
 pub mod betterGen;
 pub mod std;
+pub mod errors;

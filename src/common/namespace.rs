@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem::transmute;
-use crate::ast::{Expression, FunctionDef, Node, Op, Statement};
+use crate::ast::{Expression, FunctionDef, Node, Op, Statement, VariableModd};
 use crate::betterGen::genFunctionDef;
-use crate::codegen::complexBytecodeGen;
+// use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
-use crate::objects::ViplObject;
+use crate::objects::{Str, ViplObject};
 use crate::parser::{Operation, parseTokens};
 use crate::value::Value;
 use crate::vm;
@@ -32,6 +32,20 @@ pub struct FunctionMeta {
     pub functionType: FunctionTypeMeta,
     pub localsMeta: Box<[VariableMetadata]>,
     pub returnType: Option<DataType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructMeta {
+    pub name: String,
+    pub fieldsLookup: HashMap<String, usize>,
+    pub fields: Vec<VariableMetadata>
+    // TODO default values
+}
+
+impl FunctionMeta {
+    pub fn toFunctionType(&self) -> DataType {
+        DataType::Function { args: self.localsMeta.iter().map(|it|{it.typ.clone()}).collect::<Vec<_>>(), ret: Box::new(self.returnType.clone().unwrap_or(DataType::Void)) }
+    }
 }
 
 impl Into<FunctionMeta> for FunctionDef {
@@ -116,15 +130,28 @@ pub struct Namespace {
 
     pub functionsLookup: HashMap<String, usize>,
     pub globalsLookup: HashMap<String, usize>,
+    pub structLookup: HashMap<String, usize>,
 
     pub functionsMeta: Vec<FunctionMeta>,
     pub functions: Vec<LoadedFunction>,
 
     pub globalsMeta: Vec<VariableMetadata>,
     pub globals: Vec<Value>,
+
+    pub structs: Vec<StructMeta>,
 }
 
 impl Namespace {
+    pub fn getFunctionByName(&self, name: &str) -> Option<(&FunctionMeta, usize)> {
+        let id = self.functionsLookup.get(name.strip_prefix((&format!("{}::", self.name))).unwrap_or(name))?;
+        match self.functionsMeta.get(*id) {
+            None => None,
+            Some(v) => {
+                Some((v, *id))
+            }
+        }
+    }
+
     pub fn makeNative(
         &mut self,
         name: String,
@@ -146,6 +173,12 @@ impl Namespace {
         self.functionsMeta.push(d);
     }
 
+    pub fn registerStruct(&mut self, d: StructMeta) {
+        let index = self.structs.len();
+        self.structLookup.insert(d.name.clone(), index);
+        self.structs.push(d);
+    }
+
     pub fn new(name: String) -> Self {
         Self {
             id: 0,
@@ -153,10 +186,12 @@ impl Namespace {
             state: NamespaceState::PartiallyLoaded,
             functionsLookup: Default::default(),
             globalsLookup: Default::default(),
+            structLookup: Default::default(),
             functionsMeta: vec![],
             functions: vec![],
             globalsMeta: vec![],
             globals: vec![],
+            structs: vec![],
         }
     }
 
@@ -174,6 +209,7 @@ impl Namespace {
             returnType: None,
             isNative: false,
         };
+        println!("{:?}", src);
 
         for s in src {
             match s {
@@ -182,7 +218,7 @@ impl Namespace {
                         Node::FunctionDef(d) => {
                             n.registerFunctionDef(d.into());
                         }
-                        Node::StructDef(_) => todo!(),
+                        Node::StructDef(v) => n.registerStruct(v.into()),
                         Node::Import(_) => todo!()
                     }
                 }
@@ -194,15 +230,8 @@ impl Namespace {
                         Expression::FunctionCall(c) => {
                             initFunction.body.push(Statement::FunctionExpr(c));
                         }
-                        Expression::NamespaceAccess(c, v) => {
-                            match *v {
-                                Expression::FunctionCall(d) => {
-                                    initFunction.body.push(Statement::NamespaceFunction(c, d));
-                                }
-                                _ => panic!()
-                            }
-                        }
-                        c => panic!("{:?}", c)
+                        // Expression::NamespaceAccess(c) => todo!(),
+                        c => initFunction.body.push(Statement::StatementExpression(c))
                     }
                 }
             }
@@ -219,7 +248,7 @@ pub fn loadSourceFile(src: &str, vm: &mut VirtualMachine) -> Result<Vec<Operatio
         Ok(v) => v,
         Err(e) => {
             eprintln!("tokenizer");
-            todo!()
+            todo!("{}", e)
         }
     };
 

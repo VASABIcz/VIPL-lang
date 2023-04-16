@@ -3,24 +3,12 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
-use crate::bytecodeChecker::InvalidTypeException;
+use crate::errors::{InvalidTypeException, TypeNotFound};
+use crate::namespace::StructMeta;
 use crate::objects::Str;
 use crate::vm::{DataType, Func, Generic, genFunName, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::DataType::{Bool, Char, Object};
 use crate::vm::Generic::Any;
-
-#[derive(Debug)]
-pub(crate) struct TypeNotFound {
-    pub(crate) typ: String,
-}
-
-impl Display for TypeNotFound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.typ)
-    }
-}
-
-impl Error for TypeNotFound {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
@@ -54,7 +42,11 @@ pub enum Expression {
     ArrayLiteral(Vec<Expression>),
     ArrayIndexing(Box<ArrayAccess>),
     NotExpression(Box<Expression>),
-    NamespaceAccess(Vec<String>, Box<Expression>)
+    NamespaceAccess(Vec<String>),
+    Lambda(Vec<VariableMetadata>, DataType),
+    Callable(Box<Expression>, Vec<Expression>),
+    StructInit(String, Vec<(String, Expression)>),
+    FieldAccess(Box<Expression>, String)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -125,9 +117,12 @@ impl Expression {
             }
             Expression::Variable(name) => {
                 match typesMapping.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
-                    None => Err(Box::new(TypeNotFound {
-                        typ: format!("variable {name} not found"),
-                    })),
+                    None => {
+                        panic!();
+                        Err(Box::new(TypeNotFound {
+                            typ: format!("variable {name} not found"),
+                        }))
+                    },
                     Some(v) => Ok(Some(v.0.clone())),
                 }
             }
@@ -200,9 +195,24 @@ impl Expression {
                     }
                 }
             }
-            Expression::NamespaceAccess(n, i) => {
-                i.toDataType(typesMapping, functionReturns, typeHint)
+            Expression::NamespaceAccess(n) => {
+                panic!()
+                //i.toDataType(typesMapping, functionReturns, typeHint)
             }
+            Expression::Lambda(_, _) => todo!(),
+            Expression::Callable(prev, args) => {
+                let res = prev.toDataType(typesMapping, functionReturns, typeHint)?.unwrap();
+                match res {
+                    DataType::Function { args, ret } => {
+                        Ok(Some(*ret.clone()))
+                    }
+                    _ => panic!()
+                }
+            }
+            Expression::StructInit(name, _) => {
+                Ok(Some(Object(ObjectMeta { name: name.clone().into(), generics: Box::new([]) })))
+            }
+            Expression::FieldAccess(_, _) => todo!()
         }
     }
 }
@@ -212,7 +222,7 @@ pub enum Statement {
     FunctionExpr(FunctionCall),
     While(While),
     Variable(VariableCreate),
-    VariableMod(VariableMod),
+    VariableMod(VariableModd),
     If(If),
     Return(Return),
     ArrayAssign {
@@ -222,11 +232,12 @@ pub enum Statement {
     Continue,
     Break,
     Loop(Vec<Statement>),
-    NamespaceFunction(Vec<String>, FunctionCall)
+    NamespaceFunction(Vec<String>, FunctionCall),
+    StatementExpression(Expression)
 }
 
 #[derive(Debug, Clone)]
-pub struct VariableMod {
+pub struct VariableModd {
     pub varName: String,
     pub modType: ModType,
     pub expr: Expression,
@@ -256,6 +267,24 @@ pub struct If {
 pub struct StructDef {
     pub name: String,
     pub fields: HashMap<String, DataType>,
+}
+
+impl Into<StructMeta> for StructDef {
+    fn into(self) -> StructMeta {
+        let mut fieldsLookup = HashMap::new();
+        let mut fields = vec![];
+
+        for (k, v) in self.fields {
+            fields.push(VariableMetadata{ name: k.clone().into(), typ: v });
+            fieldsLookup.insert(k, fields.len()-1);
+        }
+
+        StructMeta {
+            name: self.name,
+            fieldsLookup,
+            fields,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

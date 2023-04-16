@@ -1,0 +1,27 @@
+fn add(a: int, b: int): int {
+    return a + b
+}
+
+fn mul(a: int, b: int): int {
+    return a * b
+}
+
+fn callMany(f: (): !, count: int) {
+    i = 0
+    while i < count {
+        f()
+        i++
+    }
+}
+
+x = mul // at this point the type of X is not known
+        // there are 2 possibilities (int, int) -> int | (int) -> int
+        // not even a damn kotlin compiler can handle this i think its fine for now to just crash :)
+
+out::print("multiplication")
+out::print(x(5,5)) // the type can be inferred here when x is called with 2 int arguments
+
+x = add
+
+out::print("adition")
+out::print(x(5,5))

@@ -12,6 +12,7 @@ pub union Value {
     pub Bol: bool,
     pub Chr: char,
     pub Reference: Hay<ViplObject>,
+    pub FunctionPointer: (u32, u32)
 }
 
 impl Debug for Value {
@@ -31,6 +32,13 @@ impl From<isize> for Value {
     #[inline]
     fn from(val: isize) -> Self {
         Self{Num: val}
+    }
+}
+
+impl From<i32> for Value {
+    #[inline]
+    fn from(val: i32) -> Self {
+        Self{Num: val as isize}
     }
 }
 
@@ -55,6 +63,13 @@ impl From<bool> for Value {
     }
 }
 
+impl From<usize> for Value {
+    #[inline]
+    fn from(val: usize) -> Self {
+        Value{Reference: Hay::new(val as *mut ViplObject)}
+    }
+}
+
 impl Value {
     #[inline(always)]
     pub fn asHay(&self) -> Hay<ViplObject> {
@@ -74,6 +89,11 @@ impl Value {
     #[inline(always)]
     pub fn asChar(&self) -> char {
         unsafe { self.Chr }
+    }
+
+    #[inline(always)]
+    pub fn asFunction(&self) -> (u32, u32) {
+        unsafe { self.FunctionPointer }
     }
 
     #[inline(always)]
@@ -120,6 +140,8 @@ impl Value {
                 }
             }
             DataType::Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -135,6 +157,8 @@ impl Value {
             DataType::Bool => {}
             DataType::Object { .. } => {}
             DataType::Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -150,6 +174,8 @@ impl Value {
             DataType::Bool => {}
             DataType::Object { .. } => {}
             DataType::Char => panic!(),
+            Void => panic!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -165,6 +191,8 @@ impl Value {
             Bool => {}
             Object { .. } => {}
             Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -197,6 +225,8 @@ impl Value {
             Object(_) => {
                 panic!()
             }
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 }
@@ -210,6 +240,8 @@ impl Value {
             Bool => self.getBool() & !val.getBool(),
             Object { .. } => panic!(),
             Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -247,6 +279,8 @@ impl Value {
             Bool => !self.getBool() & val.getBool(),
             Object { .. } => panic!(),
             Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -270,6 +304,8 @@ impl Value {
             Bool => !self.getBool() & val.getBool(),
             Object { .. } => panic!(),
             Char => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         };
 
         *self = l.into()
@@ -283,6 +319,8 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
             Object { .. } => panic!(),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         }
     }
 
@@ -294,6 +332,8 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
             Object(a) => panic!("{:?}", a),
+            Void => unreachable!(),
+            Function { .. } => unreachable!()
         };
         *self = x.into()
     }
@@ -387,9 +427,14 @@ impl Value {
         self.asMutRef().getMutArr()
     }
 
+    // FIXME not sure why inline never :D
     #[inline(never)]
     pub fn makeString(str: String, vm: &mut VirtualMachine) -> Value {
         Value{Reference: vm.heap.allocate(Str::new(str).into())}
+    }
+
+    pub fn makeFunction(namespaceID: u32, functionID: u32) -> Value {
+        Value{FunctionPointer: (namespaceID, functionID)}
     }
 
     #[inline]

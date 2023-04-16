@@ -7,7 +7,6 @@ use std::time::Duration;
 use libc::{exit, sleep};
 
 
-use crate::codegen::bytecodeGen;
 use crate::heap::Hay;
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::namespace::{Namespace, NamespaceState};
@@ -68,6 +67,7 @@ pub extern fn popStack(vm: &mut VirtualMachine) -> Option<Value> {
 
 #[no_mangle]
 pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
+    /*
     let mut buf = vec![0u8; len];
     unsafe {
         d.copy_to(buf.as_mut_ptr(), len);
@@ -130,6 +130,8 @@ pub extern fn evaluate(vm: &mut VirtualMachine, d: *const u8, len: usize) {
     );
 
     println!("finished");
+
+     */
 }
 
 #[no_mangle]
@@ -163,17 +165,7 @@ pub extern fn test(vm: *mut VirtualMachine) {
                 objects: None,
                 previous: None,
                 programCounter: 0,
-                namespace: &Namespace{
-                    id: 0,
-                    name: "".to_string(),
-                    state: NamespaceState::Loaded,
-                    functionsLookup: Default::default(),
-                    globalsLookup: Default::default(),
-                    functionsMeta: vec![],
-                    functions: vec![],
-                    globalsMeta: vec![],
-                    globals: vec![],
-                },
+                namespace: &Namespace::new("".to_string()),
             },
         )
     }
@@ -511,17 +503,7 @@ pub extern fn asmCall(vm: &mut VirtualMachine, name: *const c_char, rsp: *mut Va
         objects: None,
         previous: None,
         programCounter: 0,
-        namespace: &Namespace {
-            id: 0,
-            name: "".to_string(),
-            state: NamespaceState::Loaded,
-            functionsLookup: Default::default(),
-            globalsLookup: Default::default(),
-            functionsMeta: vec![],
-            functions: vec![],
-            globalsMeta: vec![],
-            globals: vec![],
-        },
+        namespace: &Namespace::new("".to_string()),
     };
 
     let t = f.typ;

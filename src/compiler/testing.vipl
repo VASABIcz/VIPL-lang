@@ -10,6 +10,8 @@ out::print(x)
 
 out::print("recursion test")
 
+print(out::array::call(1)[rand(0)][2](1, 2, 3))
+
 fn fact(n: int): int {
     if n > 0 {
         return n*fact(n-1)

@@ -119,6 +119,7 @@ fn genExpression(
                     Bool => "vm->nativeWrapper.pushBool(vm,",
                     DataType::Char => "vm->nativeWrapper.pushChar(vm,",
                     DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
+                    _ => panic!()
                 };
                 out.push_str(t);
                 genExpression(arg, out, functionReturns, vTable)?;
@@ -134,6 +135,8 @@ fn genExpression(
                     Bool => "vm->nativeWrapper.popBool(vm);",
                     DataType::Char => "vm->nativeWrapper.popChar(vm);",
                     DataType::Object(_) => "vm->nativeWrapper.popRef(vm,frame);",
+                    DataType::Void => panic!(),
+                    DataType::Function { .. } => {}
                 };
                 out.push_str(s)
             }
@@ -189,6 +192,7 @@ fn genExpression(
                             Bool => "vm->nativeWrapper.arrGetBool(vm,",
                             DataType::Char => "vm->nativeWrapper.stringGetChar(vm,",
                             DataType::Object(_) => "vm->nativeWrapper.arrGetRef(vm,frame,",
+                            DataType::Void => panic!()
                         };
                         out.push_str(s);
                         genExpression(i.expr, out, functionReturns, vTable)?;
@@ -254,6 +258,7 @@ fn genStatement(
                     Bool => "vm->nativeWrapper.pushBool(vm,",
                     DataType::Char => "vm->nativeWrapper.pushChar(vm,",
                     DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
+                    _ => panic!()
                 };
                 out.push_str(t);
                 genExpression(arg, out, functionReturns, vTable)?;
@@ -269,6 +274,7 @@ fn genStatement(
                     Bool => "vm->nativeWrapper.popBool(vm);",
                     DataType::Char => "vm->nativeWrapper.popChar(vm);",
                     DataType::Object(_) => "vm->nativeWrapper.popRef(vm,frame);",
+                    DataType::Void => panic!()
                 };
                 out.push_str(s)
             }
@@ -363,6 +369,7 @@ fn genStatement(
                         Bool => "vm->nativeWrapper.pushBool(vm,",
                         DataType::Char => "vm->nativeWrapper.pushChar(vm,",
                         DataType::Object(_) => "vm->nativeWrapper.pushRef(vm,",
+                        DataType::Void => panic!()
                     };
                     out.push_str(v);
                     genExpression(ret.exp, out, functionReturns, vTable)?;
@@ -447,6 +454,7 @@ pub fn genFunctionDef(
             Bool => "vm->nativeWrapper.getLocalsBool(frame,",
             DataType::Char => "vm->nativeWrapper.getLocalsChar(frame,",
             DataType::Object(_) => "vm->nativeWrapper.getLocalsRef(frame,",
+            DataType::Void => panic!()
         };
         out.push_str(ee);
 
@@ -717,6 +725,71 @@ pub fn bytecodeGen2(
     out.push('}');
 
     Ok(out)
+}
+
+fn genFunctionDef(
+    fun: FunctionDef,
+    ops: &mut Vec<OpCode>,
+    functionReturns: &HashMap<MyStr, Option<DataType>>,
+) -> Result<(), Box<dyn Error>> {
+    if fun.isNative {
+        let c = fun.argsCount;
+        let mut buf = String::new();
+        crate::cGen::genFunctionDef(fun.clone(), &mut buf, functionReturns)?;
+        let resPath = crate::gccWrapper::compile(&buf)?;
+
+        ops.push(OpCode::StrNew(MyStr::Runtime(resPath.into_boxed_str())));
+        ops.push(StrNew(MyStr::Runtime(
+            genFunNameMeta(&fun.name, &fun.localsMeta, c).into_boxed_str(),
+        )));
+        ops.push(OpCode::PushInt(fun.argsCount as isize));
+        ops.push(OpCode::Call {
+            encoded: MyStr::Runtime(Box::from("loadNative(String, String, int)")),
+        });
+
+        return Ok(());
+    }
+
+    ops.push(OpCode::FunBegin);
+    ops.push(FunName {
+        name: MyStr::Runtime(fun.name.clone().into_boxed_str()),
+    });
+
+    let mut idk1 = HashMap::new();
+    let mut idk2 = vec![];
+
+    for arg in fun.localsMeta {
+        idk1.insert(arg.name.clone(), (arg.typ.clone(), idk2.len()));
+        idk2.push(arg)
+    }
+
+    for s in &fun.body {
+        buildLocalsTable(s, &mut idk1, &mut idk2, functionReturns)?;
+    }
+
+    // let vTable = constructVarTable(&fun, functionReturns)?;
+    ops.push(LocalVarTable {
+        typ: idk2.into_boxed_slice(),
+        argsCount: fun.argsCount,
+    });
+    ops.push(FunReturn {
+        typ: fun.returnType,
+    });
+
+    for statement in fun.body {
+        let ctx = StatementCtx {
+            statement: &statement,
+            ops,
+            functionReturns,
+            vTable: &idk1,
+            loopContext: None,
+            clearStack: true,
+        };
+        genStatement(ctx)?;
+    }
+    ops.push(OpCode::Return);
+    ops.push(OpCode::FunEnd);
+    Ok(())
 }
 
 /*

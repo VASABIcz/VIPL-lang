@@ -1,0 +1,14 @@
+fn callMany(ff: (int, int): int, count: int) {
+    i = 0
+    while i < count {
+        c = ff(i, i)
+        out::print(c)
+        i++
+    }
+}
+
+fn mul(a: int, b: int): int {
+    return a*b
+}
+
+callMany(mul, 10)

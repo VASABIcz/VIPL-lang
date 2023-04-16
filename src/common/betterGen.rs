@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
+use std::ops::Deref;
 
 use Statement::Variable;
 
-use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef, TypeNotFound};
-use crate::bytecodeChecker::InvalidTypeException;
-use crate::cGen::{NoValue, VariableNotFound};
+use crate::ast::{Expression, FunctionDef, ModType, Node, Op, Statement, StructDef};
+use crate::errors::{InvalidTypeException, NoValue, TypeNotFound, SymbolNotFound};
 use crate::lexer::*;
 use crate::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::optimizer::{evalE};
@@ -20,6 +20,7 @@ use crate::vm::OpCode::*;
 
 
 
+#[derive(Debug)]
 pub struct ExpressionCtx<'a> {
     pub exp: &'a Expression,
     pub ops: &'a mut Vec<OpCode>,
@@ -30,7 +31,37 @@ pub struct ExpressionCtx<'a> {
     pub vm: &'a VirtualMachine<'a>
 }
 
+impl PartialExprCtx<'_> {
+    pub fn lookupFunctionByBaseName(&self, name: &str) -> Option<String> {
+        println!("funcs {:?}", self.functionReturns.keys());
+        let idk = format!("{}::{}(", self.currentNamespace.name, name);
+        println!("finding {}", idk);
+
+        for (k, _) in self.functionReturns {
+            if k.as_str().starts_with(&idk) {
+                println!("found {}", k);
+                return Some(k.to_string());
+            }
+        }
+        return None;
+    }
+}
+
 impl ExpressionCtx<'_> {
+    pub fn lookupFunctionByBaseName(&self, name: &str) -> Option<String> {
+        println!("funcs {:?}", self.functionReturns.keys());
+        let idk = format!("{}::{}(", self.currentNamespace.name, name);
+        println!("finding {}", idk);
+
+        for (k, v) in self.functionReturns {
+            if k.as_str().starts_with(&idk) {
+                println!("found {}", k);
+                return Some(k.to_string());
+            }
+        }
+        return None;
+    }
+
     pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
         ExpressionCtx {
             exp,
@@ -74,7 +105,6 @@ impl ExpressionCtx<'_> {
             }
             Expression::StringLiteral(_) => Ok(Some(DataType::str())),
             Expression::FunctionCall(f) => {
-                println!("i am here");
                 let types = f
                     .arguments
                     .iter()
@@ -104,7 +134,14 @@ impl ExpressionCtx<'_> {
             Expression::Variable(name) => {
                 match self.vTable.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
                     None => {
-                        panic!();
+                        println!("JEBE");
+                        let funcName = self.lookupFunctionByBaseName(name).ok_or(Box::new(TypeNotFound {
+                            typ: format!("variable {name} not found"),
+                        }))?;
+                        let f = self.currentNamespace.getFunctionByName(&funcName).unwrap();
+                        return Ok(Some(f.0.toFunctionType()));
+
+                        println!("hint {:?}", self.typeHint);
                         Err(Box::new(TypeNotFound {
                             typ: format!("variable {name} not found"),
                         }))
@@ -177,8 +214,50 @@ impl ExpressionCtx<'_> {
                     }
                 }
             }
-            Expression::NamespaceAccess(n, i) => {
-                self.transfer(i).toDataType()
+            Expression::NamespaceAccess(n) => todo!(),
+            Expression::Lambda(_, _) => panic!(),
+            Expression::Callable(prev, args) => {
+                unsafe {
+                    if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
+                        if !self.vTable.contains_key(&MyStr::Static(&v)) {
+                            println!("hello {:?} {:?} {:?}", prev, args, self.vTable);
+                            let genName = genFunName(&v, &args.iter().map(|it| { self.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                            let funcId = self.currentNamespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName))?;
+                            return Ok(funcId.0.returnType.clone())
+                        }
+                        else {
+                            let var = self.vTable.get(&MyStr::Static(&v)).unwrap();
+                            match &var.0 {
+                                DataType::Function { args, ret } => {
+                                    return Ok(Some(*ret.clone()))
+                                }
+                                _ => panic!()
+                            }
+                        }
+                    }
+                    else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
+                        let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                        let funcId = self.currentNamespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+                        return Ok(funcId.0.returnType.clone())
+                    }
+                }
+                todo!("{:?} {:?}", prev, args)
+            }
+            Expression::StructInit(name, _) => {
+                Ok(Some(DataType::Object(ObjectMeta{ name: name.clone().into(), generics: Box::new([]) })))
+            }
+            Expression::FieldAccess(prev, fieldName) => {
+                let e = self.transfer(prev).toDataType()?.ok_or("cannot array index none")?;
+                match e {
+                    Object(o) => {
+                        let structID = self.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
+                        let structMeta = self.currentNamespace.structs.get(*structID).unwrap();
+                        let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
+                        let t = structMeta.fields.get(*fieldID).unwrap();
+                        Ok(Some(t.typ.clone()))
+                    }
+                    _ => panic!(),
+                }
             }
         }
     }
@@ -222,6 +301,20 @@ impl PartialExprCtx<'_> {
 }
 
 impl ExpressionCtx<'_> {
+    pub fn constructCtx<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
+        ExpressionCtx {
+            exp,
+            ops: self.ops,
+            functionReturns: self.functionReturns,
+            vTable: self.vTable,
+            typeHint: None,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+        }
+    }
+}
+
+impl ExpressionCtx<'_> {
     pub fn reduce(&mut self) -> (&Expression, PartialExprCtx<'_>) {
         let p = PartialExprCtx {
             ops: self.ops,
@@ -237,6 +330,7 @@ impl ExpressionCtx<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct StatementCtx<'a> {
     pub statement: &'a Statement,
     pub ops: &'a mut Vec<OpCode>,
@@ -308,19 +402,19 @@ impl StatementCtx<'_> {
     }
 }
 
-pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>, vTable: &mut HashMap<MyStr, (DataType, usize)>) -> Result<(), Box<dyn Error>> {
+pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>) -> Result<(), Box<dyn Error>> {
     match ctx.statement {
         Variable(c) => {
             let res = c.init.clone().ok_or("variable expected initializer")?;
-            let t = ctx.makeExpressionCtx(&res, None).toDataType()?;
+            let t = ctx.makeExpressionCtx(&res, None).toDataType().unwrap_or(c.typeHint.clone());
 
 
             let k = MyStr::Runtime(c.name.clone().into_boxed_str());
-            if vTable.contains_key(&k) {
+            if ctx.vTable.contains_key(&k) {
                return Ok(());
             }
 
-            vTable.insert(
+            ctx.vTable.insert(
                 MyStr::Runtime(c.name.clone().into_boxed_str()),
                 (t.clone().unwrap(), locals.len()),
             );
@@ -331,22 +425,22 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
         }
         Statement::While(w) => {
             for s in &w.body {
-                buildLocalsTable(&mut ctx.transfer(s), locals, vTable)?;
+                buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
         }
         Statement::If(i) => {
             for s in &i.body {
-                buildLocalsTable(&mut ctx.transfer(s), locals, vTable)?;
+                buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
             if let Some(body) = &i.elseBody {
                 for s in body {
-                    buildLocalsTable(&mut ctx.transfer(s), locals, vTable)?;
+                    buildLocalsTable(&mut ctx.transfer(s), locals)?;
                 }
             }
         }
         Statement::Loop(body) => {
             for s in body {
-                buildLocalsTable(&mut ctx.transfer(s), locals, vTable)?;
+                buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
         }
         Statement::FunctionExpr(_) => {}
@@ -356,6 +450,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
         Statement::Continue => {}
         Statement::Break => {}
         Statement::NamespaceFunction(_, _) => {}
+        Statement::StatementExpression(_) => {}
     }
 
     Ok(())
@@ -368,41 +463,41 @@ pub fn genFunctionDef(
     vm: &VirtualMachine,
     currentNamespace: &Namespace
 ) -> Result<Vec<VariableMetadata>, Box<dyn Error>> {
-    let mut idk1 = HashMap::new();
+    let mut vTable = HashMap::new();
     let mut locals = vec![];
 
     for arg in fun.localsMeta.iter() {
-        idk1.insert(arg.name.clone(), (arg.typ.clone(), locals.len()));
+        vTable.insert(arg.name.clone(), (arg.typ.clone(), locals.len()));
         locals.push(arg.clone())
     }
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
         for s in body {
-            buildLocalsTable(&mut StatementCtx{
-                statement: s,
+            let mut ctx = StatementCtx{
+                statement: &Statement::Continue,
                 ops,
                 functionReturns,
-                vTable: &mut Default::default(),
+                vTable: &mut vTable,
                 loopContext: None,
                 clearStack: false,
                 currentNamespace,
                 vm,
-            }, &mut locals, &mut idk1)?;
+            };
+            buildLocalsTable(&mut ctx.transfer(s), &mut locals)?;
         }
 
         for statement in body {
             println!("gening {:?}", statement);
-            let ctx = StatementCtx {
-                statement: &statement,
+            genStatement(StatementCtx{
+                statement,
                 ops,
                 functionReturns,
-                vTable: &mut idk1,
+                vTable: &mut vTable,
                 loopContext: None,
-                clearStack: true,
+                clearStack: false,
                 currentNamespace,
                 vm,
-            };
-            genStatement(ctx)?;
+            })?;
         }
         ops.push(Return);
 
@@ -455,6 +550,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         Variable(v) => match &v.init {
             None => {}
             Some(e) => {
+                println!("aids {:?}", ctx);
                 let t = ctx.makeExpressionCtx(e, v.typeHint.clone()).toDataType()?;
                 match t {
                     None => {
@@ -555,7 +651,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         Statement::VariableMod(m) => {
             match ctx.vTable.get(&MyStr::Runtime(m.clone().varName.into_boxed_str())) {
                 None => {
-                    return Err(Box::new(VariableNotFound { name: m.varName.clone() }));
+                    return Err(Box::new(SymbolNotFound { name: m.varName.clone() }));
                 }
                 Some(local) => {
                     let dataType = m.expr.toDataType(ctx.vTable, ctx.functionReturns, None)?.expect("expected return value");
@@ -634,6 +730,10 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
 
             ctx.ops.push(LCall { namespace: *namespaceId, id: *funcId })
         }
+        Statement::StatementExpression(v) => {
+            let eCtx = ctx.makeExpressionCtx(v, None);
+            genExpression(eCtx)?;
+        }
     }
     Ok(())
 }
@@ -648,7 +748,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
 
     match e {
         Expression::ArithmeticOp { left, right, op } => {
-            let dataType = left.toDataType(r.vTable, r.functionReturns, None)?;
+            let dataType = r.constructCtx(left).toDataType()?;
             match dataType {
                 None => {
                     return Err(Box::new(NoValue {
@@ -669,7 +769,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         Op::And => OpCode::And,
                         Op::Or => OpCode::Or,
                     };
-                    ctx.ops.push(t);
+                    r.ops.push(t);
                 }
             }
         }
@@ -697,24 +797,25 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             }
 
             let n = genFunName(e.name.as_str(), &argTypes);
-            println!("{:?}", ctx.currentNamespace.functionsLookup);
-            let res = ctx.currentNamespace.functionsLookup.get(&n).unwrap();
-            ctx.ops.push(OpCode::SCall { id: *res })
+            println!("{:?}", r.currentNamespace.functionsLookup);
+            let res = r.currentNamespace.functionsLookup.get(&n).unwrap();
+            r.ops.push(OpCode::SCall { id: *res })
         }
-        Expression::Variable(v) => {
-            let _res = match r.vTable.get(&MyStr::Runtime(v.clone().into_boxed_str())) {
-                None => {
-                    return Err(Box::new(VariableNotFound { name: v.clone() }));
-                }
-                Some(v) => v,
-            };
-            r.ops.push(OpCode::PushLocal {
-                index: r
-                    .vTable
-                    .get(&MyStr::Runtime(v.clone().into_boxed_str()))
-                    .unwrap()
-                    .1,
-            })
+        Expression::Variable(v) => unsafe {
+            if r.vTable.contains_key(&v.clone().into()) {
+                r.ops.push(OpCode::PushLocal {
+                    index: r
+                        .vTable
+                        .get(&MyStr::Runtime(v.clone().into_boxed_str()))
+                        .ok_or(Box::new(SymbolNotFound { name: v.clone() }))?
+                        .1,
+                });
+            }
+            else {
+                let f = r.lookupFunctionByBaseName(v).unwrap();
+                let a = r.currentNamespace.getFunctionByName(&f).unwrap();
+                r.ops.push(PushFunction(r.currentNamespace.id as u32, a.1 as u32))
+            }
         }
         Expression::CharLiteral(c) => r.ops.push(PushChar(*c)),
         Expression::ArrayLiteral(i) => {
@@ -768,7 +869,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                             genExpression(r.constructCtx(&i.expr))?;
                             genExpression(r.constructCtx(&i.index))?;
 
-                            ctx.ops.push(OpCode::ArrayLoad(v.clone()));
+                            r.ops.push(OpCode::ArrayLoad(v.clone()));
                         }
                         Generic::Any => panic!(),
                     }
@@ -778,9 +879,91 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         }
         Expression::NotExpression(e) => {
             genExpression(r.constructCtx(e))?;
-            ctx.ops.push(Not)
+            r.ops.push(Not)
         }
-        Expression::NamespaceAccess(_, _) => todo!()
+        Expression::NamespaceAccess(_) => todo!(),
+        Expression::Lambda(_, _) => todo!(),
+        Expression::Callable(prev, args) => {
+            let mut argTypes = vec![];
+
+            for arg in args {
+                let t = r.constructCtx(arg).toDataType()?;
+                match t {
+                    None => { return Err(Box::new(NoValue { msg: String::from("aahhh"), })); }
+                    Some(v) => {
+                        argTypes.push(v);
+                        genExpression(r.constructCtx(arg))?;
+                    }
+                }
+            }
+
+            println!("COZE? {:?}", prev);
+            unsafe {
+                if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
+                    if !r.vTable.contains_key(&MyStr::Static(&v)) {
+                        let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                        let funcId = r.currentNamespace.functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+
+                        r.ops.push(SCall { id: *funcId });
+                    }
+                    else {
+                        genExpression(r.constructCtx(prev))?;
+                        r.ops.push(DynamicCall)
+                    }
+                }
+                else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
+                    let genName = genFunName(v.last().unwrap(), &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                    let namespaceName = v[0..v.len()-1].join("::");
+                    let funcId = r.vm.namespaces.get(*r.vm.namespaceLookup.get(&namespaceName).unwrap()).unwrap().functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+
+                    r.ops.push(LCall { namespace: 0, id: *funcId });
+                }
+                else {
+                    genExpression(r.constructCtx(prev))?;
+                    r.ops.push(DynamicCall)
+                }
+            }
+        }
+        Expression::StructInit(name, init) => {
+            let structID  = *r.currentNamespace.structLookup.get(name).unwrap();
+            let structMeta = r.currentNamespace.structs.get(structID).unwrap();
+            let namespaceID = r.currentNamespace.id;
+
+            r.ops.push(New { namespaceID, structID });
+
+            for (fieldName, value) in init {
+                r.ops.push(Dup);
+                let fieldID = *structMeta.fieldsLookup.get(fieldName.into()).unwrap();
+                let ctx = r.constructCtx(value);
+                genExpression(ctx)?;
+                r.ops.push(SetField {
+                    namespaceID,
+                    structID,
+                    fieldID,
+                })
+            }
+        }
+        Expression::FieldAccess(prev, fieldName) => {
+            let ctx = r.constructCtx(prev);
+            genExpression(ctx)?;
+
+            let e = r.constructCtx(prev).toDataType()?.ok_or("cannot array index none")?;
+            match e {
+                Object(o) => {
+                    let structID = r.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
+                    let structMeta = r.currentNamespace.structs.get(*structID).unwrap();
+                    let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
+
+
+                    r.ops.push(GetField {
+                        namespaceID: r.currentNamespace.id,
+                        structID: *structID,
+                        fieldID: *fieldID,
+                    });
+                }
+                _ => panic!(),
+            };
+        }
     }
     Ok(())
 }

@@ -1,0 +1,34 @@
+struct MyStruct {
+  x: int
+  y: int
+  z: int
+}
+
+struct AnotherStruct {
+  oldPos: MyStruct
+  nwPos: MyStruct
+}
+
+x = MyStruct {
+    x: 10
+    y: 11
+    z: 12
+}
+
+n = AnotherStruct {
+    oldPos: MyStruct {
+        x: 10
+        y: 11
+        z: 12
+    }
+    nwPos: MyStruct {
+        x: 10
+        y: 11
+        z: 12
+    }
+}
+
+y = x
+c = y.x
+
+out::print(n.oldPos.z)

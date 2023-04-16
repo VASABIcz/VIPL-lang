@@ -1,55 +1,11 @@
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use crate::errors::{GenericException, InvalidOpcode, InvalidTypeException, OutOfBoundsException};
 
 use crate::vm::*;
 use crate::vm::DataType::{Bool, Char, Float, Int, Object};
 use crate::vm::OpCode::*;
-
-#[derive(Debug)]
-struct InvalidOpcode {
-    msg: String,
-}
-
-impl Display for InvalidOpcode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for InvalidOpcode {}
-
-#[derive(Debug)]
-struct GenericException {
-    msg: String,
-}
-
-impl Display for GenericException {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for GenericException {}
-
-#[derive(Debug)]
-struct OutOfBoundsException {
-    max: isize,
-    index: isize,
-    msg: String,
-}
-
-impl Display for OutOfBoundsException {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "tried to index {} out of bounds index {} bounds 0-{}",
-            self.msg, self.index, self.index
-        )
-    }
-}
-
-impl Error for OutOfBoundsException {}
 
 pub fn checkFunction(
     opCodes: &mut SeekableOpcodes,
@@ -159,27 +115,6 @@ pub fn checkFunction(
 pub struct AbstractStack {
     pub stack: Vec<DataType>,
 }
-
-#[derive(Debug)]
-pub struct InvalidTypeException {
-    pub(crate) expected: DataType,
-    pub(crate) actual: Option<DataType>,
-}
-
-impl Display for InvalidTypeException {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.actual {
-            None => {
-                write!(f, "expected {:?}, got None", self.expected)
-            }
-            Some(v) => {
-                write!(f, "expected {:?}, got {:?}", self.expected, v)
-            }
-        }
-    }
-}
-
-impl Error for InvalidTypeException {}
 
 impl AbstractStack {
     fn assertPop(&mut self, typ: &DataType) -> Result<(), Box<dyn Error>> {

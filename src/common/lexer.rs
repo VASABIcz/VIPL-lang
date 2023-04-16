@@ -3,19 +3,7 @@
 use std::error::Error;
 use std::fmt::Formatter;
 use std::ops::Index;
-
-#[derive(Debug)]
-struct UnknownToken {
-    source: String,
-}
-
-impl std::fmt::Display for UnknownToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "failed to parse remaining source: {}", self.source)
-    }
-}
-
-impl Error for UnknownToken {}
+use crate::errors::UnknownToken;
 
 pub fn tokenize(
     lexingUnits: &mut [Box<dyn LexingUnit>],
@@ -132,6 +120,7 @@ pub enum TokenType {
     DoubleLiteral,
     StringLiteral,
     CharLiteral,
+    LambdaBegin,
 
     Identifier,
 
@@ -182,6 +171,11 @@ pub enum TokenType {
 
     And,
     Or,
+
+    Dot,
+
+    Inc,
+    Dec
 }
 
 #[derive(Clone, Debug)]
@@ -448,6 +442,10 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("<", TokenType::Gt),
         KeywordLexingUnit::new("!", TokenType::Not),
         KeywordLexingUnit::new("::", TokenType::Namespace),
+        KeywordLexingUnit::new(".", TokenType::Dot),
+        KeywordLexingUnit::new("->", TokenType::LambdaBegin),
+        KeywordLexingUnit::new("++", TokenType::Inc),
+        KeywordLexingUnit::new("--", TokenType::Dec),
         //
         KeywordLexingUnit::new(";", TokenType::Semicolon),
         KeywordLexingUnit::new("=", TokenType::Equals),
