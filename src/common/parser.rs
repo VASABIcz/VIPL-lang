@@ -20,12 +20,12 @@ use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::RawOpCode::Inc;
 
 #[derive(Debug)]
-struct NoSuchParsingUnit {
+struct NoSuchParsingUnit<T> {
     typ: ParsingUnitSearchType,
-    token: Option<Token>,
+    token: Option<Token<T>>,
 }
 
-impl Display for NoSuchParsingUnit {
+impl<T: Debug + Send + Sync> Display for NoSuchParsingUnit<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -35,7 +35,7 @@ impl Display for NoSuchParsingUnit {
     }
 }
 
-impl Error for NoSuchParsingUnit {}
+impl<T: Debug + Send + Sync> Error for NoSuchParsingUnit<T> {}
 
 #[derive(Debug)]
 struct InvalidOperation {
@@ -171,7 +171,7 @@ pub fn parse(
     Ok(buf)
 }
 
-pub fn parseTokens(toks: Vec<Token>) -> Result<Vec<Operation>, Box<dyn Error>> {
+pub fn parseTokens(toks: Vec<Token<TokenType>>) -> Result<Vec<Operation>, Box<dyn Error>> {
     let mut buf = vec![];
     let parsingUnits = unsafe { &parsingUnits() };
     let mut tokens = TokenProvider::new(toks);
@@ -250,7 +250,7 @@ fn parse(parsingUnits: &mut [Box<dyn ParsingUnit>], mut tokens: TokenProvider, t
  */
 
 pub struct TokenProvider {
-    pub tokens: Vec<Token>,
+    pub tokens: Vec<Token<TokenType>>,
     pub index: usize,
 }
 
@@ -268,15 +268,15 @@ impl Display for InvalidToken {
 impl Error for InvalidToken {}
 
 impl TokenProvider {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token<TokenType>>) -> Self {
         Self { tokens, index: 0 }
     }
 
-    fn peekOne(&self) -> Option<&Token> {
+    fn peekOne(&self) -> Option<&Token<TokenType>> {
         self.tokens.get(self.index)
     }
 
-    fn peekIndex(&self, offset: usize) -> Option<&Token> {
+    fn peekIndex(&self, offset: usize) -> Option<&Token<TokenType>> {
         self.tokens.get(self.index + offset)
     }
 
@@ -326,7 +326,7 @@ impl TokenProvider {
         Ok(buf)
     }
 
-    fn getAssert(&mut self, typ: TokenType) -> Result<&Token, Box<dyn Error>> {
+    fn getAssert(&mut self, typ: TokenType) -> Result<&Token<TokenType>, Box<dyn Error>> {
         let i = self.index;
         self.consume();
         let t = match self.tokens.get(i) {
@@ -369,7 +369,7 @@ impl TokenProvider {
         Ok(t.str.clone())
     }
 
-    fn getToken(&mut self) -> Result<Token, Box<dyn Error>> {
+    fn getToken(&mut self) -> Result<Token<TokenType>, Box<dyn Error>> {
         let i = self.index;
         self.consume();
         match self.tokens.get(i) {

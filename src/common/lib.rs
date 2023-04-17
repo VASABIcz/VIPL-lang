@@ -11,6 +11,7 @@
 #![feature(dir_entry_ext2)]
 #![feature(core_intrinsics)]
 #![feature(adt_const_params)]
+#![feature(generic_const_exprs)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

@@ -4,12 +4,14 @@ use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::ops::Index;
 use crate::errors::UnknownToken;
+use crate::lexer;
 use crate::lexer::TokenType::Identifier;
+use crate::vm::DataType;
 
-pub fn tokenize(
-    lexingUnits: &mut [Box<dyn LexingUnit>],
+pub fn tokenize<T: Debug + Send + Sync>(
+    lexingUnits: &mut [Box<dyn LexingUnit<T>>],
     mut source: SourceProvider,
-) -> Result<Vec<Token>, Box<dyn Error>> {
+) -> Result<Vec<Token<T>>, Box<dyn Error>> {
     let mut buf = vec![];
 
     'main: while !source.isDone() {
@@ -34,14 +36,14 @@ pub fn tokenize(
     Ok(buf)
 }
 
-pub fn tokenizeSource(src: &str) -> Result<Vec<Token>, Box<dyn Error>> {
+pub fn tokenizeSource(src: &str) -> Result<Vec<Token<TokenType>>, Box<dyn Error>> {
     let mut lexingUnits = lexingUnits();
     let mut source: SourceProvider = SourceProvider {
         data: src,
         index: 0,
     };
 
-    return tokenize(&mut lexingUnits, source)
+    return tokenize(lexingUnits.as_mut_slice(), source)
 }
 
 #[derive(Debug)]
@@ -104,7 +106,7 @@ impl SourceProvider<'_> {
         })
     }
 
-    pub fn assertAmount(&mut self, amount: usize, typ: TokenType) -> Result<Token, Box<dyn Error>> {
+    pub fn assertAmount<T: Debug>(&mut self, amount: usize, typ: T) -> Result<Token<T>, Box<dyn Error>> {
         let s = self.peekStr(amount).ok_or(format!("insuficient amount required {}", amount))?.to_string();
 
         self.consumeMany(amount);
@@ -121,7 +123,7 @@ impl SourceProvider<'_> {
         Ok(c)
     }
 
-    pub fn consumeWhileMatches(&mut self, f: fn (char) -> bool, typ: Option<TokenType>) -> Result<Option<Token>, Box<dyn Error>> {
+    pub fn consumeWhileMatches<T: Debug>(&mut self, f: fn (char) -> bool, typ: Option<T>) -> Result<Option<Token<T>>, Box<dyn Error>> {
         let start = self.index;
         while self.isPeekChar(f) {
             self.consumeOne();
@@ -202,63 +204,63 @@ pub enum TokenType {
 }
 
 #[derive(Clone, Debug)]
-pub struct Token {
-    pub typ: TokenType,
+pub struct Token<T> {
+    pub typ: T,
     pub str: String,
 }
 
-pub trait LexingUnit: Send + Sync + Debug {
+pub trait LexingUnit<T: Debug>: Send + Sync + Debug {
     fn canParse(&self, lexer: &SourceProvider) -> bool;
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>>;
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>>;
 }
 
 #[derive(Debug)]
-pub struct AlphabeticKeywordLexingUnit {
+pub struct AlphabeticKeywordLexingUnit<T: Debug + Clone + Copy> {
     pub keyword: &'static str,
-    pub tokenType: TokenType,
+    pub tokenType: T,
 }
 
-impl LexingUnit for AlphabeticKeywordLexingUnit {
+impl<T: Debug + Send + Sync + Clone + Copy> LexingUnit<T> for AlphabeticKeywordLexingUnit<T> {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeek(self.keyword) && lexer.isPeekOffsetChar(|it| {
             !it.is_ascii_digit() && !it.is_ascii_alphabetic() && !(it == '_')
         }, self.keyword.len())
     }
 
-    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>> {
         let token = source.assertAmount(self.keyword.len(), self.tokenType)?;
 
         Ok(Some(token))
     }
 }
 
-impl AlphabeticKeywordLexingUnit {
+impl<T: Debug + Send + Sync + Clone + Copy + 'static> AlphabeticKeywordLexingUnit<T> {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(keyword: &'static str, tokenType: TokenType) -> Box<dyn LexingUnit> {
+    pub fn new(keyword: &'static str, tokenType: T) -> Box<dyn LexingUnit<T>> {
         Box::new(Self { keyword, tokenType })
     }
 }
 
 #[derive(Debug)]
-pub struct KeywordLexingUnit {
+pub struct KeywordLexingUnit<T> {
     pub keyword: &'static str,
-    pub tokenType: TokenType,
+    pub tokenType: T,
 }
 
 #[derive(Debug)]
-pub struct RangeLexingUnit {
+pub struct RangeLexingUnit<T: Debug + Clone + Copy> {
     pub start: &'static str,
     pub end: &'static str,
-    pub tokenType: Option<TokenType>,
+    pub tokenType: Option<T>,
 }
 
-impl LexingUnit for RangeLexingUnit {
+impl<T: Debug + Send + Sync + Clone + Copy> LexingUnit<T> for RangeLexingUnit<T> {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeek(self.start)
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>> {
         lexer.consumeMany(self.start.len());
 
         let mut buf = String::new();
@@ -279,13 +281,13 @@ impl LexingUnit for RangeLexingUnit {
     }
 }
 
-impl RangeLexingUnit {
+impl<T: Debug + Send + Sync + Clone + Copy + 'static> RangeLexingUnit<T> {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         start: &'static str,
         end: &'static str,
-        tokenType: Option<TokenType>,
-    ) -> Box<dyn LexingUnit> {
+        tokenType: Option<T>,
+    ) -> Box<dyn LexingUnit<T>> {
         Box::new(Self {
             start,
             end,
@@ -294,31 +296,33 @@ impl RangeLexingUnit {
     }
 }
 
-impl KeywordLexingUnit {
+impl<T: Debug + Send + Sync + 'static + Copy> KeywordLexingUnit<T> {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(keyword: &'static str, tokenType: TokenType) -> Box<dyn LexingUnit> {
+    pub fn new(keyword: &'static str, tokenType: T) -> Box<dyn LexingUnit<T>> {
         Box::new(Self { keyword, tokenType })
     }
 }
 
 #[derive(Debug)]
-struct NumericLexingUnit;
+struct NumericLexingUnit {
+
+}
 
 impl NumericLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Box<dyn LexingUnit> {
+    pub fn new() -> Box<dyn LexingUnit<TokenType>> {
         Box::new(Self {})
     }
 }
 
-impl LexingUnit for NumericLexingUnit {
+impl LexingUnit<TokenType> for NumericLexingUnit {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeekChar(|it|{
             it.is_ascii_digit()
         })
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<TokenType>>, Box<dyn Error>> {
         let mut buf = String::new();
         let mut typ = TokenType::IntLiteral;
         let encounteredDot = false;
@@ -361,19 +365,19 @@ struct IdentifierLexingUnit;
 
 impl IdentifierLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Box<dyn LexingUnit> {
+    pub fn new() -> Box<dyn LexingUnit<TokenType>> {
         Box::new(Self {})
     }
 }
 
-impl LexingUnit for IdentifierLexingUnit {
+impl LexingUnit<TokenType> for IdentifierLexingUnit {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeekChar(|it| {
             it.is_ascii_alphabetic() || it == '_'
         })
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<TokenType>>, Box<dyn Error>> {
         Ok(lexer.consumeWhileMatches(|it| {
             it.is_alphanumeric() || it == '_'
         }, Some(Identifier))?)
@@ -385,20 +389,20 @@ struct WhitespaceLexingUnit;
 
 impl WhitespaceLexingUnit {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Box<dyn LexingUnit> {
+    pub fn new<T: Debug + Send + Sync>() -> Box<dyn LexingUnit<T>> {
         Box::new(Self {})
     }
 }
 
-impl LexingUnit for WhitespaceLexingUnit {
+impl<T: Debug + Send + Sync> LexingUnit<T> for WhitespaceLexingUnit {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeekChar(|it| {
             it.is_whitespace()
         })
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
-        lexer.consumeWhileMatches(|it| {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>> {
+        lexer.consumeWhileMatches::<T>(|it| {
             it.is_whitespace()
         }, None)?;
 
@@ -406,12 +410,12 @@ impl LexingUnit for WhitespaceLexingUnit {
     }
 }
 
-impl LexingUnit for KeywordLexingUnit {
+impl<T: Debug + Send + Sync + Clone + Copy> LexingUnit<T> for KeywordLexingUnit<T> {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeek(self.keyword)
     }
 
-    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>> {
         let t = source.assertAmount(self.keyword.len(), self.tokenType)?;
 
         Ok(Some(t))
@@ -420,7 +424,7 @@ impl LexingUnit for KeywordLexingUnit {
 
 
 
-pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
+pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
     vec![
         WhitespaceLexingUnit::new(),
         NumericLexingUnit::new(),
