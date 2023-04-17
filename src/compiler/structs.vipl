@@ -30,7 +30,12 @@ n = AnotherStruct {
 
 y = x
 c = y.x
+n: Array<MyStruct> = [MyStruct{x: 1 y: 1 z: 1}]
+
+out::print("before")
+out::print(n.oldPos.x)
 
 n.oldPos.x = 69
 
+out::print("after")
 out::print(n.oldPos.x)

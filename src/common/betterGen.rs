@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::ops::Deref;
+use libc::open;
 
 use Statement::Variable;
 
@@ -14,7 +15,7 @@ use crate::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::optimizer::{evalE};
 use crate::parser::*;
 use crate::vm::{DataType, Generic, genFunName, genFunNameMeta, JmpType, MyStr, ObjectMeta, OpCode, VariableMetadata, VirtualMachine};
-use crate::vm::DataType::{Bool, Char, Object};
+use crate::vm::DataType::{Bool, Char, Int, Object};
 use crate::vm::Generic::Any;
 use crate::vm::OpCode::*;
 
@@ -152,9 +153,9 @@ impl ExpressionCtx<'_> {
             Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
             Expression::CharLiteral(_) => Ok(Some(Char)),
             Expression::ArrayLiteral(e) => {
-                let l = &self.typeHint;
-                let c = l.clone().ok_or("cannot infer type of empty array consider adding type hint")?;
                 if e.is_empty() {
+                    let l = &self.typeHint;
+                    let c = l.clone().ok_or("cannot infer type of empty array consider adding type hint")?;
                     match c
                     {
                         Object(o) => {
@@ -183,6 +184,7 @@ impl ExpressionCtx<'_> {
                     let t = self.transfer(e
                         .get(0)
                         .ok_or("array must have least one value")?).toDataType()?.ok_or("array item must have tyoe")?;
+
                     Ok(Some(DataType::arr(Generic::Type(t))))
                 }
             }
@@ -250,6 +252,13 @@ impl ExpressionCtx<'_> {
                 let e = self.transfer(prev).toDataType()?.ok_or("cannot array index none")?;
                 match e {
                     Object(o) => {
+                        match o.name.as_str() {
+                            "Array" | "String" => {
+                                return Ok(Some(DataType::Int))
+                            }
+                            _ => {}
+                        }
+
                         let structID = self.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
                         let structMeta = self.currentNamespace.structs.get(*structID).unwrap();
                         let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
@@ -451,6 +460,27 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
         Statement::Break => {}
         Statement::NamespaceFunction(_, _) => {}
         Statement::StatementExpression(_) => {}
+        Statement::Assignable(prev, init) => {}
+        Statement::ForLoop(var, exp, body) => {
+            let t = ctx.makeExpressionCtx(exp, None).toDataType()?.unwrap();
+            let arr = t.asArray()?;
+            let typ = arr.generics.first().unwrap().clone().ok_or("what?")?;
+
+            if !ctx.vTable.contains_key(&var.clone().into()) {
+                ctx.vTable.insert(
+                    var.clone().into(),
+                    (typ.clone(), locals.len()),
+                );
+                locals.push(VariableMetadata {
+                    name: var.clone().into(),
+                    typ,
+                });
+            }
+
+            for s in body {
+                buildLocalsTable(&mut ctx.transfer(s), locals)?;
+            }
+        }
     }
 
     Ok(())
@@ -734,6 +764,111 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             let eCtx = ctx.makeExpressionCtx(v, None);
             genExpression(eCtx)?;
         }
+        Statement::Assignable(dest, value) => {
+            match dest {
+                Expression::Variable(v) => {
+                    let c = ctx.makeExpressionCtx(value, None);
+                    genExpression(c).unwrap();
+
+                    let var = ctx.vTable.get(&v.clone().into()).unwrap();
+
+                    ctx.ops.push(SetLocal { index: var.1, typ: DataType::Int })
+                }
+                Expression::ArrayIndexing(v) => {
+                    let mut arrayCtx = ctx.makeExpressionCtx(&v.expr, None);
+                    genExpression(arrayCtx).unwrap();
+
+                    let valueCtx = ctx.makeExpressionCtx(value, None);
+                    genExpression(valueCtx).unwrap();
+
+                    let mut indexCtx = ctx.makeExpressionCtx(&v.index, None);
+                    genExpression(indexCtx).unwrap();
+
+                    ctx.ops.push(ArrayStore(DataType::Int))
+                },
+                Expression::NamespaceAccess(_) => todo!(),
+                Expression::FieldAccess(obj, field) => {
+                    let mut cd = ctx.makeExpressionCtx(obj, None);
+                    let class = match cd.toDataType()?.unwrap() {
+                        Object(v) => v,
+                        _ => panic!()
+                    };
+
+                    let namespaceID = cd.currentNamespace.id;
+                    let structID = *cd.currentNamespace.structLookup.get(class.name.as_str()).unwrap();
+                    let str = cd.currentNamespace.structs.get(structID).unwrap();
+                    let fieldID = *str.fieldsLookup.get(field).unwrap();
+
+                    genExpression(cd)?;
+
+                    let c = ctx.makeExpressionCtx(value, None);
+                    genExpression(c).unwrap();
+
+                    ctx.ops.push(SetField {
+                        namespaceID,
+                        structID,
+                        fieldID,
+                    })
+                }
+                _ => panic!()
+            }
+        }
+        Statement::ForLoop(var, arr, body) => {
+            let mut bodyOps = vec![];
+            let varID = ctx.vTable.get(&var.clone().into()).unwrap().1;
+
+            // BEGIN
+            ctx.ops.push(PushIntZero());
+
+            let beginIndex = ctx.ops.len();
+
+            // BODY
+            bodyOps.push(Dup);
+
+            let mut arrCtx = ctx.makeExpressionCtx(arr, None);
+            arrCtx.ops = &mut bodyOps;
+            genExpression(arrCtx)?;
+
+            // dec array length bcs less-eq is not implemented
+            bodyOps.push(ArrayLength);
+            bodyOps.push(PushIntOne());
+            bodyOps.push(Sub(Int));
+
+            bodyOps.push(Less(Int));
+
+            let mut buf = vec![];
+
+            buf.push(Dup);
+            let mut arrCtx = ctx.makeExpressionCtx(arr, None);
+            arrCtx.ops = &mut buf;
+            genExpression(arrCtx)?;
+            buf.push(Swap);
+
+            buf.push(ArrayLoad(Int));
+            buf.push(SetLocal { index: varID, typ: DataType::Int });
+
+            for s in body {
+                let mut sCtx = ctx.transfer(s);
+                sCtx.ops = &mut buf;
+                genStatement(sCtx)?;
+            }
+
+
+            // jmp to end if done
+            bodyOps.push(Jmp { offset: (buf.len()+3) as isize, jmpType: JmpType::True });
+
+            bodyOps.extend(buf);
+
+            bodyOps.push(PushIntOne());
+            bodyOps.push(Add(DataType::Int));
+            // jmp to begining
+            bodyOps.push(Jmp { offset: (bodyOps.len() as isize+1)*-1, jmpType: JmpType::Jmp });
+
+            ctx.ops.extend(bodyOps);
+
+            // END
+            ctx.ops.push(Pop);
+        }
     }
     Ok(())
 }
@@ -902,7 +1037,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                     if !r.vTable.contains_key(&MyStr::Static(&v)) {
                         let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                        let funcId = r.currentNamespace.functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+                        let funcId = r.currentNamespace.functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName))?;
 
                         r.ops.push(SCall { id: *funcId });
                     }
@@ -950,6 +1085,19 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let e = r.constructCtx(prev).toDataType()?.ok_or("cannot array index none")?;
             match e {
                 Object(o) => {
+                    if fieldName == "size" || fieldName == "length" {
+                        match o.name.as_str() {
+                            "Array" => {
+                                r.ops.push(ArrayLength);
+                                return Ok(())
+                            }
+                            "String" => {
+                                todo!()
+                            }
+                            _ => {}
+                        }
+                    }
+
                     let structID = r.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
                     let structMeta = r.currentNamespace.structs.get(*structID).unwrap();
                     let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();

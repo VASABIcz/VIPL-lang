@@ -23,7 +23,6 @@ pub mod bytecodeChecker;
 // pub mod cGen;
 // pub mod codegen;
 pub mod ffi;
-pub mod fs;
 pub mod gccWrapper;
 pub mod lexer;
 pub mod objects;

@@ -1,0 +1,29 @@
+struct MyStruct {
+  x: int
+  y: int
+  z: int
+}
+
+n = [
+    MyStruct{
+        x: 1
+        y: 1
+        z: 1
+    },
+    MyStruct{
+        x: 2
+        y: 2
+        z: 2
+    },
+    MyStruct{
+        x: 3
+        y: 3
+        z: 3
+    }
+]
+
+out::print(n[0].x)
+
+n[0] = n[2]
+
+print(n[0].x)

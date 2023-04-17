@@ -1,6 +1,8 @@
 use std::{intrinsics, ptr};
 use std::alloc::{alloc, Layout};
 use std::collections::HashMap;
+use std::env::var;
+use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
@@ -110,6 +112,20 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn asArray(&self) -> Result<&ObjectMeta,Box<dyn Error>>  {
+        match self {
+            Object(o) => {
+                if o.name.as_str() == "Array" {
+                    Ok(o)
+                }
+                else {
+                    Err(format!("expected Array got: {:?}", o.name).into())
+                }
+            }
+            v => Err(format!("expected Array got: {:?}", v).into())
+        }
+    }
+
     pub fn str() -> Self {
         Object(ObjectMeta {
             name: MyStr::Static("String"),
@@ -271,6 +287,7 @@ pub enum OpCode {
     PushChar(char),
     Pop,
     Dup,
+    Swap,
     PushLocal {
         index: usize,
     },
@@ -915,7 +932,10 @@ impl VirtualMachine<'_> {
             };
             self.getMutFrame().programCounter += 1;
 
-            // println!("evaluating {:?}", op);
+            if DEBUG {
+                println!("evaluating {:?}", op);
+            }
+
             unsafe {
                 match op {
                     FunBegin => {
@@ -1146,14 +1166,16 @@ impl VirtualMachine<'_> {
                     }
                     ArrayStore(_) => {
                         let index = self.pop().getNum();
-                        let mut c = self.pop();
-                        let val = c.getMutArray();
+
                         let value = self.pop();
 
-                        if index as usize == val.internal.len() {
-                            val.internal.push(value)
+                        let mut arrayRaw = self.pop();
+                        let array = arrayRaw.getMutArray();
+
+                        if index as usize == array.internal.len() {
+                            array.internal.push(value)
                         } else {
-                            val.internal[index as usize] = value
+                            array.internal[index as usize] = value
                         }
                     }
                     ArrayLoad(_) => {
@@ -1299,6 +1321,12 @@ impl VirtualMachine<'_> {
 
                         let v = ptr.add(*fieldID).read();
                         self.stack.push(v);
+                    }
+                    Swap => {
+                        let a = self.pop();
+                        let b = self.pop();
+                        self.stack.push(a);
+                        self.stack.push(b);
                     }
                     o => panic!("unimplemented opcode {:?}", o)
                 }
@@ -1543,14 +1571,14 @@ impl VirtualMachine<'_> {
                     }
                     ArrayStore(_) => {
                         let index = self.pop().getNum();
-                        let mut c = self.pop();
-                        let val = c.getMutArray();
+                        let mut arrayRaw = self.pop();
+                        let array = arrayRaw.getMutArray();
                         let value = self.pop();
 
-                        if index as usize == val.internal.len() {
-                            val.internal.push(value)
+                        if index as usize == array.internal.len() {
+                            array.internal.push(value)
                         } else {
-                            val.internal[index as usize] = value
+                            array.internal[index as usize] = value
                         }
                     }
                     ArrayLoad(_) => {

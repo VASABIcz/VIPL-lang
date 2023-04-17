@@ -367,7 +367,8 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::GetField { .. } => {}
             OpCode::SetField { .. } => {}
             OpCode::DynamicCall => todo!(),
-            OpCode::PushFunction(_, _) => todo!()
+            OpCode::PushFunction(_, _) => todo!(),
+            OpCode::Swap => todo!()
         }
     }
 }

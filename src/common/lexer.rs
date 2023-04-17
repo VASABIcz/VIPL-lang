@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
 
 use std::error::Error;
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::ops::Index;
 use crate::errors::UnknownToken;
+use crate::lexer::TokenType::Identifier;
 
 pub fn tokenize(
     lexingUnits: &mut [Box<dyn LexingUnit>],
@@ -13,15 +14,10 @@ pub fn tokenize(
 
     'main: while !source.isDone() {
         for unit in lexingUnits.iter_mut() {
-            let reqSize = unit.getRequestSize();
-            let peek = source.peekStr(reqSize).unwrap();
-            if peek.len() < reqSize {
-                continue;
-            }
-            if unit.canParse(source.peekStr(reqSize).unwrap()) {
-                match unit.parse(&mut source) {
-                    None => {}
-                    Some(v) => buf.push(v),
+            if unit.canParse(&source) {
+                println!("working on {:?}", unit);
+                if let Some(v) = unit.parse(&mut source)? {
+                    buf.push(v)
                 }
 
                 continue 'main;
@@ -45,34 +41,7 @@ pub fn tokenizeSource(src: &str) -> Result<Vec<Token>, Box<dyn Error>> {
         index: 0,
     };
 
-    let mut buf = vec![];
-
-    'main: while !source.isDone() {
-        for unit in lexingUnits.iter_mut() {
-            let reqSize = unit.getRequestSize();
-            let peek = source.peekStr(reqSize).unwrap();
-            if peek.len() < reqSize {
-                continue;
-            }
-            if unit.canParse(source.peekStr(reqSize).unwrap()) {
-                match unit.parse(&mut source) {
-                    None => {}
-                    Some(v) => buf.push(v),
-                }
-
-                continue 'main;
-            }
-        }
-        return Err(Box::try_from(UnknownToken {
-            source: source
-                .peekStr(source.data.len() - source.index)
-                .unwrap()
-                .to_string(),
-        })
-            .unwrap());
-        //panic!("error {:?}", source.peekStr(4));
-    }
-    Ok(buf)
+    return tokenize(&mut lexingUnits, source)
 }
 
 #[derive(Debug)]
@@ -82,7 +51,7 @@ pub struct SourceProvider<'a> {
 }
 
 impl SourceProvider<'_> {
-    pub fn peekStr(&self, amount: usize) -> Option<&str> {
+    fn peekStr(&self, amount: usize) -> Option<&str> {
         if self.index >= self.data.len() {
             return None;
         }
@@ -95,7 +64,7 @@ impl SourceProvider<'_> {
         Some(res)
     }
 
-    pub fn peekChar(&self) -> Option<char> {
+    fn peekChar(&self) -> Option<char> {
         self.data.chars().nth(self.index)
     }
 
@@ -109,6 +78,58 @@ impl SourceProvider<'_> {
 
     pub fn isDone(&self) -> bool {
         self.index >= self.data.len()
+    }
+
+    pub fn isPeek(&self, s: &str) -> bool {
+        self.peekStr(s.len()).map_or(false, |it| {
+            it == s
+        })
+    }
+
+    pub fn isPeekOffset(&self, s: &str, offset: usize) -> bool {
+        self.peekStr(s.len()+offset).map_or(false, |it| {
+            &it[offset..] == s
+        })
+    }
+
+    pub fn isPeekChar(&self, f: fn(char) -> bool) -> bool {
+        self.peekStr(1).map_or(false, |it| {
+            f(it.bytes().next().unwrap() as char)
+        })
+    }
+
+    pub fn isPeekOffsetChar(&self, f: fn(char) -> bool, offset: usize) -> bool {
+        self.peekStr(offset+1).map_or(false, |it| {
+            f(*it.as_bytes().get(offset).unwrap() as char)
+        })
+    }
+
+    pub fn assertAmount(&mut self, amount: usize, typ: TokenType) -> Result<Token, Box<dyn Error>> {
+        let s = self.peekStr(amount).ok_or(format!("insuficient amount required {}", amount))?.to_string();
+
+        self.consumeMany(amount);
+
+        Ok(Token {
+            typ,
+            str: s,
+        })
+    }
+
+    pub fn assertChar(&mut self) -> Result<char, Box<dyn Error>> {
+        let c = self.peekStr(1).ok_or("expected char go EOL")?.chars().next().unwrap();
+        self.consumeOne();
+        Ok(c)
+    }
+
+    pub fn consumeWhileMatches(&mut self, f: fn (char) -> bool, typ: Option<TokenType>) -> Result<Option<Token>, Box<dyn Error>> {
+        let start = self.index;
+        while self.isPeekChar(f) {
+            self.consumeOne();
+        }
+
+        Ok(typ.map(|it| {
+            Token { typ: it, str: self.data[start..self.index].to_string() }
+        }))
     }
 }
 
@@ -147,6 +168,7 @@ pub enum TokenType {
     Namespace,
     Import,
     Global,
+    In,
 
     ORB,
     CRB,
@@ -185,19 +207,46 @@ pub struct Token {
     pub str: String,
 }
 
-pub trait LexingUnit: Send + Sync {
-    fn getRequestSize(&self) -> usize;
+pub trait LexingUnit: Send + Sync + Debug {
+    fn canParse(&self, lexer: &SourceProvider) -> bool;
 
-    fn canParse(&self, data: &str) -> bool;
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token>;
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>>;
 }
 
+#[derive(Debug)]
+pub struct AlphabeticKeywordLexingUnit {
+    pub keyword: &'static str,
+    pub tokenType: TokenType,
+}
+
+impl LexingUnit for AlphabeticKeywordLexingUnit {
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeek(self.keyword) && lexer.isPeekOffsetChar(|it| {
+            !it.is_ascii_digit() && !it.is_ascii_alphabetic() && !(it == '_')
+        }, self.keyword.len())
+    }
+
+    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+        let token = source.assertAmount(self.keyword.len(), self.tokenType)?;
+
+        Ok(Some(token))
+    }
+}
+
+impl AlphabeticKeywordLexingUnit {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(keyword: &'static str, tokenType: TokenType) -> Box<dyn LexingUnit> {
+        Box::new(Self { keyword, tokenType })
+    }
+}
+
+#[derive(Debug)]
 pub struct KeywordLexingUnit {
     pub keyword: &'static str,
     pub tokenType: TokenType,
 }
 
+#[derive(Debug)]
 pub struct RangeLexingUnit {
     pub start: &'static str,
     pub end: &'static str,
@@ -205,23 +254,16 @@ pub struct RangeLexingUnit {
 }
 
 impl LexingUnit for RangeLexingUnit {
-    fn getRequestSize(&self) -> usize {
-        self.start.len()
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeek(self.start)
     }
 
-    fn canParse(&self, data: &str) -> bool {
-        data == self.start
-    }
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
-        // println!("parsing {:?}", self.tokenType);
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
         lexer.consumeMany(self.start.len());
 
         let mut buf = String::new();
 
-        'lop: while lexer
-            .peekStr(self.end.len())
-            .map_or(false, |v| v != self.end)
+        'lop: while !lexer.isPeek(self.end)
         {
             match lexer.peekChar() {
                 Some(v) => {
@@ -233,7 +275,7 @@ impl LexingUnit for RangeLexingUnit {
         }
         lexer.consumeMany(self.end.len());
 
-        self.tokenType.map(|v| Token { typ: v, str: buf })
+        Ok(self.tokenType.map(|v| Token { typ: v, str: buf }))
     }
 }
 
@@ -259,7 +301,8 @@ impl KeywordLexingUnit {
     }
 }
 
-struct NumericLexingUnit {}
+#[derive(Debug)]
+struct NumericLexingUnit;
 
 impl NumericLexingUnit {
     #[allow(clippy::new_ret_no_self)]
@@ -269,29 +312,24 @@ impl NumericLexingUnit {
 }
 
 impl LexingUnit for NumericLexingUnit {
-    fn getRequestSize(&self) -> usize {
-        1
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeekChar(|it|{
+            it.is_ascii_digit()
+        })
     }
 
-    fn canParse(&self, data: &str) -> bool {
-        let c = data.chars().next().unwrap();
-        c.is_ascii_digit()
-    }
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
         let mut buf = String::new();
         let mut typ = TokenType::IntLiteral;
         let encounteredDot = false;
 
-        while lexer
-            .peekChar()
-            .map_or(false, |c| c == '.' || c == '_' || c.is_numeric())
+        while lexer.isPeekChar(|c| { c == '.' || c == '_' || c.is_numeric() })
         {
-            let c = lexer.peekChar().unwrap();
+            let c = lexer.assertChar()?;
             if c == '.' && encounteredDot {
                 // fixme return result from lexer
                 // panic!("number cant have more than 1 dots")
-                return None;
+                return None.ok_or("number cant have more than one dot".into());
             }
             if c == '.' {
                 typ = TokenType::FloatLiteral
@@ -299,33 +337,27 @@ impl LexingUnit for NumericLexingUnit {
             if c != '_' {
                 buf.push(c)
             }
-            lexer.consumeOne();
         }
 
-        match lexer.peekChar() {
-            None => {}
-            Some(v) => match v {
-                'f' => {
-                    typ = TokenType::FloatLiteral;
-                    lexer.consumeOne()
-                }
-                'L' => {
-                    typ = TokenType::LongLiteral;
-                    lexer.consumeOne()
-                }
-                'D' => {
-                    typ = TokenType::DoubleLiteral;
-                    lexer.consumeOne()
-                }
-                _ => {}
-            },
+        if lexer.isPeek("f") {
+            typ = TokenType::FloatLiteral;
+            lexer.consumeOne()
+        }
+        else if lexer.isPeek("L") {
+            typ = TokenType::LongLiteral;
+            lexer.consumeOne()
+        }
+        else if lexer.isPeek("D") {
+            typ = TokenType::DoubleLiteral;
+            lexer.consumeOne()
         }
 
-        Some(Token { typ, str: buf })
+        Ok(Some(Token { typ, str: buf }))
     }
 }
 
-struct IdentifierLexingUnit {}
+#[derive(Debug)]
+struct IdentifierLexingUnit;
 
 impl IdentifierLexingUnit {
     #[allow(clippy::new_ret_no_self)]
@@ -335,32 +367,21 @@ impl IdentifierLexingUnit {
 }
 
 impl LexingUnit for IdentifierLexingUnit {
-    fn getRequestSize(&self) -> usize {
-        1
-    }
-
-    fn canParse(&self, data: &str) -> bool {
-        let c = data.chars().next().unwrap();
-        c == '_' || c.is_alphabetic()
-    }
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
-        let mut buf = String::new();
-        while lexer.peekChar().map_or(false, |v| match v {
-            c => c == '_' || c.is_alphabetic() || c.is_numeric(),
-        }) {
-            buf.push(lexer.peekChar().unwrap());
-            lexer.consumeOne();
-        }
-
-        Some(Token {
-            typ: TokenType::Identifier,
-            str: buf,
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeekChar(|it| {
+            it.is_ascii_alphabetic() || it == '_'
         })
+    }
+
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+        Ok(lexer.consumeWhileMatches(|it| {
+            it.is_alphanumeric() || it == '_'
+        }, Some(Identifier))?)
     }
 }
 
-struct WhitespaceLexingUnit {}
+#[derive(Debug)]
+struct WhitespaceLexingUnit;
 
 impl WhitespaceLexingUnit {
     #[allow(clippy::new_ret_no_self)]
@@ -370,66 +391,58 @@ impl WhitespaceLexingUnit {
 }
 
 impl LexingUnit for WhitespaceLexingUnit {
-    fn getRequestSize(&self) -> usize {
-        1
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeekChar(|it| {
+            it.is_whitespace()
+        })
     }
 
-    fn canParse(&self, data: &str) -> bool {
-        let c = data.chars().next().unwrap();
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+        lexer.consumeWhileMatches(|it| {
+            it.is_whitespace()
+        }, None)?;
 
-        c.is_whitespace()
-    }
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Option<Token> {
-        while lexer.peekChar().map_or(false, |v| v.is_whitespace()) {
-            lexer.consumeOne()
-        }
-
-        None
+        Ok(None)
     }
 }
 
 impl LexingUnit for KeywordLexingUnit {
-    fn getRequestSize(&self) -> usize {
-        self.keyword.len()
+    fn canParse(&self, lexer: &SourceProvider) -> bool {
+        lexer.isPeek(self.keyword)
     }
 
-    fn canParse(&self, data: &str) -> bool {
-        data == self.keyword
-    }
+    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token>, Box<dyn Error>> {
+        let t = source.assertAmount(self.keyword.len(), self.tokenType)?;
 
-    fn parse(&mut self, source: &mut SourceProvider) -> Option<Token> {
-        let str = source.peekStr(self.keyword.len())?.to_string();
-        source.consumeMany(self.keyword.len());
-
-        Some(Token {
-            typ: self.tokenType,
-            str,
-        })
+        Ok(Some(t))
     }
 }
+
+
 
 pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
     vec![
         WhitespaceLexingUnit::new(),
         NumericLexingUnit::new(),
-        KeywordLexingUnit::new("fn", TokenType::Fn),
-        KeywordLexingUnit::new("var", TokenType::Var),
-        KeywordLexingUnit::new("while", TokenType::While),
-        KeywordLexingUnit::new("if", TokenType::If),
-        KeywordLexingUnit::new("else", TokenType::Else),
-        KeywordLexingUnit::new("for", TokenType::For),
-        KeywordLexingUnit::new("loop", TokenType::Loop),
-        KeywordLexingUnit::new("return", TokenType::Return),
-        KeywordLexingUnit::new("break", TokenType::Break),
-        KeywordLexingUnit::new("continue", TokenType::Continue),
-        KeywordLexingUnit::new("false", TokenType::False),
-        KeywordLexingUnit::new("true", TokenType::True),
-        KeywordLexingUnit::new("new", TokenType::New),
-        KeywordLexingUnit::new("struct", TokenType::Struct),
-        KeywordLexingUnit::new("native", TokenType::Native),
-        KeywordLexingUnit::new("import", TokenType::Import),
-        KeywordLexingUnit::new("global", TokenType::Global),
+        AlphabeticKeywordLexingUnit::new("fn", TokenType::Fn),
+        AlphabeticKeywordLexingUnit::new("var", TokenType::Var),
+        AlphabeticKeywordLexingUnit::new("while", TokenType::While),
+        AlphabeticKeywordLexingUnit::new("if", TokenType::If),
+        AlphabeticKeywordLexingUnit::new("else", TokenType::Else),
+        AlphabeticKeywordLexingUnit::new("for", TokenType::For),
+        AlphabeticKeywordLexingUnit::new("loop", TokenType::Loop),
+        AlphabeticKeywordLexingUnit::new("return", TokenType::Return),
+        AlphabeticKeywordLexingUnit::new("break", TokenType::Break),
+        AlphabeticKeywordLexingUnit::new("continue", TokenType::Continue),
+        AlphabeticKeywordLexingUnit::new("false", TokenType::False),
+        AlphabeticKeywordLexingUnit::new("true", TokenType::True),
+        AlphabeticKeywordLexingUnit::new("new", TokenType::New),
+        AlphabeticKeywordLexingUnit::new("struct", TokenType::Struct),
+        AlphabeticKeywordLexingUnit::new("native", TokenType::Native),
+        AlphabeticKeywordLexingUnit::new("import", TokenType::Import),
+        AlphabeticKeywordLexingUnit::new("global", TokenType::Global),
+        AlphabeticKeywordLexingUnit::new("in", TokenType::In),
+
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
@@ -465,8 +478,8 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit>> {
         KeywordLexingUnit::new("]", TokenType::CSB),
         KeywordLexingUnit::new("{", TokenType::OCB),
         KeywordLexingUnit::new("}", TokenType::CCB),
-        IdentifierLexingUnit::new(),
         RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
         RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
+        IdentifierLexingUnit::new(),
     ]
 }

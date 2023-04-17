@@ -233,7 +233,9 @@ pub enum Statement {
     Break,
     Loop(Vec<Statement>),
     NamespaceFunction(Vec<String>, FunctionCall),
-    StatementExpression(Expression)
+    StatementExpression(Expression),
+    Assignable(Expression, Expression),
+    ForLoop(String, Expression, Vec<Statement>)
 }
 
 #[derive(Debug, Clone)]

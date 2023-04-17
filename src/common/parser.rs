@@ -14,7 +14,7 @@ use crate::ast::{
 use crate::ast::Expression::{IntLiteral, NamespaceAccess};
 use crate::ast::Statement::{StatementExpression, VariableMod};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, Equals, Global, Gt, Identifier, Import, LambdaBegin, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, Equals, For, Global, Gt, Identifier, Import, In, LambdaBegin, Loop, Minus, Namespace, Native, Not, OCB, ORB, OSB, Return, StringLiteral, Struct};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::{DataType, Generic, MyStr, ObjectMeta, VariableMetadata};
 use crate::vm::RawOpCode::Inc;
@@ -186,11 +186,23 @@ pub fn parseTokens(toks: Vec<Token>) -> Result<Vec<Operation>, Box<dyn Error>> {
 
             match parserType {
                 Around | Back => {
-                    let res = unit.parse(&mut tokens, buf.pop(), parsingUnits)?;
+                    let res = match unit.parse(&mut tokens, buf.pop(), parsingUnits) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("exception inside {:?}", unit);
+                            return Err(e)
+                        }
+                    };
                     buf.push(res);
                 }
                 Ahead => {
-                    let res = unit.parse(&mut tokens, None, parsingUnits)?;
+                    let res = match unit.parse(&mut tokens, None, parsingUnits) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("exception inside {:?}", unit);
+                            return Err(e)
+                        }
+                    };
                     buf.push(res);
                 }
             }
@@ -1802,6 +1814,35 @@ impl ParsingUnit for FieldAccessParsingUnit {
 }
 
 #[derive(Debug)]
+struct AssignableParsingUnit;
+
+impl ParsingUnit for AssignableParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Around
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(Equals)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(Equals)?;
+
+        let next = parseOne(tokenProvider, Ahead, parser, None)?.asExpr()?;
+
+        Ok(Operation::Statement(Statement::Assignable(previous.ok_or("cant assign no nothing")?.asExpr()?, next)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
 struct GlobalParsingUnit;
 
 impl ParsingUnit for GlobalParsingUnit {
@@ -1847,8 +1888,44 @@ impl ParsingUnit for GlobalParsingUnit {
     }
 }
 
+#[derive(Debug)]
+struct ForParsingUnit;
+
+impl ParsingUnit for ForParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+        tokenProvider.isPeekType(For)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
+        tokenProvider.getAssert(For)?;
+
+        let varName = tokenProvider.getIdentifier()?;
+
+        tokenProvider.getAssert(In)?;
+
+        let res = parseOne(tokenProvider, Ahead, parser, previous)?.asExpr()?;
+
+        let body = parseBody(tokenProvider, parser)?;
+
+        Ok(Operation::Statement(Statement::ForLoop(varName, res, body)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
     vec![
+        Box::new(AssignableParsingUnit),
         Box::new(StructInitParsingUnit),
         Box::new(NamespaceParsingUnit),
         Box::new(VarModParsingUnit),
@@ -1861,7 +1938,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(ArrayIndexingParsingUnit),
         Box::new(StringParsingUnit),
         Box::new(ArrayLiteralParsingUnit),
-        Box::new(ArrayAssignParsingUnit),
+        // Box::new(ArrayAssignParsingUnit),
         Box::new(CallableParsingUnit),
         // Box::new(CallParsingUnit),
         Box::new(BreakParsingUnit),
@@ -1921,6 +1998,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(StructParsingUnit),
         Box::new(IncParsingUnit),
         Box::new(FieldAccessParsingUnit),
-        Box::new(GlobalParsingUnit)
+        Box::new(GlobalParsingUnit),
+        Box::new(ForParsingUnit)
     ]
 }
