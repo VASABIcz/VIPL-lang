@@ -185,6 +185,7 @@ fn initCode<T: AsmGen>(this: &mut T) {
 }
 
 pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace) {
+    todo!("completly borked due to refactor in ffi function offsets are completly differenet");
     // debugProgram(generator);
     initCode(generator);
 
@@ -340,12 +341,6 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::Dec { .. } => todo!(),
             OpCode::StrNew(v) => pushStr(generator, v.as_str()),
             OpCode::GetChar => todo!(),
-
-            OpCode::FunBegin => {}
-            OpCode::FunName { .. } => {}
-            OpCode::FunReturn { .. } => {}
-            OpCode::LocalVarTable { .. } => {}
-            OpCode::FunEnd => {}
             OpCode::SCall { id } => {
                 let f = namespace.functionsMeta.get(*id).unwrap();
                 let argsCount = f.argsCount;
@@ -360,10 +355,6 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
 
                 genCall(generator, *namespace, *id, returns, argsCount)
             }
-            OpCode::ClassBegin => {}
-            OpCode::ClassName { .. } => {}
-            OpCode::ClassField { .. } => {}
-            OpCode::ClassEnd => {}
             OpCode::GetField { .. } => {}
             OpCode::SetField { .. } => {}
             OpCode::DynamicCall => todo!(),

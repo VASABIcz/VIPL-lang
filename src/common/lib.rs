@@ -20,7 +20,7 @@
 extern crate core;
 
 pub mod ast;
-pub mod bytecodeChecker;
+// pub mod bytecodeChecker;
 // pub mod cGen;
 // pub mod codegen;
 pub mod ffi;
@@ -38,6 +38,6 @@ pub mod nativeStack;
 pub mod asm;
 pub mod value;
 pub mod namespace;
-pub mod betterGen;
+pub mod bytecodeGen;
 pub mod std;
 pub mod errors;

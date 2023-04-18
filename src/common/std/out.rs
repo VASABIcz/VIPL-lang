@@ -1,4 +1,5 @@
 use crate::namespace::Namespace;
+use crate::namespace::NamespaceState::Loaded;
 use crate::vm::{DataType, MyStr, VariableMetadata, VirtualMachine};
 use crate::vm::DataType::{Bool, Float, Int};
 
@@ -49,5 +50,6 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         None,
     );
 
+    namespace.state = Loaded;
     vm.registerNamespace(namespace);
 }

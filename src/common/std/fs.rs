@@ -7,6 +7,8 @@ use crate::value::Value;
 use crate::vm::{DataType, Generic, MyStr, VariableMetadata, VirtualMachine};
 
 pub fn setupFs(vm: &mut VirtualMachine) {
+    todo!("needs to be ported to namespaces");
+    /*
     vm.makeNative(
         "ls".to_string(),
         Box::new([VariableMetadata {
@@ -78,4 +80,6 @@ pub fn setupFs(vm: &mut VirtualMachine) {
         },
         Some(DataType::Int),
     );
+
+     */
 }

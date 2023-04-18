@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem::transmute;
+
 use crate::ast::{Expression, FunctionDef, Node, Op, Statement, VariableModd};
-use crate::betterGen::genFunctionDef;
+use crate::bytecodeGen::genFunctionDef;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::objects::{Str, ViplObject};
@@ -123,7 +124,7 @@ impl LoadedFunction {
             }
             LoadedFunction::Virtual(v) => {
                 vm.pushFrame(frame);
-                vm.execute2(v);
+                vm.execute(v);
             }
         }
     }
@@ -140,7 +141,7 @@ pub struct Namespace {
     pub structLookup: HashMap<String, usize>,
 
     pub functionsMeta: Vec<FunctionMeta>,
-    pub functions: Vec<LoadedFunction>,
+    pub functions: Vec<Option<LoadedFunction>>,
 
     pub globalsMeta: Vec<GlobalMeta>,
     pub globals: Vec<Value>,
@@ -171,13 +172,15 @@ impl Namespace {
 
         self.functionsLookup.insert(genName, self.functionsMeta.len());
         self.functionsMeta.push(FunctionMeta::makeBuiltin(name, args, argsCount, ret));
-        self.functions.push(LoadedFunction::BuiltIn(fun));
+        self.functions.push(Some(LoadedFunction::BuiltIn(fun)));
     }
 
-    pub fn registerFunctionDef(&mut self, d: FunctionMeta) {
+    pub fn registerFunctionDef(&mut self, d: FunctionMeta) -> usize {
         let index = self.functionsMeta.len();
         self.functionsLookup.insert(d.genName(), index);
         self.functionsMeta.push(d);
+        self.functions.push(None);
+        index
     }
 
     pub fn registerStruct(&mut self, d: StructMeta) {

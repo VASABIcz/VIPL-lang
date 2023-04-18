@@ -6,6 +6,7 @@ use crate::vm::DataType::{Bool, Float, Int};
 use crate::vm::OpCode::{Call, Pop, PushInt};
 
 pub fn registerStd(vm: &mut VirtualMachine) {
+    /*
     vm.makeNative(
         String::from("assert"),
         Box::new([
@@ -167,6 +168,8 @@ pub fn registerStd(vm: &mut VirtualMachine) {
         },
         None,
     );
+
+     */
 }
 
 pub fn bootStrapVM() -> VirtualMachine<'static> {

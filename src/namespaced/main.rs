@@ -1,8 +1,8 @@
 use std::{env, fs};
 use libc::link;
-use rust_vm::namespace::{loadSourceFile, Namespace};
-use rust_vm::std::std::bootStrapVM;
-use rust_vm::vm::{StackFrame, VirtualMachine};
+use vipl::namespace::{loadSourceFile, Namespace};
+use vipl::std::std::bootStrapVM;
+use vipl::vm::{StackFrame, VirtualMachine};
 
 pub fn namespacePath(path: &str) -> Vec<String> {
     let mut con123 = fs::canonicalize(path).unwrap();
@@ -32,7 +32,7 @@ pub fn namespacePath(path: &str) -> Vec<String> {
 
 fn main() {
     let mut vm = bootStrapVM();
-    let sourceFile = std::env::args().nth(1).expect("expected source field");
+    let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
     println!("{:?}", name);
 
@@ -56,12 +56,13 @@ fn main() {
     println!("calling {} {}", fMeta.localsMeta.len(), fMeta.name);
     let mut xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     unsafe {
-        f.call(&mut *c, StackFrame {
+        f.as_ref().unwrap().call(&mut *c, StackFrame {
             localVariables: &mut xd,
             objects: None,
             previous: None,
             programCounter: 0,
             namespace: nn,
+            functionID: nn.functions.len()-1,
         })
     }
 }
