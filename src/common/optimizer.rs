@@ -1,27 +1,27 @@
-use crate::ast::{Expression, Op};
+use crate::ast::{Expression, BinaryOp};
 use crate::vm::value::Value;
 
 pub fn evalE(exp: &Expression) -> Option<Expression> {
     match exp {
-        Expression::ArithmeticOp { left, right, op } => {
+        Expression::BinaryOperation { left, right, op } => {
             let l = evalExpr(left);
             let r = evalExpr(right);
 
             if let Some(mut a) = l && let Some(b) = r {
                 match op {
-                    Op::Add => { todo!()/*a.add(b, &a.toDataType())*/ },
-                    Op::Sub => a.sub(&b, &a.toDataType()),
-                    Op::Mul => a.mul(&b, &a.toDataType()),
-                    Op::Div => a.div(&b, &a.toDataType()),
-                    Op::Gt => a.refGt(&b, &a.toDataType()),
-                    Op::Less => a.refLess(&b, &a.toDataType()),
-                    Op::Eq => a.refEq(&b, &a.toDataType()),
-                    Op::And => a.and(&b),
-                    Op::Or => a.or(&b)
+                    BinaryOp::Add => { todo!()/*a.add(b, &a.toDataType())*/ },
+                    BinaryOp::Sub => a.sub(&b, &a.toDataType()),
+                    BinaryOp::Mul => a.mul(&b, &a.toDataType()),
+                    BinaryOp::Div => a.div(&b, &a.toDataType()),
+                    BinaryOp::Gt => a.refGt(&b, &a.toDataType()),
+                    BinaryOp::Less => a.refLess(&b, &a.toDataType()),
+                    BinaryOp::Eq => a.refEq(&b, &a.toDataType()),
+                    BinaryOp::And => a.and(&b),
+                    BinaryOp::Or => a.or(&b)
                 };
                 Some(a.toExpression(&a.toDataType()))
             } else {
-                Some(Expression::ArithmeticOp {
+                Some(Expression::BinaryOperation {
                     left: Box::new(evalE(left).unwrap_or(*left.clone())),
                     right: Box::new(evalE(right).unwrap_or(*right.clone())),
                     op: op.clone(),
@@ -36,7 +36,6 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
         Expression::LongLiteral(_) => None,
         Expression::DoubleLiteral(_d) => None,
         Expression::StringLiteral(_) => None,
-        Expression::FunctionCall(_) => None,
         Expression::Variable(_) => None,
         Expression::ArrayLiteral(_) => None,
         Expression::ArrayIndexing(_) => None,
@@ -50,20 +49,20 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
 
 pub fn evalExpr(exp: &Expression) -> Option<Value> {
     match exp {
-        Expression::ArithmeticOp { left, right, op } => {
+        Expression::BinaryOperation { left, right, op } => {
             let mut l = evalExpr(left)?;
             let r = evalExpr(right)?;
 
             match op {
-                Op::Add => todo!()/*l.add(r, &l.toDataType())*/,
-                Op::Sub => l.sub(&r, &l.toDataType()),
-                Op::Mul => l.mul(&r, &l.toDataType()),
-                Op::Div => l.div(&r, &l.toDataType()),
-                Op::Gt => l.refGt(&r, &l.toDataType()),
-                Op::Less => l.refLess(&r, &l.toDataType()),
-                Op::Eq => l.refEq(&r, &l.toDataType()),
-                Op::And => l.and(&r),
-                Op::Or => l.or(&r),
+                BinaryOp::Add => todo!()/*l.add(r, &l.toDataType())*/,
+                BinaryOp::Sub => l.sub(&r, &l.toDataType()),
+                BinaryOp::Mul => l.mul(&r, &l.toDataType()),
+                BinaryOp::Div => l.div(&r, &l.toDataType()),
+                BinaryOp::Gt => l.refGt(&r, &l.toDataType()),
+                BinaryOp::Less => l.refLess(&r, &l.toDataType()),
+                BinaryOp::Eq => l.refEq(&r, &l.toDataType()),
+                BinaryOp::And => l.and(&r),
+                BinaryOp::Or => l.or(&r),
             };
 
             Some(l)
@@ -74,7 +73,6 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::DoubleLiteral(_d) => None,
         Expression::StringLiteral(_) => None,
         Expression::BoolLiteral(b) => Some((*b).into()),
-        Expression::FunctionCall(_) => None,
         Expression::Variable(_) => None,
         Expression::CharLiteral(c) => Some((*c).into()),
         Expression::ArrayLiteral(_) => None,

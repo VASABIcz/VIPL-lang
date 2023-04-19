@@ -170,6 +170,7 @@ pub enum TokenType {
     Import,
     Global,
     In,
+    Null,
 
     ORB,
     CRB,
@@ -445,6 +446,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         AlphabeticKeywordLexingUnit::new("import", TokenType::Import),
         AlphabeticKeywordLexingUnit::new("global", TokenType::Global),
         AlphabeticKeywordLexingUnit::new("in", TokenType::In),
+        AlphabeticKeywordLexingUnit::new("null", TokenType::Null),
 
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),

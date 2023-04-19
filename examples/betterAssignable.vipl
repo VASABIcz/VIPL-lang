@@ -1,0 +1,16 @@
+struct MyStruct {
+  x: int
+  y: int
+  z: int
+}
+
+x = MyStruct {
+    x: 1
+    y: 0
+    z: 0
+}
+
+x.x *= 10
+x.x *= 10
+
+out::print(x.x)

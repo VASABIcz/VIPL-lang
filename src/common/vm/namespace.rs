@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::mem::transmute;
 
-use crate::ast::{Expression, FunctionDef, Node, Op, Statement, VariableModd};
+use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
 use crate::bytecodeGen::genFunctionDef;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
@@ -251,9 +251,6 @@ impl Namespace {
                 }
                 Operation::Expr(e) => {
                     match e {
-                        Expression::FunctionCall(c) => {
-                            initFunction.body.push(Statement::FunctionExpr(c));
-                        }
                         // Expression::NamespaceAccess(c) => todo!(),
                         c => initFunction.body.push(Statement::StatementExpression(c))
                     }

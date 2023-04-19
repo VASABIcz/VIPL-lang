@@ -13,7 +13,7 @@ use crate::vm::myStr::MyStr;
 use crate::vm::namespace::StructMeta;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Op {
+pub enum BinaryOp {
     Add,
     Sub,
     Mul,
@@ -26,11 +26,19 @@ pub enum Op {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
-    ArithmeticOp {
+    BinaryOperation {
         left: Box<Expression>,
         right: Box<Expression>,
-        op: Op,
+        op: BinaryOp,
     },
     IntLiteral(String),
     LongLiteral(String),
@@ -38,7 +46,6 @@ pub enum Expression {
     DoubleLiteral(String),
     StringLiteral(String),
     BoolLiteral(bool),
-    FunctionCall(FunctionCall),
     Variable(String),
     CharLiteral(char),
     ArrayLiteral(Vec<Expression>),
@@ -71,17 +78,17 @@ impl Expression {
         typeHint: Option<DataType>,
     ) -> Result<Option<DataType>, Box<dyn Error>> {
         match self {
-            Expression::ArithmeticOp {
+            Expression::BinaryOperation {
                 left,
                 right: _,
                 op: o,
             } => {
                 match o {
-                    Op::Gt => return Ok(Some(Bool)),
-                    Op::Less => return Ok(Some(Bool)),
-                    Op::Eq => return Ok(Some(Bool)),
-                    Op::And => return Ok(Some(Bool)),
-                    Op::Or => return Ok(Some(Bool)),
+                    BinaryOp::Gt => return Ok(Some(Bool)),
+                    BinaryOp::Less => return Ok(Some(Bool)),
+                    BinaryOp::Eq => return Ok(Some(Bool)),
+                    BinaryOp::And => return Ok(Some(Bool)),
+                    BinaryOp::Or => return Ok(Some(Bool)),
                     _ => {}
                 }
 
@@ -101,22 +108,6 @@ impl Expression {
                 Ok(Some(DataType::Float))
             }
             Expression::StringLiteral(_) => Ok(Some(DataType::str())),
-            Expression::FunctionCall(f) => {
-                let types = f
-                    .arguments
-                    .iter()
-                    .filter_map(|x| x.toDataType(typesMapping, functionReturns, None).ok()?)
-                    .collect::<Vec<DataType>>();
-                // println!("{:?}", &types);
-                let enc = genFunName(f.name.as_str(), &types);
-                match functionReturns.get(&MyStr::Runtime(enc.clone().into_boxed_str())) {
-                    None => {
-                        println!("{functionReturns:?}");
-                        Err(Box::new(TypeNotFound { typ: enc }))
-                    }
-                    Some(v) => Ok(v.clone()),
-                }
-            }
             Expression::Variable(name) => {
                 match typesMapping.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
                     None => {
@@ -236,7 +227,7 @@ pub enum Statement {
     Loop(Vec<Statement>),
     NamespaceFunction(Vec<String>, FunctionCall),
     StatementExpression(Expression),
-    Assignable(Expression, Expression),
+    Assignable(Expression, Expression, Option<ArithmeticOp>),
     ForLoop(String, Expression, Vec<Statement>)
 }
 
