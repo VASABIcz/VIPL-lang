@@ -2,6 +2,7 @@ use crate::ast::{Expression, BinaryOp};
 use crate::vm::value::Value;
 
 pub fn evalE(exp: &Expression) -> Option<Expression> {
+    return None;
     match exp {
         Expression::BinaryOperation { left, right, op } => {
             let l = evalExpr(left);

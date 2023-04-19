@@ -58,6 +58,26 @@ pub enum Expression {
     FieldAccess(Box<Expression>, String)
 }
 
+impl Expression {
+    pub fn isCallable(&self) -> bool {
+        return match self {
+            Expression::Variable(..) => true,
+            Expression::NamespaceAccess(..) => true,
+            _ => false
+        }
+    }
+
+    pub fn isAssignable(&self) -> bool {
+        return match self {
+            Expression::Variable(..) => true,
+            Expression::ArrayIndexing(..) => true,
+            Expression::NamespaceAccess(..) => true,
+            Expression::FieldAccess(..) => true,
+            _ => false
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayAccess {
     pub expr: Expression,

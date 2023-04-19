@@ -64,7 +64,7 @@ fn getParsingUnit<'a>(
             ParsingUnitSearchType::Ahead => parserType == ParsingUnitSearchType::Ahead,
         };
 
-        canParse && it.canParse(tokens)
+        canParse && it.canParse(tokens, None)
     })
 }
 
@@ -111,7 +111,7 @@ pub fn parse(
                 Ahead => parserType == Ahead || parserType == Around,
             };
 
-            if canParse && unit.canParse(tokens) {
+            if canParse && unit.canParse(tokens, buf.last()) {
                 let res =
                     if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1
                     {
@@ -136,7 +136,7 @@ pub fn parse(
         for unit in parsingUnits.iter() {
             let parserType = unit.getType();
 
-            if unit.canParse(tokens) {
+            if unit.canParse(tokens, buf.last()) {
                 let res =
                     if !*isPrevUser && (parserType == Around || parserType == Back) && counter == 1
                     {
@@ -170,43 +170,78 @@ pub fn parse(
     Ok(buf)
 }
 
+pub fn parseType(parsingUnits: &Vec<Box<dyn ParsingUnit>>, tokens: &mut TokenProvider, typ: ParsingUnitSearchType, buf: &mut Vec<Operation>) -> Result<bool, Box<dyn Error>> {
+    for unit in parsingUnits.iter() {
+        let parserType = unit.getType();
+
+        if parserType != typ {
+            continue
+        }
+
+        if !unit.canParse(&tokens, buf.last()) {
+            continue
+        }
+
+        match typ {
+            Around | Back => {
+                let res = match unit.parse(tokens, buf.pop(), parsingUnits) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("exception inside {:?}", unit);
+                        return Err(e)
+                    }
+                };
+                buf.push(res);
+                return Ok(true)
+            }
+            Ahead => {
+                let res = match unit.parse(tokens, None, parsingUnits) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("exception inside {:?}", unit);
+                        return Err(e)
+                    }
+                };
+                buf.push(res);
+                return Ok(true)
+            }
+        }
+    }
+    Ok(false)
+}
+
 pub fn parseTokens(toks: Vec<Token<TokenType>>) -> Result<Vec<Operation>, Box<dyn Error>> {
     let mut buf = vec![];
-    let parsingUnits = unsafe { &parsingUnits() };
+    let parsingUnits = &parsingUnits();
     let mut tokens = TokenProvider::new(toks);
 
-    'main: while !tokens.isDone() {
-        for unit in parsingUnits.iter() {
-            let parserType = unit.getType();
-
-            if !unit.canParse(&tokens) {
+    while !tokens.isDone() {
+        if buf.is_empty() {
+            if parseType(parsingUnits, &mut tokens, Ahead, &mut buf)? {
                 continue
             }
 
-            match parserType {
-                Around | Back => {
-                    let res = match unit.parse(&mut tokens, buf.pop(), parsingUnits) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            eprintln!("exception inside {:?}", unit);
-                            return Err(e)
-                        }
-                    };
-                    buf.push(res);
-                }
-                Ahead => {
-                    let res = match unit.parse(&mut tokens, None, parsingUnits) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            eprintln!("exception inside {:?}", unit);
-                            return Err(e)
-                        }
-                    };
-                    buf.push(res);
-                }
+            if parseType(parsingUnits, &mut tokens, Back, &mut buf)? {
+                continue
             }
-            continue 'main;
+
+            if parseType(parsingUnits, &mut tokens, Around, &mut buf)? {
+                continue
+            }
         }
+        else {
+            if parseType(parsingUnits, &mut tokens, Back, &mut buf)? {
+                continue
+            }
+
+            if parseType(parsingUnits, &mut tokens, Around, &mut buf)? {
+                continue
+            }
+            if parseType(parsingUnits, &mut tokens, Ahead, &mut buf)? {
+                continue
+            }
+        }
+
         return Err(Box::new(NoSuchParsingUnit {
             typ: Ahead,
             token: tokens.peekOne().cloned(),
@@ -422,6 +457,16 @@ impl Operation {
         }
     }
 
+    fn asExprRef(&self) -> Result<&Expression, Box<dyn Error>> {
+        match self {
+            Operation::Expr(e) => Ok(e),
+            _ => Err(Box::new(InvalidOperation {
+                operation: self.clone(),
+                expected: "Expression".to_string(),
+            })),
+        }
+    }
+
     fn asStatement(self) -> Result<Statement, Box<dyn Error>> {
         let clone = self.clone();
         match self {
@@ -455,7 +500,7 @@ pub enum ParsingUnitSearchType {
 pub trait ParsingUnit: Debug {
     fn getType(&self) -> ParsingUnitSearchType;
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool;
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool;
 
     fn parse(
         &self,
@@ -477,7 +522,7 @@ impl ParsingUnit for FunctionParsingUnit {
         ParsingUnitSearchType::Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Fn)
     }
 
@@ -554,7 +599,7 @@ impl ParsingUnit for StatementVarParsingUnit {
         ParsingUnitSearchType::Ahead
     }
 
-    fn canParse(&self, tokens: &TokenProvider) -> bool {
+    fn canParse(&self, tokens: &TokenProvider, previous: Option<&Operation>) -> bool {
         // tokens.isPeekType(TokenType::Semicolon)
         tokens.isPeekType(TokenType::Identifier)
             && (tokens.isPeekIndexType(TokenType::Equals, 1)
@@ -612,7 +657,7 @@ impl ParsingUnit for ArithmeticParsingUnit {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(self.typ)
     }
 
@@ -672,7 +717,7 @@ impl ParsingUnit for NumericParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         let peek = match tokenProvider.peekOne() {
             None => return false,
             Some(v) => v,
@@ -762,7 +807,7 @@ impl ParsingUnit for BoolParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::True) || tokenProvider.isPeekType(TokenType::False)
     }
 
@@ -795,7 +840,7 @@ impl ParsingUnit for VariableParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier)
     }
 
@@ -825,7 +870,7 @@ impl ParsingUnit for ReturnParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Return)
     }
 
@@ -855,7 +900,7 @@ impl ParsingUnit for WhileParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::While)
     }
 
@@ -926,7 +971,7 @@ impl ParsingUnit for IfParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::If)
     }
 
@@ -976,7 +1021,7 @@ impl ParsingUnit for BracketsParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(ORB)
     }
 
@@ -1007,7 +1052,7 @@ impl ParsingUnit for VarModParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(TokenType::AddAs, 1)
             || tokenProvider.isPeekIndexType(TokenType::SubAs, 1)
             || tokenProvider.isPeekIndexType(TokenType::MulAs, 1)
@@ -1053,7 +1098,7 @@ impl ParsingUnit for CharParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(CharLiteral)
     }
 
@@ -1107,7 +1152,7 @@ impl ParsingUnit for StringParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::StringLiteral)
     }
 
@@ -1212,7 +1257,7 @@ impl ParsingUnit for ArrayLiteralParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
@@ -1252,7 +1297,7 @@ impl ParsingUnit for ArrayIndexingParsingUnit {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
@@ -1282,51 +1327,6 @@ impl ParsingUnit for ArrayIndexingParsingUnit {
 }
 
 #[derive(Debug)]
-struct ArrayAssignParsingUnit;
-
-impl ParsingUnit for ArrayAssignParsingUnit {
-    fn getType(&self) -> ParsingUnitSearchType {
-        Around
-    }
-
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
-        tokenProvider.isPeekType(Equals)
-    }
-
-    fn parse(
-        &self,
-        tokenProvider: &mut TokenProvider,
-        previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit>],
-    ) -> Result<Operation, Box<dyn Error>> {
-        tokenProvider.getAssert(Equals)?;
-        let value = parseExpr(tokenProvider, parser)?;
-
-        let arrayExpr = previous
-            .ok_or("array asign must have expression")?
-            .asExpr()?;
-        let arrayAccess = match arrayExpr {
-            Expression::ArrayIndexing(v) => Some(v),
-            _ => None,
-        }
-            .ok_or("expected array indexing")?;
-
-        Ok(Operation::Statement(Statement::ArrayAssign {
-            left: *arrayAccess,
-            right: value,
-        }))
-    }
-
-    fn getPriority(&self) -> usize {
-        usize::MAX
-    }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
 struct ContinueParsingUnit;
 
 impl ParsingUnit for ContinueParsingUnit {
@@ -1334,7 +1334,7 @@ impl ParsingUnit for ContinueParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Continue)
     }
 
@@ -1365,7 +1365,7 @@ impl ParsingUnit for BreakParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Break)
     }
 
@@ -1396,7 +1396,7 @@ impl ParsingUnit for LoopParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Loop)
     }
 
@@ -1428,7 +1428,7 @@ impl ParsingUnit for NotParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Not)
     }
 
@@ -1462,7 +1462,7 @@ impl ParsingUnit for StructParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Struct)
     }
 
@@ -1516,7 +1516,7 @@ impl ParsingUnit for ImportParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Import)
     }
 
@@ -1548,7 +1548,7 @@ impl ParsingUnit for NamespaceParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(Namespace, 1)
     }
 
@@ -1586,8 +1586,8 @@ impl ParsingUnit for CallableParsingUnit {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
-        tokenProvider.isPeekType(ORB)
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+        tokenProvider.isPeekType(ORB) && previous.map(|it| it.asExprRef().map(|it| { it.isCallable() }).unwrap_or(false)).unwrap_or(false)
     }
 
     fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
@@ -1613,7 +1613,7 @@ impl ParsingUnit for CallableParsingUnit {
 
         tokens.getAssert(TokenType::CRB)?;
 
-        Ok(Operation::Expr(Expression::Callable(Box::new(previous.unwrap().asExpr()?), args)))
+        Ok(Operation::Expr(Expression::Callable(Box::new(previous.ok_or("expected previous")?.asExpr()?), args)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1673,7 +1673,7 @@ struct IncParsingUnit;
 impl ParsingUnit for IncParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {Back}
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Inc) || tokenProvider.isPeekType(TokenType::Dec)
     }
 
@@ -1721,7 +1721,7 @@ impl ParsingUnit for StructInitParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(OCB, 1)
     }
 
@@ -1758,7 +1758,7 @@ impl ParsingUnit for FieldAccessParsingUnit {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Dot)
     }
 
@@ -1786,12 +1786,17 @@ impl ParsingUnit for AssignableParsingUnit {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Equals)
             || tokenProvider.isPeekType(AddAs)
             || tokenProvider.isPeekType(SubAs)
             || tokenProvider.isPeekType(DivAs)
             || tokenProvider.isPeekType(MulAs)
+        && previous.map(|it| {
+            it.asExprRef().map(|it| {
+                it.isAssignable()
+            }).unwrap_or(false)
+        }).unwrap_or(false)
     }
 
     fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit>]) -> Result<Operation, Box<dyn Error>> {
@@ -1833,7 +1838,7 @@ impl ParsingUnit for GlobalParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Global)
     }
 
@@ -1879,7 +1884,7 @@ impl ParsingUnit for ForParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(For)
     }
 
