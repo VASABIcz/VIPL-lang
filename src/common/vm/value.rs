@@ -334,7 +334,7 @@ impl Value {
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
-            Object(a) => panic!("{:?}", a),
+            Object(a) => self.getNumRef() == val.getNumRef(),
             Void => unreachable!(),
             Function { .. } => unreachable!()
         };

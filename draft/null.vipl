@@ -1,0 +1,20 @@
+struct MyStruct {
+  x: int
+  y: int
+  z: int
+}
+
+x = MyStruct {
+    x: 10
+    y: 11
+    z: 12
+}
+
+x = null
+
+if x == null {
+    out::print("object is null")
+}
+else {
+    out::print("object is not null")
+}

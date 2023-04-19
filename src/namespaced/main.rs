@@ -19,7 +19,7 @@ fn main() {
     let res = loadSourceFile(fs::read_to_string(sourceFile).unwrap(), &mut vm).unwrap();
 
     println!("xd");
-    let n = Namespace::constructNamespace(res, name.join("::"), &mut vm);
+    let n = Namespace::constructNamespace(res, name.join("::"), &mut vm, vec![]);
     let id = vm.registerNamespace(n);
     vm.link();
 

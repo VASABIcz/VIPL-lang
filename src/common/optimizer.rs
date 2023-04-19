@@ -44,7 +44,8 @@ pub fn evalE(exp: &Expression) -> Option<Expression> {
         Expression::Lambda(_, _) => None,
         Expression::Callable(_, _) => None,
         Expression::StructInit(_, _) => None,
-        Expression::FieldAccess(_, _) => None
+        Expression::FieldAccess(_, _) => None,
+        Expression::Null => None
     }
 }
 
@@ -83,6 +84,7 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::Lambda(_, _) => None,
         Expression::Callable(_, _) => None,
         Expression::StructInit(_, _) => None,
-        Expression::FieldAccess(_, _) => None
+        Expression::FieldAccess(_, _) => None,
+        Expression::Null => None
     }
 }
