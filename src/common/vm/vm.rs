@@ -1,14 +1,16 @@
 use std::{intrinsics, ptr};
 use std::alloc::{alloc, Layout};
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use libloading::os::unix::Library;
 use crate::asm::jitCompiler::JITCompiler;
-use crate::bytecodeGen::genFunctionDef;
+use crate::bytecodeGen::{genFunctionDef, StatementCtx};
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
+use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, HayCollector, Heap};
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionTypeMeta, LoadedFunction, Namespace};
@@ -173,10 +175,16 @@ pub struct VirtualMachine<'a> {
     pub namespaces: Vec<Namespace>,
 
     pub namespaceLoader: NamespaceLoader,
-    pub jitCompiler: JITCompiler
+    pub jitCompiler: JITCompiler,
+
+    pub handleStatementExpression: fn(&mut StatementCtx, DataType)
 }
 
 impl VirtualMachine<'_> {
+    pub fn rawPtr(&self) -> *mut VirtualMachine {
+        self as *const VirtualMachine as *mut VirtualMachine
+    }
+
     pub fn buildFunctionReturn(&self) -> HashMap<MyStr, Option<DataType>> {
         let mut x = HashMap::new();
 
@@ -628,7 +636,7 @@ impl VirtualMachine<'_> {
 }
 
 impl VirtualMachine<'_> {
-    pub fn link(&mut self) {
+    pub fn link(&mut self) -> Result<(), Box<dyn Error>> {
         let functionReturns = self.buildFunctionReturn();
 
         let v = self as *mut VirtualMachine as *const VirtualMachine;
@@ -643,7 +651,7 @@ impl VirtualMachine<'_> {
                 unsafe {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
                         let mut ops = vec![];
-                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn).unwrap() };
+                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression)? };
                         f.localsMeta = res.into_boxed_slice();
                         println!("f ops {:?}", ops);
 
@@ -656,6 +664,7 @@ impl VirtualMachine<'_> {
 
             n.state = Loaded;
         }
+        Ok(())
     }
 
     pub fn new() -> Self {
@@ -670,6 +679,7 @@ impl VirtualMachine<'_> {
             namespaces: vec![],
             namespaceLoader: NamespaceLoader::new(),
             jitCompiler: JITCompiler {},
+            handleStatementExpression: |it, t| { if t != Void { it.push(Pop) } },
         }
     }
 }

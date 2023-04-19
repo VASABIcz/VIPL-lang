@@ -16,7 +16,7 @@ use crate::parser::*;
 use crate::utils::genFunName;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
-use crate::vm::dataType::DataType::{Bool, Char, Int, Object};
+use crate::vm::dataType::DataType::{Bool, Char, Int, Object, Void};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
@@ -32,7 +32,7 @@ pub struct ExpressionCtx<'a> {
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>
+    pub vm: &'a VirtualMachine<'a>,
 }
 
 impl ExpressionCtx<'_> {
@@ -220,8 +220,19 @@ impl ExpressionCtx<'_> {
                         }
                     }
                     else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
+                        println!("{:?}", self.functionReturns);
+                        let namespaceName = v[..v.len()-1].join("::");
+
+                        println!("namespaceName {}", namespaceName);
+
+                        let namespaceID = self.vm.namespaceLookup.get(&namespaceName).unwrap();
+                        let namespace = self.vm.namespaces.get(*namespaceID).unwrap();
+
                         let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                        let funcId = self.currentNamespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+
+                        println!("lookup {}", &genName);
+
+                        let funcId = namespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
                         return Ok(funcId.0.returnType.clone())
                     }
                 }
@@ -260,7 +271,7 @@ pub struct PartialExprCtx<'a> {
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>
+    pub vm: &'a VirtualMachine<'a>,
 }
 
 impl PartialExprCtx<'_> {
@@ -328,9 +339,9 @@ pub struct StatementCtx<'a> {
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a mut HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
-    pub clearStack: bool,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>
+    pub vm: &'a VirtualMachine<'a>,
+    pub handle: fn(&mut StatementCtx, DataType) -> ()
 }
 
 impl StatementCtx<'_> {
@@ -343,7 +354,7 @@ impl StatementCtx<'_> {
             loopContext: self.loopContext,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
-            clearStack: false
+            handle: self.handle,
         }
     }
 }
@@ -391,9 +402,9 @@ impl StatementCtx<'_> {
             functionReturns: self.functionReturns,
             vTable: self.vTable,
             loopContext: self.loopContext,
-            clearStack: self.clearStack,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            handle: self.handle,
         }
     }
 }
@@ -447,9 +458,26 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
         Statement::Break => {}
         Statement::NamespaceFunction(_, _) => {}
         Statement::StatementExpression(_) => {}
-        Statement::Assignable(prev, init, _) => {
-            // FIXME gather variables
-            eprintln!("[bytecodeGen] buildLocalsTable Assignable FIXME")
+        Statement::Assignable(prev, init, t) => {
+            if *t != None {
+                return Ok(())
+            }
+            match prev {
+                Expression::Variable(c) => {
+                    if !ctx.vTable.contains_key(&c.clone().into()) {
+                        let t = ctx.makeExpressionCtx(init, None).toDataType()?.unwrap_or(Void);
+                        ctx.vTable.insert(
+                            c.clone().into(),
+                            (t.clone(), locals.len()),
+                        );
+                        locals.push(VariableMetadata {
+                            name: c.clone().into(),
+                            typ: t,
+                        });
+                    }
+                }
+                _ => {}
+            }
         },
         Statement::ForLoop(var, exp, body) => {
             let t = ctx.makeExpressionCtx(exp, None).toDataType()?.unwrap();
@@ -481,7 +509,8 @@ pub fn genFunctionDef(
     ops: &mut Vec<OpCode>,
     functionReturns: &HashMap<MyStr, Option<DataType>>,
     vm: &VirtualMachine,
-    currentNamespace: &Namespace
+    currentNamespace: &Namespace,
+    handleStatementExpression: fn(&mut StatementCtx, DataType)
 ) -> Result<Vec<VariableMetadata>, Box<dyn Error>> {
     let mut vTable = HashMap::new();
     let mut locals = vec![];
@@ -499,9 +528,9 @@ pub fn genFunctionDef(
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
-                clearStack: false,
                 currentNamespace,
                 vm,
+                handle: handleStatementExpression,
             };
             buildLocalsTable(&mut ctx.transfer(s), &mut locals)?;
         }
@@ -514,9 +543,9 @@ pub fn genFunctionDef(
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
-                clearStack: false,
                 currentNamespace,
                 vm,
+                handle: handleStatementExpression,
             })?;
         }
         ops.push(Return);
@@ -550,21 +579,19 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
 
             let mut shouldPop = false;
 
-            if ctx.clearStack {
-                match ctx.functionReturns.get(&n.into()) {
-                    None => {}
-                    Some(v) => match v {
-                        None => {}
-                        Some(_) => {
-                            shouldPop = true;
-                        }
-                    },
-                }
-            }
+            let ret = match ctx.functionReturns.get(&n.into()) {
+                None => Void,
+                Some(v) => match v {
+                    None => Void,
+                    Some(v) => {
+                        v.clone()
+                    }
+                },
+            };
 
             ctx.ops.push(SCall { id: *res });
-            if shouldPop {
-                ctx.ops.push(Pop)
+            if shouldPop && ret != Void {
+                (ctx.handle)(&mut ctx, ret)
             }
         }
         Variable(v) => match &v.init {
@@ -751,8 +778,15 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             ctx.ops.push(LCall { namespace: *namespaceId, id: *funcId })
         }
         Statement::StatementExpression(v) => {
-            let eCtx = ctx.makeExpressionCtx(v, None);
+            let mut eCtx = ctx.makeExpressionCtx(v, None);
+
+            let ret = eCtx.toDataType()?.unwrap_or(Void);
+
             genExpression(eCtx)?;
+
+            if ret != Void {
+                (ctx.handle)(&mut ctx, ret);
+            }
         }
         Statement::Assignable(dest, value, t) => {
             match dest {

@@ -152,7 +152,8 @@ pub struct Namespace {
 
 impl Namespace {
     pub fn getFunctionByName(&self, name: &str) -> Option<(&FunctionMeta, usize)> {
-        let id = self.functionsLookup.get(name.strip_prefix((&format!("{}::", self.name))).unwrap_or(name))?;
+        println!("i am here");
+        let id = self.functionsLookup.get(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name))?;
         match self.functionsMeta.get(*id) {
             None => None,
             Some(v) => {
@@ -217,11 +218,11 @@ impl Namespace {
         todo!()
     }
 
-    pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine) -> Namespace {
+    pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
         let mut n = Namespace::new(name);
         let mut initFunction = FunctionDef{
             name: String::from("__init"),
-            localsMeta: vec![],
+            localsMeta: mainLocals,
             argsCount: 0,
             body: vec![],
             returnType: None,
@@ -262,9 +263,7 @@ impl Namespace {
     }
 }
 
-pub fn loadSourceFile(src: &str, vm: &mut VirtualMachine) -> Result<Vec<Operation>, Box<dyn Error>> {
-    let src = std::fs::read_to_string(src).expect("failed to read source");
-
+pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operation>, Box<dyn Error>> {
     let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
         Err(e) => {
@@ -277,13 +276,5 @@ pub fn loadSourceFile(src: &str, vm: &mut VirtualMachine) -> Result<Vec<Operatio
         return Ok(vec![])
     }
 
-    let ast = match parseTokens(tokens) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("parser");
-            todo!("{}", e)
-        }
-    };
-
-    Ok(ast)
+    parseTokens(tokens)
 }

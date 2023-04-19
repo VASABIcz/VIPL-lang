@@ -1,23 +1,12 @@
-out::print("while test")
+x = 10
+x
+x
+x
+x
+x
+x
+x
+x
+x
 
-x = 0
-while x < 10 {
-    out::print(x)
-    x += 1
-}
-
-out::print(x)
-
-out::print("recursion test")
-
-print(out::array::call(1)[rand(0)][2](1, 2, 3))
-
-fn fact(n: int): int {
-    if n > 0 {
-        return n*fact(n-1)
-    }
-    return 1
-}
-
-x = fact(3)
-out::print(x)
+out::print("hello there")

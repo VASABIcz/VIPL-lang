@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::{env, fs};
 use crate::lexer::tokenizeSource;
 use crate::parser::{parseDataType, TokenProvider};
 use crate::vm::variableMetadata::VariableMetadata;
@@ -51,4 +52,30 @@ pub fn argsToString(args: &[DataType]) -> String {
 pub fn parseDataTypeFromStr(s: &str) -> Result<DataType, Box<dyn Error>> {
     let p = tokenizeSource(s)?;
     parseDataType(&mut TokenProvider::new(p))
+}
+
+pub fn namespacePath(path: &str) -> Vec<String> {
+    let mut con123 = fs::canonicalize(path).unwrap();
+    let mut con = con123.iter();
+    let mut cwd123 = env::current_dir().unwrap();
+    let mut cwd = cwd123.iter();
+    let mut hasResolved = false;
+    let mut strBuf = vec![];
+
+    loop {
+        let c = con.next();
+        let r = cwd.next();
+        if c.is_none() {
+            break
+        }
+        if hasResolved || c != r {
+            strBuf.push(c.unwrap().to_str().unwrap().to_string());
+            hasResolved = true;
+        }
+    }
+    let id = strBuf.len()-1;
+    strBuf.get_mut(id).map(|it| {
+        *it = it.strip_suffix(".vipl").unwrap().to_string()
+    });
+    strBuf
 }
