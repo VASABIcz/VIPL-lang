@@ -1,4 +1,4 @@
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Bool, Float, Int};
 use crate::vm::myStr::MyStr;

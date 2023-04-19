@@ -7,7 +7,7 @@ use crate::asm::jitCompiler::JITCompiler;
 use crate::bytecodeGen::genFunctionDef;
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::heap::{Allocation, HayCollector, Heap};
 use crate::vm::myStr::MyStr;

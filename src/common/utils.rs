@@ -1,7 +1,7 @@
 use std::error::Error;
 use crate::lexer::tokenizeSource;
 use crate::parser::{parseDataType, TokenProvider};
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 
 // same as Vec but can be unsafely modified and accessed

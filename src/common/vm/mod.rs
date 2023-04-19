@@ -9,3 +9,4 @@ pub mod objects;
 pub mod namespace;
 // mod tests;
 pub mod nativeStack;
+pub mod variableMetadata;

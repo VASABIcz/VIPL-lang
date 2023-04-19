@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use crate::errors::{InvalidTypeException, TypeNotFound};
 use crate::utils::genFunName;
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Object};
 use crate::vm::dataType::Generic::Any;

@@ -14,7 +14,7 @@ use crate::lexer::*;
 use crate::optimizer::{evalE};
 use crate::parser::*;
 use crate::utils::genFunName;
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Int, Object};
 use crate::vm::dataType::Generic::Any;

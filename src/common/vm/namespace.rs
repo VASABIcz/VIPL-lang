@@ -8,7 +8,7 @@ use crate::bytecodeGen::genFunctionDef;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta};
-use crate::variableMetadata::VariableMetadata;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;

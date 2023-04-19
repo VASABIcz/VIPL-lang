@@ -35,5 +35,4 @@ pub mod bytecodeGen;
 pub mod std;
 pub mod errors;
 pub mod utils;
-pub mod variableMetadata;
 pub mod vm;
