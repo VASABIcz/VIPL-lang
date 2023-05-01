@@ -2,6 +2,8 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use crate::vm::dataType::DataType;
 
+pub type Errorable<T> = Result<T, Box<dyn Error>>;
+
 #[derive(Debug)]
 pub struct NoValue {
     pub(crate) msg: String,

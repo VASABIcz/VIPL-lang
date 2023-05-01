@@ -19,7 +19,7 @@ use crate::vm::dataType::Generic::Any;
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
-use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, PushLocal, Return, SCall, SetField, SetLocal, StrNew, Sub, Swap};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
 
 
 #[derive(Debug)]
@@ -119,7 +119,7 @@ impl ExpressionCtx<'_> {
                         let funcName = self.lookupFunctionByBaseName(name).ok_or(Box::new(TypeNotFound {
                             typ: format!("variable {name} not found"),
                         }))?;
-                        let f = self.currentNamespace.getFunctionByName(&funcName).unwrap();
+                        let f = self.currentNamespace.findFunction(&funcName).unwrap();
                         return Ok(Some(f.0.toFunctionType()));
 
                         println!("hint {:?}", self.typeHint);
@@ -196,15 +196,23 @@ impl ExpressionCtx<'_> {
                     }
                 }
             }
-            Expression::NamespaceAccess(n) => todo!(),
-            Expression::Lambda(_, _) => panic!(),
+            Expression::NamespaceAccess(n) => {
+                let (namespace, namespaceId) = self.vm.findNamespaceParts(&n[..n.len()-1])?;
+
+                let global = namespace.findGlobal(n.last().unwrap())?;
+
+                Ok(Some(global.0.typ.clone()))
+            },
+            Expression::Lambda(l, body) => {
+                Ok(self.typeHint.clone())
+            },
             Expression::Callable(prev, args) => {
                 unsafe {
                     if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                         if !self.vTable.contains_key(&MyStr::Static(&v)) {
                             println!("hello {:?} {:?} {:?}", prev, args, self.vTable);
                             let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                            let funcId = self.currentNamespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName))?;
+                            let funcId = self.currentNamespace.findFunction(&genName).ok_or(format!("could not find function with type {}", &genName))?;
                             return Ok(funcId.0.returnType.clone())
                         }
                         else {
@@ -221,16 +229,15 @@ impl ExpressionCtx<'_> {
                         println!("{:?}", self.functionReturns);
                         let namespaceName = v[..v.len()-1].join("::");
 
-                        println!("namespaceName {}", namespaceName);
+                        let (namespace, namespaceID) = self.vm.findNamespaceParts(&v[..v.len()-1])?;
 
-                        let namespaceID = self.vm.namespaceLookup.get(&namespaceName).unwrap();
-                        let namespace = self.vm.namespaces.get(*namespaceID).unwrap();
+                        println!("namespaceName {}", namespaceName);
 
                         let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
 
                         println!("lookup {}", &genName);
 
-                        let funcId = namespace.getFunctionByName(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+                        let funcId = namespace.findFunction(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
                         return Ok(funcId.0.returnType.clone())
                     }
                 }
@@ -674,7 +681,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 Expression::ArrayIndexing(v) => {
                     ctx.makeExpressionCtx(&v.expr, None).genExpression()?;
                 }
-                Expression::NamespaceAccess(_) => todo!(),
+                Expression::NamespaceAccess(_) => {},
                 Expression::FieldAccess(obj, _) => {
                     let mut cd = ctx.makeExpressionCtx(obj, None);
 
@@ -713,7 +720,12 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
 
                     ctx.ops.push(ArrayStore(DataType::Int))
                 },
-                Expression::NamespaceAccess(_) => todo!(),
+                Expression::NamespaceAccess(v) => {
+                    let namespace = ctx.vm.findNamespaceParts(&v[..v.len()-1])?;
+                    let global = namespace.0.findGlobal(v.last().unwrap())?;
+
+                    ctx.ops.push(SetGlobal { namespaceID: namespace.1, globalID: global.1 })
+                },
                 Expression::FieldAccess(obj, field) => {
                     let mut cd = ctx.makeExpressionCtx(obj, None);
                     let class = match cd.toDataType()?.unwrap() {
@@ -841,7 +853,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         Expression::BoolLiteral(i) => r.ops.push(OpCode::PushBool(*i)),
         Expression::Variable(v) => unsafe {
             if r.vTable.contains_key(&v.clone().into()) {
-                r.ops.push(OpCode::PushLocal {
+                r.ops.push(OpCode::GetLocal {
                     index: r
                         .vTable
                         .get(&MyStr::Runtime(v.clone().into_boxed_str()))
@@ -851,7 +863,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             }
             else {
                 let f = r.lookupFunctionByBaseName(v).unwrap();
-                let a = r.currentNamespace.getFunctionByName(&f).unwrap();
+                let a = r.currentNamespace.findFunction(&f).unwrap();
                 r.ops.push(PushFunction(r.currentNamespace.id as u32, a.1 as u32))
             }
         }
@@ -913,8 +925,30 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             genExpression(r.constructCtx(e))?;
             r.ops.push(Not)
         }
-        Expression::NamespaceAccess(_) => todo!(),
-        Expression::Lambda(_, _) => todo!(),
+        Expression::NamespaceAccess(parts) => {
+            let namespace = r.vm.findNamespaceParts(&parts[..parts.len()-1])?;
+
+            let global = namespace.0.findGlobal(parts.last().unwrap())?;
+
+            r.ops.push(OpCode::GetGlobal { namespaceID: namespace.1, globalID: global.1 })
+        },
+        Expression::Lambda(args, body) => {
+            // procedure to determine return type of a fucntion
+            // better typehinting
+
+            let m = FunctionMeta {
+                // gen name
+                name: "".to_string(),
+                argsCount: 0,
+                functionType: FunctionTypeMeta::Builtin,
+                localsMeta: Box::new([]),
+                returnType: None,
+            };
+
+            ctx.currentNamespace.registerFunctionDef(m);
+
+            todo!()
+        },
         Expression::Callable(prev, args) => {
             let mut argTypes = vec![];
 
@@ -957,15 +991,15 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             }
         }
         Expression::StructInit(name, init) => {
-            let structID  = *r.currentNamespace.structLookup.get(name).unwrap();
-            let structMeta = r.currentNamespace.structs.get(structID).unwrap();
+            // FIXME doesnt support other namespaces
+            let (structMeta, structID) = r.currentNamespace.findStruct(name)?;
             let namespaceID = r.currentNamespace.id;
 
             r.ops.push(New { namespaceID, structID });
 
             for (fieldName, value) in init {
                 r.ops.push(Dup);
-                let fieldID = *structMeta.fieldsLookup.get(fieldName.into()).unwrap();
+                let (_, fieldID) = structMeta.findField(fieldName)?;
                 let ctx = r.constructCtx(value);
                 genExpression(ctx)?;
                 r.ops.push(SetField {
@@ -981,17 +1015,15 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
 
             let e = r.constructCtx(prev).toDataType()?.ok_or("cannot array index none")?;
             match e {
-                Object(o) => {
+                Object(ref o) => {
                     if fieldName == "size" || fieldName == "length" {
-                        match o.name.as_str() {
-                            "Array" => {
-                                r.ops.push(ArrayLength);
-                                return Ok(())
-                            }
-                            "String" => {
-                                todo!()
-                            }
-                            _ => {}
+                        if e.isArray() {
+                            r.ops.push(ArrayLength);
+                            return Ok(())
+                        }
+                        else if e.isString() {
+                            r.ops.push(StringLength);
+                            return Ok(())
                         }
                     }
 

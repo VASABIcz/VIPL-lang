@@ -5,7 +5,8 @@ use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use libloading::os::unix::Library;
 use crate::asm::jitCompiler::JITCompiler;
-use crate::bytecodeGen::{genFunctionDef, StatementCtx};
+use crate::bytecodeGen::{ExpressionCtx, genFunctionDef, StatementCtx};
+use crate::errors::Errorable;
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
 use crate::vm::variableMetadata::VariableMetadata;
@@ -13,7 +14,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, HayCollector, Heap};
 use crate::vm::myStr::MyStr;
-use crate::vm::namespace::{FunctionTypeMeta, LoadedFunction, Namespace};
+use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
 use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeStack::StackManager;
@@ -50,7 +51,7 @@ pub enum OpCode {
     Pop,
     Dup,
     Swap,
-    PushLocal {
+    GetLocal {
         index: usize,
     },
     SetLocal {
@@ -104,6 +105,9 @@ pub enum OpCode {
     ArrayStore(DataType),
     ArrayLoad(DataType),
     ArrayLength,
+    StringLength,
+    StrNew(MyStr),
+    GetChar,
     Inc {
         typ: DataType,
         index: usize,
@@ -112,8 +116,15 @@ pub enum OpCode {
         typ: DataType,
         index: usize,
     },
-    StrNew(MyStr),
-    GetChar,
+    SetGlobal {
+        namespaceID: usize,
+        globalID: usize
+    },
+    GetGlobal {
+        namespaceID: usize,
+        globalID: usize
+    },
+    ConstStr(usize)
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +192,21 @@ pub struct VirtualMachine<'a> {
 }
 
 impl VirtualMachine<'_> {
+    pub fn findNamespace(&self, name: &str) -> Errorable<(&Namespace, usize)> {
+        let namespaceId = self.namespaceLookup.get(name)
+            .ok_or(format!("failed to find namespace {}", name))?;
+        let namespace = self.namespaces.get(*namespaceId)
+            .ok_or(format!("failed to find namespace with id {}", *namespaceId))?;
+
+        Ok((namespace, *namespaceId))
+    }
+
+    pub fn findNamespaceParts(&self, parts: &[String]) -> Errorable<(&Namespace, usize)> {
+        let namespaceName = parts.join("::");
+
+        self.findNamespace(&namespaceName)
+    }
+
     pub fn rawPtr(&self) -> *mut VirtualMachine {
         self as *const VirtualMachine as *mut VirtualMachine
     }
@@ -219,6 +245,11 @@ impl VirtualMachine<'_> {
         unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
 
         buf
+    }
+
+    #[inline(always)]
+    pub fn push(&mut self, value: Value) {
+        self.stack.push(value)
     }
 
     pub fn gc(&mut self, frame: &StackFrame) {
@@ -363,7 +394,7 @@ impl VirtualMachine<'_> {
                         let val = self.getTop();
                         self.stack.push(*val);
                     },
-                    PushLocal { index } => {
+                    GetLocal { index } => {
                         self.stack.push(*self.getLocal(*index))
                     }
                     SetLocal { index, typ: _ } => {
@@ -628,6 +659,23 @@ impl VirtualMachine<'_> {
                         self.stack.push(a);
                         self.stack.push(b);
                     }
+                    StringLength => {
+                        let a = self.pop();
+                        let len = a.getString().len();
+                        self.stack.push(len.into());
+                    }
+                    SetGlobal { namespaceID, globalID } => {
+                        let v = self.pop();
+                        let n = self.namespaces.get_mut(*namespaceID).unwrap();
+                        let g = n.globals.get_mut(*globalID).unwrap();
+
+                        *g = v;
+                    }
+                    GetGlobal { namespaceID, globalID } => {
+                        let n = self.namespaces.get(*namespaceID).unwrap();
+
+                        self.push(*n.globals.get(*globalID).unwrap())
+                    }
                     o => panic!("unimplemented opcode {:?}", o)
                 }
             }
@@ -645,6 +693,21 @@ impl VirtualMachine<'_> {
             let nn = n as *mut Namespace;
             if n.state == Loaded {
                 continue
+            }
+
+            for (index, g) in n.globalsMeta.iter_mut().enumerate() {
+                unsafe {
+                    let mut ctx = ExpressionCtx{
+                        exp: &g.default,
+                        ops: &mut vec![],
+                        functionReturns: &functionReturns,
+                        vTable: &Default::default(),
+                        typeHint: None,
+                        currentNamespace: &*nn,
+                        vm: &*v,
+                    };
+                    g.typ = ctx.toDataType()?.unwrap();
+                }
             }
 
             for (index, f) in n.functionsMeta.iter_mut().enumerate() {

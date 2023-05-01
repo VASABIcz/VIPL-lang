@@ -36,3 +36,4 @@ pub mod std;
 pub mod errors;
 pub mod utils;
 pub mod vm;
+pub mod regix;

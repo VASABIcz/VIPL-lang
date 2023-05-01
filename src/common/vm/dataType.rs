@@ -19,6 +19,24 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn isString(&self) -> bool {
+        match self {
+            Object(o) => {
+                return o.name.as_str() == "String"
+            }
+            _ => false
+        }
+    }
+
+    pub fn isArray(&self) -> bool {
+        match self {
+            Object(o) => {
+                return o.name.as_str() == "Array"
+            }
+            _ => false
+        }
+    }
+
     pub fn asArray(&self) -> Result<&ObjectMeta,Box<dyn Error>>  {
         match self {
             Object(o) => {

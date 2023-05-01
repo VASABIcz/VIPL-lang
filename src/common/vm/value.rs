@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Formatter};
+use std::mem::transmute;
 use crate::ast::Expression;
 use crate::vm;
 use crate::vm::dataType::DataType;
@@ -21,6 +22,13 @@ pub union Value {
 impl Debug for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.asNum())
+    }
+}
+
+impl Into<usize> for Value {
+    #[inline]
+    fn into(self) -> usize {
+        unsafe { transmute(self) }
     }
 }
 

@@ -3,13 +3,16 @@ use std::error::Error;
 use std::mem::transmute;
 
 use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
-use crate::bytecodeGen::genFunctionDef;
+use crate::bytecodeGen::{ExpressionCtx, genFunctionDef};
+use crate::errors::Errorable;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
+use crate::vm::heap::{Allocation, HayCollector};
+use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::{OpCode, VirtualMachine};
@@ -49,6 +52,18 @@ pub struct StructMeta {
     pub fieldsLookup: HashMap<String, usize>,
     pub fields: Vec<VariableMetadata>
     // TODO default values
+}
+
+impl StructMeta {
+    pub fn findField(&self, name: &str) -> Errorable<(&VariableMetadata, usize)> {
+        let fieldId = self.fieldsLookup.get(name)
+            .ok_or(format!("failed to find field {} on struct {}", name, self.name))?;
+
+        let field = self.fields.get(*fieldId)
+            .ok_or(format!("failed to find field with id {} on struct {}", fieldId, self.name))?;
+
+        Ok((field, *fieldId))
+    }
 }
 
 impl FunctionMeta {
@@ -138,20 +153,34 @@ pub struct Namespace {
     pub state: NamespaceState,
 
     pub functionsLookup: HashMap<String, usize>,
-    pub globalsLookup: HashMap<String, usize>,
-    pub structLookup: HashMap<String, usize>,
-
     pub functionsMeta: Vec<FunctionMeta>,
     pub functions: Vec<Option<LoadedFunction>>,
 
+    pub globalsLookup: HashMap<String, usize>,
     pub globalsMeta: Vec<GlobalMeta>,
     pub globals: Vec<Value>,
 
+    pub structLookup: HashMap<String, usize>,
     pub structs: Vec<StructMeta>,
+
+    pub stringsLookup: HashMap<String, usize>,
+    pub strings: Vec<*mut Str>
+}
+
+impl Allocation for Namespace {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        for s in &self.strings {
+            allocations.visit(*s as usize)
+        }
+
+        for s in &self.globals {
+            allocations.visit((*s).into())
+        }
+    }
 }
 
 impl Namespace {
-    pub fn getFunctionByName(&self, name: &str) -> Option<(&FunctionMeta, usize)> {
+    pub fn findFunction(&self, name: &str) -> Option<(&FunctionMeta, usize)> {
         println!("i am here");
         let id = self.functionsLookup.get(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name))?;
         match self.functionsMeta.get(*id) {
@@ -160,6 +189,32 @@ impl Namespace {
                 Some((v, *id))
             }
         }
+    }
+
+    pub fn findGlobal(&self, name: &str) -> Errorable<(&GlobalMeta, usize)> {
+        let gId = self.globalsLookup.get(name)
+            .ok_or(format!("failed to find global varibale with name {}, in namespace {}", name, self.name))?;
+
+        let g = self.globalsMeta.get(*gId).ok_or(format!("failed to find global varibale with id {}", gId))?;
+
+        Ok((g, *gId))
+    }
+
+    pub fn findStruct(&self, name: &str) -> Errorable<(&StructMeta, usize)> {
+        let structId = self.structLookup.get(name)
+            .ok_or(format!("failed to find struct with name {}, in namespace {}", name, self.name))?;
+
+        let struc = self.structs.get(*structId).ok_or(format!("failed to find struct with id {}", structId))?;
+
+        Ok((struc, *structId))
+    }
+
+    pub fn findStructField(&self, structName: &str, fieldName: &str) -> Errorable<(&StructMeta, usize, &VariableMetadata, usize)> {
+        let (struc, structId) = self.findStruct(structName)?;
+
+        let (field, fieldId) = struc.findField(fieldName)?;
+
+        Ok((struc, structId, field, fieldId))
     }
 
     pub fn makeNative(
@@ -177,25 +232,32 @@ impl Namespace {
         self.functions.push(Some(LoadedFunction::BuiltIn(fun)));
     }
 
-    pub fn registerFunctionDef(&mut self, d: FunctionMeta) -> usize {
+    pub fn registerFunctionDef(&self, d: FunctionMeta) -> usize {
+        let mS = unsafe { &mut *(self as *const Namespace as *mut Namespace) };
+
         let index = self.functionsMeta.len();
-        self.functionsLookup.insert(d.genName(), index);
-        self.functionsMeta.push(d);
-        self.functions.push(None);
+        mS.functionsLookup.insert(d.genName(), index);
+        mS.functionsMeta.push(d);
+        mS.functions.push(None);
+
         index
     }
 
-    pub fn registerStruct(&mut self, d: StructMeta) {
+    pub fn registerStruct(&mut self, d: StructMeta) -> usize {
         let index = self.structs.len();
         self.structLookup.insert(d.name.clone(), index);
         self.structs.push(d);
+
+        index
     }
 
-    pub fn registerGlobal(&mut self, global: GlobalMeta) {
+    pub fn registerGlobal(&mut self, global: GlobalMeta) -> usize {
         let index = self.globals.len();
         self.globalsLookup.insert(global.name.as_str().to_string(), index);
         self.globalsMeta.push(global);
-        self.globals.push(Value::from(0))
+        self.globals.push(Value::from(0));
+
+        index
     }
 
     pub fn new(name: String) -> Self {
@@ -211,6 +273,8 @@ impl Namespace {
             globalsMeta: vec![],
             globals: vec![],
             structs: vec![],
+            stringsLookup: Default::default(),
+            strings: vec![],
         }
     }
 
@@ -237,14 +301,18 @@ impl Namespace {
                         Node::FunctionDef(d) => {
                             n.registerFunctionDef(d.into());
                         }
-                        Node::StructDef(v) => n.registerStruct(v.into()),
+                        Node::StructDef(v) => {
+                            n.registerStruct(v.into());
+                        }
                         Node::Import(_) => todo!(),
                         // TODO default value
-                        Node::GlobalVarDef(name, default) => n.registerGlobal(GlobalMeta{
-                            name,
-                            default,
-                            typ: DataType::Void,
-                        })
+                        Node::GlobalVarDef(name, default) => {
+                            n.registerGlobal(GlobalMeta{
+                                name,
+                                default,
+                                typ: DataType::Void,
+                            });
+                        }
                     }
                 }
                 Operation::Statement(v) => {

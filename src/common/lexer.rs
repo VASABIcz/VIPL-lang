@@ -87,6 +87,16 @@ impl SourceProvider<'_> {
         })
     }
 
+    pub fn assertConsume(&mut self, s: &str) -> Result<(), Box<dyn Error>> {
+        if !self.isPeek(s) {
+            None.ok_or(format!("expected {}", s))?
+        }
+        else {
+            self.consumeMany(s.len());
+            Ok(())
+        }
+    }
+
     pub fn isPeekOffset(&self, s: &str, offset: usize) -> bool {
         self.peekStr(s.len()+offset).map_or(false, |it| {
             &it[offset..] == s

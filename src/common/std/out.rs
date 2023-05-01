@@ -1,9 +1,11 @@
+use crate::ast::Expression;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::myStr::MyStr;
-use crate::vm::namespace::Namespace;
+use crate::vm::namespace::{GlobalMeta, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {
@@ -76,6 +78,14 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         },
         None,
     );
+
+    let index = namespace.registerGlobal(GlobalMeta{
+        name: "newLine".to_string(),
+        default: Expression::CharLiteral('\n'),
+        typ: DataType::Char,
+    });
+
+    *namespace.globals.get_mut(index).unwrap() = Value::from('\n');
 
     namespace.state = Loaded;
     vm.registerNamespace(namespace);

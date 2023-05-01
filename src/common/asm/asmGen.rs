@@ -234,7 +234,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 generator.push(R12.into());
                 generator.push(R12.into());
             }
-            OpCode::PushLocal { index } => pushLocal(generator, *index),
+            OpCode::GetLocal { index } => pushLocal(generator, *index),
             OpCode::SetLocal { index, typ } => setLocal(generator, *index),
             OpCode::Jmp { offset, jmpType } => {
                 let l = jmpLookup.get(&i).unwrap().clone();
@@ -359,7 +359,11 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::SetField { .. } => {}
             OpCode::DynamicCall => todo!(),
             OpCode::PushFunction(_, _) => todo!(),
-            OpCode::Swap => todo!()
+            OpCode::Swap => todo!(),
+            OpCode::StringLength => todo!(),
+            OpCode::SetGlobal { .. } => todo!(),
+            OpCode::GetGlobal { .. } => todo!(),
+            OpCode::ConstStr(_) => todo!()
         }
     }
 }

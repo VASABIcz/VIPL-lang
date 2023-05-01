@@ -52,7 +52,7 @@ pub enum Expression {
     ArrayIndexing(Box<ArrayAccess>),
     NotExpression(Box<Expression>),
     NamespaceAccess(Vec<String>),
-    Lambda(Vec<VariableMetadata>, DataType),
+    Lambda(Vec<(String, Option<DataType>)>, Vec<Statement>),
     Callable(Box<Expression>, Vec<Expression>),
     StructInit(String, Vec<(String, Expression)>),
     FieldAccess(Box<Expression>, String),
@@ -91,7 +91,7 @@ pub struct FunctionCall {
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     While(While),
     If(If),
@@ -120,12 +120,12 @@ pub enum ModType {
     Mul,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Return {
     pub exp: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct If {
     pub condition: Expression,
     pub body: Vec<Statement>,
@@ -182,7 +182,7 @@ impl FunctionDef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct While {
     pub exp: Expression,
     pub body: Vec<Statement>,

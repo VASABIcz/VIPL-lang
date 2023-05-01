@@ -1504,8 +1504,7 @@ impl ParsingUnit for CallableParsingUnit {
     }
 }
 
-/*
-TODO
+#[derive(Debug)]
 struct LambdaParsingUnit;
 
 impl ParsingUnit for LambdaParsingUnit {
@@ -1513,7 +1512,7 @@ impl ParsingUnit for LambdaParsingUnit {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OCB)
     }
 
@@ -1521,10 +1520,15 @@ impl ParsingUnit for LambdaParsingUnit {
         tokenProvider.getAssert(OCB)?;
         let res = tokenProvider.parseManyWithSeparatorUntil(|it| {
             let argName = it.getIdentifier()?;
-            it.getAssert(Comma)?;
-            let typ = parseDataType(it)?;
-            Ok(VariableMetadata { name: argName.into(), typ })
-        }, Colon, LambdaBegin)?;
+            let a = if it.isPeekType(Comma) {
+                it.getAssert(Comma)?;
+                Some(parseDataType(it)?)
+            }
+            else {
+                None
+            };
+            Ok((argName, a))
+        }, Some(Colon), LambdaBegin)?;
 
         let mut statements = vec![];
 
@@ -1533,7 +1537,7 @@ impl ParsingUnit for LambdaParsingUnit {
         }
         tokenProvider.getAssert(CCB)?;
 
-
+        Ok(Operation::Expr(Expression::Lambda(res, statements)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1544,8 +1548,6 @@ impl ParsingUnit for LambdaParsingUnit {
         todo!()
     }
 }
-
- */
 
 #[derive(Debug)]
 struct IncParsingUnit;
@@ -1878,6 +1880,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit>> {
         Box::new(IncParsingUnit),
         Box::new(FieldAccessParsingUnit),
         Box::new(GlobalParsingUnit),
-        Box::new(ForParsingUnit)
+        Box::new(ForParsingUnit),
+        Box::new(LambdaParsingUnit)
     ]
 }
