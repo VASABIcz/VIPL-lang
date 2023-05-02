@@ -3,4 +3,4 @@ global myVar = 1
 myVar = 2
 
 out::print(myVar)
-out::print(out::newLine )
+out::print(out::newLine)

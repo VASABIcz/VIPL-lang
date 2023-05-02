@@ -10,3 +10,4 @@ pub mod namespace;
 // mod tests;
 pub mod nativeStack;
 pub mod variableMetadata;
+pub mod nativeObjects;
