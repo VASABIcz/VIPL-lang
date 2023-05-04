@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
-use crate::vm::objects::ViplObject;
+use crate::vm::nativeObjects::ViplObject;
 
 
-static strCache: Option<Mutex<HashMap<String, ViplObject>>> = None;
+// static strCache: Option<Mutex<HashMap<String, ViplObject>>> = None;

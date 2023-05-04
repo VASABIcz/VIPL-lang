@@ -5,6 +5,7 @@ use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{GlobalMeta, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::objects::Str;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
@@ -59,7 +60,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         }]),
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            let str = c.asRef().getStr();
+            let str = c.asRef::<Str>().data;
             println!("{}", str.string);
         },
         None,
@@ -73,7 +74,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         }]),
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            let str = c.asRef().getStr();
+            let str = c.asRef::<Str>().data;
             println!("{}", str.string);
         },
         None,

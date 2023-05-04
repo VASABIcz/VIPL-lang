@@ -17,7 +17,9 @@ use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
 use crate::vm::namespaceLoader::NamespaceLoader;
+use crate::vm::nativeObjects::ObjectType;
 use crate::vm::nativeStack::StackManager;
+use crate::vm::objects::Array;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
@@ -258,7 +260,14 @@ impl VirtualMachine<'_> {
         for v in &self.stack {
             println!("num {}", v.asNum() as usize);
             if self.heap.allocations.contains(&(v.asNum() as usize)) {
-                v.asRef().collectAllocations(&mut collector);
+                match v.asRefMeta().objectType {
+                    ObjectType::Simple => {
+                        todo!()
+                    }
+                    ObjectType::Native(v) => {
+                        todo!()
+                    }
+                }
             }
         }
         frame.collect(self, &mut collector);
@@ -513,7 +522,7 @@ impl VirtualMachine<'_> {
                         self.stack.push(*arr.internal.get(index as usize).unwrap());
                     }
                     ArrayLength => {
-                        self.stack.push(Value { Num: self.pop().getReference().getArr().internal.len() as isize });
+                        self.stack.push(Value { Num: self.pop().getReference::<Array>().data.internal.len() as isize });
                     },
                     // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
                     Inc { typ, index } => unsafe {
@@ -555,7 +564,6 @@ impl VirtualMachine<'_> {
 
                         let mut fs = StackFrame{
                             localVariables: &mut locals,
-                            objects: None,
                             previous: None,
                             programCounter: 0,
                             namespace: frame.namespace,
@@ -583,7 +591,6 @@ impl VirtualMachine<'_> {
 
                         let mut fs = StackFrame{
                             localVariables: &mut locals,
-                            objects: None,
                             previous: None,
                             programCounter: 0,
                             namespace: frame.namespace,
@@ -619,7 +626,6 @@ impl VirtualMachine<'_> {
 
                         let mut fs = StackFrame{
                             localVariables: &mut locals,
-                            objects: None,
                             previous: None,
                             programCounter: 0,
                             namespace: frame.namespace,

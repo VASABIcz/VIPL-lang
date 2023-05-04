@@ -1,13 +1,11 @@
 use crate::vm::heap::{Hay, HayCollector};
 use crate::vm::namespace::Namespace;
-use crate::vm::objects::ViplObject;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
 #[derive(Debug)]
 pub struct StackFrame<'a> {
     pub localVariables: &'a mut [Value],
-    pub objects: Option<Vec<Hay<ViplObject>>>,
     pub previous: Option<&'a StackFrame<'a>>,
     pub programCounter: usize,
     pub namespace: &'a Namespace,

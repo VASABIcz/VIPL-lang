@@ -9,9 +9,11 @@ use libc::{exit, sleep};
 
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
+use crate::vm::heap::Hay;
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::Namespace;
-use crate::vm::objects::{Str, ViplObject};
+use crate::vm::nativeObjects::ViplObject;
+use crate::vm::objects::{Array, Str};
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
@@ -84,34 +86,28 @@ pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
 }
 
 #[no_mangle]
-pub extern fn arrSetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize, value: isize) {
+pub extern fn arrSetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize, value: isize) {
     if DEBUG {
         println!("[ffi] arrSetInt");
     }
-    match obj {
-        ViplObject::Arr(a) => *a.internal.get_mut(index).unwrap().getRefNum() = value,
-        _ => panic!(),
-    }
+    *(obj.data.internal.get_mut(index).unwrap().getRefNum()) = value.into()
 }
 
 #[no_mangle]
-pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> u8 {
+pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject<Str>, index: usize) -> u8 {
     if DEBUG {
         println!("[ffi] stringGetChar");
     }
 
-    *obj.getStr().string.as_bytes().get(index).unwrap()
+    *obj.data.string.as_bytes().get(index).unwrap()
 }
 
 #[no_mangle]
-pub extern fn arrGetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject, index: usize) -> isize {
+pub extern fn arrGetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] arrGetInt");
     }
-    match obj {
-        ViplObject::Arr(a) => a.internal.get(index).unwrap().getNumRef(),
-        _ => panic!(),
-    }
+    obj.data.internal.get(index).unwrap().getNumRef()
 }
 
 #[no_mangle]
@@ -124,33 +120,33 @@ pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
 }
 
 #[no_mangle]
-pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject {
+pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject<Str> {
     if DEBUG {
         println!("[ffi] stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
     let d = unsafe { &mut *vm };
     let a1 = Str::new(st);
-    let aw = a1.into();
+    let aw = ViplObject::<Str>::str(a1);
     let all = d.heap.allocate(aw);
-    let mut a = Value{Reference: all};
+    let mut a = Value::from(all);
 
-    a.asMutRef() as *mut ViplObject
+    a.asMutRef() as *mut ViplObject<Str>
 }
 
 #[no_mangle]
 pub extern fn strConcat(
     vm: &mut VirtualMachine,
     _locals: &mut StackFrame,
-    s1: &mut ViplObject,
-    s2: &mut ViplObject,
-) -> *mut ViplObject {
+    s1: &mut ViplObject<Str>,
+    s2: &mut ViplObject<Str>,
+) -> *mut ViplObject<Str> {
     if DEBUG {
         println!("[ffi] strConcat");
     }
     let mut s3 = String::new();
-    s3.push_str(&s1.getStr().string);
-    s3.push_str(&s2.getStr().string);
+    s3.push_str(&s1.data.string);
+    s3.push_str(&s2.data.string);
 
     // FIXME not sure if this is needed
     let ptr = Value::makeString(s3, vm);
@@ -183,7 +179,6 @@ pub extern fn LCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
 
     let fr = StackFrame {
         localVariables: &mut buf,
-        objects: None,
         previous: None,
         programCounter: 0,
         namespace,
@@ -208,14 +203,14 @@ pub struct NativeWrapper {
 
     pub getLocalsValue: extern fn(&mut StackFrame, usize) -> isize,
 
-    pub arrGetValue: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> isize,
+    pub arrGetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize) -> isize,
 
-    pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject, usize, isize),
+    pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
     pub call: extern fn(&mut VirtualMachine, *const c_char),
-    pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject,
-    pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject, usize) -> u8,
-    pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject, &mut ViplObject) -> *mut ViplObject,
+    pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
+    pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
+    pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,
     pub LCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value
 }
 

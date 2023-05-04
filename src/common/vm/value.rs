@@ -5,9 +5,20 @@ use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::*;
 
-use crate::vm::heap::Hay;
-use crate::vm::objects::{Array, Str, ViplObject};
+use crate::vm::heap::{Allocation, Hay, HayCollector};
+use crate::vm::nativeObjects::{ObjectMeta, UntypedObject, ViplNativeObject, ViplObject};
+use crate::vm::objects::{Array, Str};
 use crate::vm::vm::VirtualMachine;
+
+
+#[derive(Copy, Clone, Debug)]
+pub struct Xd;
+
+impl Allocation for Xd {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        todo!()
+    }
+}
 
 #[derive(Copy, Clone)]
 pub union Value {
@@ -15,7 +26,7 @@ pub union Value {
     pub Flo: f64,
     pub Bol: bool,
     pub Chr: char,
-    pub Reference: Hay<ViplObject>,
+    pub Reference: Hay<Xd>,
     pub FunctionPointer: (u32, u32)
 }
 
@@ -77,24 +88,50 @@ impl From<bool> for Value {
 impl From<usize> for Value {
     #[inline]
     fn from(val: usize) -> Self {
-        Value{Reference: Hay::new(val as *mut ViplObject)}
+        Value{Reference: Hay::new(val as *mut () as *mut Xd)}
+    }
+}
+
+impl<T: Allocation + Debug> Into<Hay<Xd>> for Hay<ViplObject<T>> {
+    fn into(self) -> Hay<Xd> {
+        Hay::new(self.inner as *mut Xd)
     }
 }
 
 impl Value {
     #[inline(always)]
-    pub fn asHay(&self) -> Hay<ViplObject> {
-        unsafe { self.Reference }
+    pub fn asHay<T: Allocation + Debug>(&self) -> Hay<ViplObject<T>> {
+        let casted = self.Reference.inner as *mut ViplObject<T>;
+
+        return Hay::new(casted)
     }
 
     #[inline(always)]
-    pub fn asRef(&self) -> &ViplObject {
-        unsafe { &self.Reference }
+    pub fn asHayUntyped(&self) -> Hay<Xd> {
+        let casted = self.Reference.inner as *mut Xd;
+
+        return Hay::new(casted)
     }
 
     #[inline(always)]
-    pub fn asMutRef(&mut self) -> &mut ViplObject {
-        unsafe { &mut self.Reference }
+    pub fn asRef<T: Allocation + Debug>(&self) -> &ViplObject<T> {
+        let casted = self.Reference.inner as *mut ViplObject<T>;
+
+        unsafe { &*casted }
+    }
+
+    #[inline(always)]
+    pub fn asRefMeta(&self) -> &UntypedObject {
+        let casted = self.Reference.inner as *mut UntypedObject;
+
+        unsafe { &*casted }
+    }
+
+    #[inline(always)]
+    pub fn asMutRef<T: Allocation + Debug>(&mut self) -> &mut ViplObject<T> {
+        let casted = self.Reference.inner as *mut ViplObject<T>;
+
+        unsafe { &mut *casted }
     }
 
     #[inline(always)]
@@ -145,7 +182,7 @@ impl Value {
                         buf.push_str(str1);
                         buf.push_str(str2);
 
-                        unsafe { self.Reference = Value::makeString(buf, vm).asHay() }
+                        unsafe { self.Reference = Value::makeString(buf, vm).asHayUntyped() }
                     }
                     _ => panic!()
                 }
@@ -417,12 +454,12 @@ impl Value {
     }
 
     #[inline(always)]
-    pub fn getReference(&self) -> &ViplObject {
+    pub fn getReference<T: Allocation + Debug>(&self) -> &ViplObject<T> {
         self.asRef()
     }
 
     #[inline(always)]
-    pub fn getMutReference(&mut self) -> &mut ViplObject {
+    pub fn getMutReference<T: Allocation + Debug>(&mut self) -> &mut ViplObject<T> {
         self.asMutRef()
     }
 }
@@ -430,18 +467,22 @@ impl Value {
 impl Value {
     #[inline(always)]
     pub fn getString(&self) -> &String {
-        &self.asRef().getStr().string
+        &self.asRef::<Str>().data.string
     }
 
     #[inline(always)]
     pub fn getMutArray(&mut self) -> &mut Array {
-        self.asMutRef().getMutArr()
+        &mut self.asMutRef::<Array>().data
     }
 
     // FIXME not sure why inline never :D
     #[inline(never)]
     pub fn makeString(str: String, vm: &mut VirtualMachine) -> Value {
-        Value{Reference: vm.heap.allocate(Str::new(str).into())}
+        let obj = ViplObject::<Str>::str(Str::new(str));
+
+        let hObj = vm.heap.allocate(obj);
+
+        Value{Reference: hObj.into()}
     }
 
     pub fn makeFunction(namespaceID: u32, functionID: u32) -> Value {
@@ -456,7 +497,7 @@ impl Value {
 
     #[inline]
     pub fn makeArray(arr: Vec<Value>, typ: DataType, vm: &mut VirtualMachine) -> Value {
-        Value{Reference: vm.heap.allocate(Array{internal: arr, typ}.into())}
+        Value{Reference: vm.heap.allocate(ViplObject::<Array>::arr(Array{internal: arr, typ})).into()}
     }
 
     #[inline]

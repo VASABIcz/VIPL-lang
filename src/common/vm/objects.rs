@@ -3,90 +3,16 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use crate::vm::dataType::DataType;
-use crate::vm::heap::{Allocation, HayCollector};
-use crate::vm::value::Value;
+use crate::vm::heap::{Allocation, Hay, HayCollector};
+use crate::vm::nativeObjects::ViplObject;
+use crate::vm::value::{Value, Xd};
 
-#[derive(Debug, Clone)]
-pub enum ViplObject {
-    Arr(Array),
-    Str(Str),
-    // Runtime(Box<dyn Object>),
-}
-
-impl Allocation for ViplObject {
-    fn collectAllocations(&self, allocations: &mut HayCollector) {
-        match self {
-            ViplObject::Arr(v) => v.collectAllocations(allocations),
-            ViplObject::Str(v) => v.collectAllocations(allocations)
-        }
-    }
-}
-
-unsafe impl Sync for ViplObject {
+unsafe impl<T: Allocation + Debug> Sync for ViplObject<T> {
 
 }
 
-unsafe impl Send for ViplObject {
+unsafe impl<T: Allocation + Debug> Send for ViplObject<T> {
 
-}
-
-impl ViplObject {
-    #[inline]
-    pub fn getArr(&self) -> &Array {
-        match self {
-            ViplObject::Arr(v) => v,
-            _ => panic!(),
-        }
-    }
-
-    #[inline]
-    pub fn toArr(self) -> Array {
-        match self {
-            ViplObject::Arr(v) => v,
-            _ => panic!(),
-        }
-    }
-
-    #[inline]
-    pub fn getMutArr(&mut self) -> &mut Array {
-        match self {
-            ViplObject::Arr(v) => v,
-            v => panic!("{:?}", v),
-        }
-    }
-
-    #[inline(always)]
-    pub fn getStr(&self) -> &Str {
-        match self {
-            ViplObject::Str(v) => v,
-            v => panic!("{:?}", v),
-        }
-    }
-
-    #[inline]
-    pub fn toStr(self) -> Str {
-        match self {
-            ViplObject::Str(v) => v,
-            v => panic!("{:?}", v),
-        }
-    }
-
-    #[inline]
-    pub fn getMutStr(&mut self) -> &mut Str {
-        match self {
-            ViplObject::Str(v) => v,
-            _ => panic!(),
-        }
-    }
-
-    #[inline]
-    pub fn asObj(&self) -> &dyn Object {
-        match self {
-            ViplObject::Arr(a) => a,
-            ViplObject::Str(a) => a,
-            // ViplObject::Runtime(v) => &**v,
-        }
-    }
 }
 
 pub trait Object: Debug + Any + Allocation {
@@ -156,14 +82,22 @@ impl Str {
     }
 }
 
-impl From<Str> for ViplObject {
+impl<T: Allocation + Debug> From<Hay<T>> for Value {
+    fn from(value: Hay<T>) -> Self {
+        Self {
+            Reference: Hay::new(value.inner as *mut Xd)
+        }
+    }
+}
+
+impl<T: Allocation + Debug> From<Str> for ViplObject<T> {
     #[inline]
     fn from(val: Str) -> Self {
         ViplObject::Str(val)
     }
 }
 
-impl From<Array> for ViplObject {
+impl From<Array> for ViplObject<Array> {
     #[inline]
     fn from(val: Array) -> Self {
         ViplObject::Arr(val)

@@ -2,8 +2,19 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::StructMeta;
+use crate::vm::objects::{Array, Str};
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
+
+fn blankDestroy<T>(this: &mut T, vm: &mut VirtualMachine) {}
+
+fn blankGetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value> { return None }
+
+fn blankSetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize, value: Value) {}
+
+fn blankCollect<T>(this: &mut T, vm: &mut VirtualMachine, allocations: &mut HayCollector) {
+
+}
 
 pub trait NativeObject: Allocation + Debug {
     fn getField(&mut self, field: usize, vm: &mut VirtualMachine) -> Option<Value>;
@@ -13,23 +24,95 @@ pub trait NativeObject: Allocation + Debug {
     fn destroy(&mut self, vm: &mut VirtualMachine);
 }
 
-enum ObjectType {
+pub struct ViplNativeObject<T: Debug> {
+    pub getField: fn (&mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value>,
+    pub setField: fn (&mut T, vm: &mut VirtualMachine, index: usize, value: Value) -> (),
+    pub destroy: fn (&mut T, vm: &mut VirtualMachine) -> (),
+    pub collect: fn (&mut T, vm: &mut VirtualMachine, allocations: &mut HayCollector) -> ()
+}
+
+impl<T: Allocation + Debug> Default for ViplNativeObject<T> {
+    fn default() -> Self {
+        Self {
+            getField: blankGetField,
+            setField: blankSetField,
+            destroy: blankDestroy,
+        }
+    }
+}
+
+pub struct SimpleObjectWrapper<const N: usize> {
+    pub fields: [Value; N]
+}
+
+impl<const N: usize> Allocation for SimpleObjectWrapper<N> {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        for c in self.fields {
+            allocations.visitHay(c.asHay())
+        }
+    }
+}
+
+pub enum ObjectType<T: Debug> {
     Simple,
-    Complex
+    Native(ViplNativeObject<T>)
 }
 
-struct SimpleVipleObject {
-    namespaceId: usize,
-    structId: usize,
-    typ: ObjectType,
-    data: [Value]
+pub struct ObjectMeta<T: Debug> {
+    pub namespaceId: usize,
+    pub structId: usize,
+    pub objectType: ObjectType<T>,
 }
 
-struct ComplexVipleObject {
-    namespaceId: usize,
-    structId: usize,
-    typ: ObjectType,
-    obj: dyn NativeObject
+impl<T: Allocation + Debug> Clone for ObjectMeta<T> {
+    fn clone(&self) -> Self {
+        Self {
+            namespaceId: *self.namespaceId,
+            structId: *self.structId,
+            objectType: ObjectType::Simple,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ViplObject<T: Allocation + Debug> {
+    pub meta: ObjectMeta<T>,
+    pub data: T
+}
+
+impl<T: Allocation + Debug> ViplObject<T> {
+    pub fn arr(arr: Array) -> ViplObject<Array> {
+        ViplObject{ meta: ObjectMeta {
+            namespaceId: 0,
+            structId: 1,
+            objectType: ObjectType::Native(ViplNativeObject {
+                getField: blankGetField,
+                setField: blankSetField,
+                destroy: blankDestroy,
+            }),
+        }, data: arr }
+    }
+
+    pub fn str(str: Str) -> ViplObject<Str> {
+        ViplObject{ meta: ObjectMeta {
+            namespaceId: 0,
+            structId: 1,
+            objectType: ObjectType::Native(ViplNativeObject {
+                getField: blankGetField,
+                setField: blankSetField,
+                destroy: blankDestroy,
+            }),
+        }, data: str
+        }
+    }
+}
+
+pub type UntypedObject = ObjectMeta<()>;
+
+impl<T: Allocation + Debug> Allocation for ViplObject<T> {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        self.data.collectAllocations(allocations)
+    }
 }
 
 #[derive(Debug)]
