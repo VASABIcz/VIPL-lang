@@ -65,6 +65,13 @@ impl DataType {
         })
     }
 
+    pub fn obj(name: &'static str) -> Self {
+        Object(ObjectMeta {
+            name: MyStr::Static(name),
+            generics: Box::new([]),
+        })
+    }
+
     pub fn toString(&self) -> String {
         match self {
             Int => "int".to_string(),
@@ -127,4 +134,13 @@ impl Generic {
 pub struct ObjectMeta {
     pub name: MyStr,
     pub generics: Box<[Generic]>,
+}
+
+impl ObjectMeta {
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name: MyStr::Static(name),
+            generics: Box::new([]),
+        }
+    }
 }

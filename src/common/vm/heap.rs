@@ -2,23 +2,25 @@ use std::collections::HashSet;
 
 use std::ops::{Deref, DerefMut};
 use std::process::exit;
+use crate::vm::nativeObjects::UntypedObject;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 pub trait Allocation {
     fn collectAllocations(&self, allocations: &mut HayCollector);
 }
 
-#[derive(Default)]
-pub struct HayCollector {
-    pub visited: HashSet<usize>
+pub struct HayCollector<'a> {
+    pub visited: HashSet<usize>,
+    pub allocated: &'a HashSet<usize>
 }
 
-impl HayCollector {
+impl HayCollector<'_> {
     #[inline]
-    pub fn new() -> Self {
-        Self {
+    pub fn new(allocated: &HashSet<usize>) -> HayCollector {
+        HayCollector {
             visited: Default::default(),
+            allocated,
         }
     }
 
@@ -92,18 +94,22 @@ impl Heap {
         Hay::new(ptr)
     }
 
-    pub fn gc(&mut self, collected: HayCollector) {
-        let unreachable = self.allocations.difference(&collected.visited);
+    pub fn gc(&mut self, collected: HashSet<usize>) {
+        let unreachable = self.allocations.difference(&collected);
         let mut count = 0;
         for u in unreachable {
             count += 1;
-            unsafe { Box::from_raw(*u as *mut ()) };
+
+            let obj = *u as *mut UntypedObject;
+            unsafe { (&mut *obj).free() }
+
+            unsafe { drop(Box::from_raw(*u as *mut ())) };
         }
         if DEBUG {
             println!("freed {} object", count);
-            println!("currently allocated {}", collected.visited.len());
+            println!("currently allocated {}", collected.len());
         }
-        self.allocations = collected.visited
+        self.allocations = collected
     }
 
     pub fn contains(&self, ptr: usize) -> bool {

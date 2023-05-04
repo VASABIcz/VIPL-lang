@@ -4,7 +4,8 @@ use crate::errors::Errorable;
 use crate::lexer::SourceProvider;
 use crate::regix::Regix::{Char, Not};
 
-enum Regix {
+#[derive(Debug)]
+pub enum Regix {
     Any,
     Numeric,
     Whitespace,

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use crate::vm::dataType::DataType;
 use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::nativeObjects::ViplObject;
+use crate::vm::nativeObjects::{ViplObjectMeta, ObjectType, UntypedObject, ViplNativeObject, ViplObject};
 use crate::vm::value::{Value, Xd};
 
 unsafe impl<T: Allocation + Debug> Sync for ViplObject<T> {
@@ -90,17 +90,25 @@ impl<T: Allocation + Debug> From<Hay<T>> for Value {
     }
 }
 
-impl<T: Allocation + Debug> From<Str> for ViplObject<T> {
+impl From<Str> for ViplObject<Str> {
     #[inline]
     fn from(val: Str) -> Self {
-        ViplObject::Str(val)
+        ViplObject{ meta: ViplObjectMeta {
+            namespaceId: 0,
+            structId: 0,
+            objectType: ObjectType::Native(ViplNativeObject::default()),
+        }, data: val }
     }
 }
 
 impl From<Array> for ViplObject<Array> {
     #[inline]
     fn from(val: Array) -> Self {
-        ViplObject::Arr(val)
+        ViplObject{ meta: ViplObjectMeta {
+            namespaceId: 0,
+            structId: 1,
+            objectType: ObjectType::Native(ViplNativeObject::default()),
+        }, data: val }
     }
 }
 
@@ -157,7 +165,10 @@ impl Allocation for Array {
         allocations.visit(self as *const Self as usize);
         if let DataType::Object(_a) = &self.typ {
             for obj in &self.internal {
-                obj.asRef();
+                match obj.asRef::<Xd>().meta.objectType {
+                    ObjectType::Simple(_) => todo!(),
+                    ObjectType::Native(_) => todo!()
+                }
             }
         }
     }

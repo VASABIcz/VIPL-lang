@@ -212,7 +212,7 @@ impl ExpressionCtx<'_> {
                         if !self.vTable.contains_key(&MyStr::Static(&v)) {
                             println!("hello {:?} {:?} {:?}", prev, args, self.vTable);
                             let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                            let funcId = self.currentNamespace.findFunction(&genName).ok_or(format!("could not find function with type {}", &genName))?;
+                            let funcId = self.currentNamespace.findFunction(&genName)?;
                             return Ok(funcId.0.returnType.clone())
                         }
                         else {
@@ -227,17 +227,16 @@ impl ExpressionCtx<'_> {
                     }
                     else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
                         println!("{:?}", self.functionReturns);
-                        let namespaceName = v[..v.len()-1].join("::");
 
                         let (namespace, namespaceID) = self.vm.findNamespaceParts(&v[..v.len()-1])?;
 
-                        println!("namespaceName {}", namespaceName);
+                        println!("namespaceName {}", namespace.name);
 
                         let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
 
                         println!("lookup {}", &genName);
 
-                        let funcId = namespace.findFunction(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
+                        let funcId = namespace.findFunction(&genName)?;
                         return Ok(funcId.0.returnType.clone())
                     }
                 }
@@ -645,7 +644,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             });
         }
         Statement::NamespaceFunction(path, f) => {
-            println!("{:?}", ctx.functionReturns);
+            println!("XDDDD {:?}", ctx.functionReturns);
             let t = f.arguments.iter().map(|it| {
                 ctx.makeExpressionCtx(it, None).toDataType().unwrap().unwrap()
             }).collect::<Vec<_>>();
@@ -979,10 +978,12 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 }
                 else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
                     let genName = genFunName(v.last().unwrap(), &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                    let namespaceName = v[0..v.len()-1].join("::");
-                    let funcId = r.vm.namespaces.get(*r.vm.namespaceLookup.get(&namespaceName).unwrap()).unwrap().functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName)).unwrap();
 
-                    r.ops.push(LCall { namespace: 0, id: *funcId });
+                    let (namespace, namespaceId) = r.vm.findNamespaceParts(&v[0..v.len()-1]).unwrap();
+
+                    let (func, funcId) = namespace.findFunction(&genName)?;
+
+                    r.ops.push(LCall { namespace: namespaceId, id: funcId });
                 }
                 else {
                     genExpression(r.constructCtx(prev))?;

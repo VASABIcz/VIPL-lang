@@ -6,7 +6,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::*;
 
 use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::nativeObjects::{ObjectMeta, UntypedObject, ViplNativeObject, ViplObject};
+use crate::vm::nativeObjects::{ViplObjectMeta, UntypedObject, ViplNativeObject, ViplObject};
 use crate::vm::objects::{Array, Str};
 use crate::vm::vm::VirtualMachine;
 
@@ -28,6 +28,14 @@ pub union Value {
     pub Chr: char,
     pub Reference: Hay<Xd>,
     pub FunctionPointer: (u32, u32)
+}
+
+impl Allocation for Value {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        if allocations.allocated.contains(&(self.asRefMeta() as *const UntypedObject as usize)) {
+            self.asRefMeta().collectAllocations(allocations)
+        }
+    }
 }
 
 impl Debug for Value {
@@ -101,35 +109,33 @@ impl<T: Allocation + Debug> Into<Hay<Xd>> for Hay<ViplObject<T>> {
 impl Value {
     #[inline(always)]
     pub fn asHay<T: Allocation + Debug>(&self) -> Hay<ViplObject<T>> {
-        let casted = self.Reference.inner as *mut ViplObject<T>;
+        let casted = self.asHayUntyped().inner as *mut ViplObject<T>;
 
         return Hay::new(casted)
     }
 
     #[inline(always)]
     pub fn asHayUntyped(&self) -> Hay<Xd> {
-        let casted = self.Reference.inner as *mut Xd;
-
-        return Hay::new(casted)
+        return unsafe { self.Reference }
     }
 
     #[inline(always)]
     pub fn asRef<T: Allocation + Debug>(&self) -> &ViplObject<T> {
-        let casted = self.Reference.inner as *mut ViplObject<T>;
+        let casted = self.asHayUntyped().inner as *mut ViplObject<T>;
 
         unsafe { &*casted }
     }
 
     #[inline(always)]
     pub fn asRefMeta(&self) -> &UntypedObject {
-        let casted = self.Reference.inner as *mut UntypedObject;
+        let casted = self.asHayUntyped().inner as *mut UntypedObject;
 
         unsafe { &*casted }
     }
 
     #[inline(always)]
     pub fn asMutRef<T: Allocation + Debug>(&mut self) -> &mut ViplObject<T> {
-        let casted = self.Reference.inner as *mut ViplObject<T>;
+        let casted = unsafe { self.Reference.inner } as *mut ViplObject<T>;
 
         unsafe { &mut *casted }
     }
@@ -147,6 +153,11 @@ impl Value {
     #[inline(always)]
     pub fn asNum(&self) -> isize {
         unsafe { self.Num }
+    }
+
+    #[inline(always)]
+    pub fn asUnsigned(&self) -> usize {
+        unsafe { transmute(self) }
     }
 
     #[inline(always)]

@@ -23,11 +23,29 @@ pub fn genFunNameMeta(name: &str, args: &[VariableMetadata], argsLen: usize) -> 
 }
 
 #[inline]
+pub fn genFunNameMetaTypes(name: &str, args: &[DataType], argsLen: usize) -> String {
+    format!("{}({})", name, typesToStringMeta(&args[0..argsLen]))
+}
+
+#[inline]
 pub fn argsToStringMeta(args: &[VariableMetadata]) -> String {
     let mut buf = String::new();
 
     for (i, arg) in args.iter().enumerate() {
         buf.push_str(&arg.typ.toString());
+        if i != args.len() - 1 {
+            buf.push_str(", ")
+        }
+    }
+    buf
+}
+
+#[inline]
+pub fn typesToStringMeta(args: &[DataType]) -> String {
+    let mut buf = String::new();
+
+    for (i, arg) in args.iter().enumerate() {
+        buf.push_str(&arg.toString());
         if i != args.len() - 1 {
             buf.push_str(", ")
         }

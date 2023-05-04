@@ -10,27 +10,23 @@ struct AnotherStruct {
 }
 
 x = MyStruct {
-    x: 10
-    y: 11
-    z: 12
+    x: 20
+    y: 21
+    z: 22
 }
 
 n = AnotherStruct {
     oldPos: MyStruct {
-        x: 10
-        y: 11
-        z: 12
+        x: 20
+        y: 21
+        z: 22
     }
     nwPos: MyStruct {
-        x: 10
-        y: 11
-        z: 12
+        x: 20
+        y: 21
+        z: 22
     }
 }
-
-y = x
-c = y.x
-n = [MyStruct{x: 1 y: 1 z: 1}]
 
 out::print("before")
 out::print(n.oldPos.x)

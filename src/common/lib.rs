@@ -12,6 +12,7 @@
 #![feature(core_intrinsics)]
 #![feature(adt_const_params)]
 #![feature(generic_const_exprs)]
+#![feature(fn_traits)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

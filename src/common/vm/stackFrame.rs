@@ -1,5 +1,6 @@
-use crate::vm::heap::{Hay, HayCollector};
+use crate::vm::heap::{Allocation, Hay, HayCollector};
 use crate::vm::namespace::Namespace;
+use crate::vm::nativeObjects::ObjectType;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
@@ -16,7 +17,9 @@ impl StackFrame<'_> {
     pub fn collect(&self, vm: &VirtualMachine, collector: &mut HayCollector) {
         for local in self.localVariables.iter() {
             if vm.heap.contains(local.asNum() as usize) {
-                collector.visit(local.asNum() as usize)
+                collector.visit(local.asNum() as usize);
+                let m = local.asRefMeta();
+                m.collectAllocations(collector);
             }
         }
         if let Some(prev) = self.previous {

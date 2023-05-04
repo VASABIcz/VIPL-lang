@@ -19,7 +19,7 @@ fn main() {
     let res = loadSourceFile(fs::read_to_string(sourceFile).unwrap(), &mut vm).unwrap();
 
     println!("xd");
-    let n = Namespace::constructNamespace(res, name.join("::"), &mut vm, vec![]);
+    let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
     let id = vm.registerNamespace(n);
     vm.link();
 
@@ -32,7 +32,6 @@ fn main() {
     unsafe {
         f.as_ref().unwrap().call(&mut *c, StackFrame {
             localVariables: &mut xd,
-            objects: None,
             previous: None,
             programCounter: 0,
             namespace: nn,

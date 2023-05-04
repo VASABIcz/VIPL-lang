@@ -1,4 +1,5 @@
 use crate::ast::Expression;
+use crate::lexer::TokenType::In;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
@@ -10,74 +11,56 @@ use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {
-    let mut namespace = Namespace::new("out".to_string());
+    let mut namespace = Namespace::new("out");
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Int,
-        }]),
+        "print",
+        &[Int],
         |_a, b| println!("{}", b.localVariables[0].getNumRef()),
-        None,
+        DataType::Void,
     );
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Bool,
-        }]),
+        "print",
+        &[Bool],
         |_a, b| println!("{}", b.localVariables[0].getBool()),
-        None,
+        DataType::Void,
     );
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Float,
-        }]),
+        "print",
+        &[Float],
         |_a, b| println!("{}", b.localVariables[0].getFlo()),
-        None,
+        DataType::Void,
     );
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static("Value"),
-            typ: Char,
-        }]),
+        "print",
+        &[Char],
         |_a, b| println!("{}", b.localVariables[0].getChar()),
-        None,
+        DataType::Void,
     );
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::str(),
-        }]),
+        "print",
+        &[DataType::str()],
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            let str = c.asRef::<Str>().data;
+            let str = &c.asRef::<Str>().data;
             println!("{}", str.string);
         },
-        None,
+        DataType::Void,
     );
 
     namespace.makeNative(
-        String::from("print"),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::arr(Generic::Any),
-        }]),
+        "print",
+        &[DataType::arr(Generic::Any)],
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            let str = c.asRef::<Str>().data;
+            let str = &c.asRef::<Str>().data;
             println!("{}", str.string);
         },
-        None,
+        DataType::Void,
     );
 
     let index = namespace.registerGlobal(GlobalMeta{

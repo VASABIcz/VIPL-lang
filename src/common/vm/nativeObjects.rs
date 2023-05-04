@@ -3,17 +3,21 @@ use std::fmt::Debug;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::StructMeta;
 use crate::vm::objects::{Array, Str};
-use crate::vm::value::Value;
+use crate::vm::value::{Value, Xd};
 use crate::vm::vm::VirtualMachine;
 
-fn blankDestroy<T>(this: &mut T, vm: &mut VirtualMachine) {}
+pub fn blankDestroy<T>(this: &mut T) {
+    println!("blankDestroy called")
+}
 
-fn blankGetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value> { return None }
+pub fn blankGetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value> { return None }
 
-fn blankSetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize, value: Value) {}
+pub fn blankSetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize, value: Value) {
+    println!("blankSetField called")
+}
 
-fn blankCollect<T>(this: &mut T, vm: &mut VirtualMachine, allocations: &mut HayCollector) {
-
+pub fn blankCollect<T>(this: &mut T, allocations: &mut HayCollector) {
+    println!("blankCollect called")
 }
 
 pub trait NativeObject: Allocation + Debug {
@@ -24,11 +28,12 @@ pub trait NativeObject: Allocation + Debug {
     fn destroy(&mut self, vm: &mut VirtualMachine);
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct ViplNativeObject<T: Debug> {
     pub getField: fn (&mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value>,
     pub setField: fn (&mut T, vm: &mut VirtualMachine, index: usize, value: Value) -> (),
-    pub destroy: fn (&mut T, vm: &mut VirtualMachine) -> (),
-    pub collect: fn (&mut T, vm: &mut VirtualMachine, allocations: &mut HayCollector) -> ()
+    pub destroy: fn (&mut T) -> (),
+    pub collect: fn (&mut T, allocations: &mut HayCollector) -> ()
 }
 
 impl<T: Allocation + Debug> Default for ViplNativeObject<T> {
@@ -37,10 +42,12 @@ impl<T: Allocation + Debug> Default for ViplNativeObject<T> {
             getField: blankGetField,
             setField: blankSetField,
             destroy: blankDestroy,
+            collect: blankCollect,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct SimpleObjectWrapper<const N: usize> {
     pub fields: [Value; N]
 }
@@ -48,70 +55,100 @@ pub struct SimpleObjectWrapper<const N: usize> {
 impl<const N: usize> Allocation for SimpleObjectWrapper<N> {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
         for c in self.fields {
-            allocations.visitHay(c.asHay())
+            allocations.visitHay(c.asHay::<Xd>())
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum ObjectType<T: Debug> {
-    Simple,
+    Simple(usize),
     Native(ViplNativeObject<T>)
 }
 
-pub struct ObjectMeta<T: Debug> {
+impl<T: Debug + Copy> Copy for ObjectType<T> {
+
+}
+
+#[derive(Debug)]
+pub struct ViplObjectMeta<T: Debug> {
     pub namespaceId: usize,
     pub structId: usize,
     pub objectType: ObjectType<T>,
 }
 
-impl<T: Allocation + Debug> Clone for ObjectMeta<T> {
-    fn clone(&self) -> Self {
+impl<T: Debug + Copy> Clone for ViplObjectMeta<T> {
+    fn clone(&self) -> ViplObjectMeta<T> {
         Self {
-            namespaceId: *self.namespaceId,
-            structId: *self.structId,
-            objectType: ObjectType::Simple,
+            namespaceId: self.namespaceId,
+            structId: self.structId,
+            objectType: self.objectType,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct ViplObject<T: Allocation + Debug> {
-    pub meta: ObjectMeta<T>,
+    pub meta: ViplObjectMeta<T>,
     pub data: T
 }
 
 impl<T: Allocation + Debug> ViplObject<T> {
     pub fn arr(arr: Array) -> ViplObject<Array> {
-        ViplObject{ meta: ObjectMeta {
+        ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
             structId: 1,
-            objectType: ObjectType::Native(ViplNativeObject {
-                getField: blankGetField,
-                setField: blankSetField,
-                destroy: blankDestroy,
-            }),
+            objectType: ObjectType::Native(ViplNativeObject::default()),
         }, data: arr }
     }
 
     pub fn str(str: Str) -> ViplObject<Str> {
-        ViplObject{ meta: ObjectMeta {
+        ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
             structId: 1,
-            objectType: ObjectType::Native(ViplNativeObject {
-                getField: blankGetField,
-                setField: blankSetField,
-                destroy: blankDestroy,
-            }),
+            objectType: ObjectType::Native(ViplNativeObject::default()),
         }, data: str
         }
     }
 }
 
-pub type UntypedObject = ObjectMeta<()>;
+pub type UntypedObject = ViplObjectMeta<()>;
 
 impl<T: Allocation + Debug> Allocation for ViplObject<T> {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
         self.data.collectAllocations(allocations)
+    }
+}
+
+impl<T: Debug> ViplObjectMeta<T> {
+    pub fn free(&mut self) {
+        match &self.objectType {
+            ObjectType::Simple(_) => {}
+            ObjectType::Native(v) => unsafe {
+                let offsetPtr = unsafe { (self as *const ViplObjectMeta<T>).add(1) };
+
+                v.destroy.call((&mut *(offsetPtr as *mut T), ))
+            }
+        }
+    }
+}
+
+impl<T: Debug> Allocation for ViplObjectMeta<T> {
+    fn collectAllocations(&self, allocations: &mut HayCollector) {
+        let offsetPtr = unsafe { (self as *const ViplObjectMeta<T>).add(1) };
+
+        match &self.objectType {
+            ObjectType::Simple(count) => {
+                for i in 0..*count {
+                    let valPtr = offsetPtr as *const Value;
+                    let v = unsafe { valPtr.add(i).read() };
+                    v.collectAllocations(allocations)
+                }
+            }
+            ObjectType::Native(n) => unsafe {
+                n.collect.call((&mut *(offsetPtr as *mut T), allocations));
+            }
+        }
     }
 }
 
@@ -123,7 +160,7 @@ enum JSON {
     JChar(char),
     JInt(isize),
     JFloat(f64),
-    JString(String),
+    JString(ViplObject<Str>),
     JNull
 }
 

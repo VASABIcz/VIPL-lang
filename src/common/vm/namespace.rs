@@ -8,7 +8,7 @@ use crate::errors::Errorable;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
-use crate::utils::{genFunName, genFunNameMeta};
+use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::heap::{Allocation, HayCollector};
@@ -180,13 +180,12 @@ impl Allocation for Namespace {
 }
 
 impl Namespace {
-    pub fn findFunction(&self, name: &str) -> Option<(&FunctionMeta, usize)> {
-        println!("i am here");
-        let id = self.functionsLookup.get(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name))?;
+    pub fn findFunction(&self, name: &str) -> Errorable<(&FunctionMeta, usize)> {
+        let id = self.functionsLookup.get(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?;
         match self.functionsMeta.get(*id) {
-            None => None,
+            None => None.ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?,
             Some(v) => {
-                Some((v, *id))
+                Ok((v, *id))
             }
         }
     }
@@ -217,18 +216,22 @@ impl Namespace {
         Ok((struc, structId, field, fieldId))
     }
 
+    pub fn getFunction(&self, id: usize) -> &Option<LoadedFunction> {
+        self.functions.get(id).unwrap()
+    }
+
     pub fn makeNative(
         &mut self,
-        name: String,
-        args: Box<[VariableMetadata]>,
+        name: &str,
+        args: &[DataType],
         fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
-        ret: Option<DataType>,
+        ret: DataType,
     ) {
-        let genName = genFunNameMeta(&name, &args, args.len());
+        let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
         self.functionsLookup.insert(genName, self.functionsMeta.len());
-        self.functionsMeta.push(FunctionMeta::makeBuiltin(name, args, argsCount, ret));
+        self.functionsMeta.push(FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret)));
         self.functions.push(Some(LoadedFunction::BuiltIn(fun)));
     }
 
@@ -260,10 +263,10 @@ impl Namespace {
         index
     }
 
-    pub fn new(name: String) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             id: 0,
-            name,
+            name: name.to_string(),
             state: NamespaceState::PartiallyLoaded,
             functionsLookup: Default::default(),
             globalsLookup: Default::default(),
@@ -282,7 +285,7 @@ impl Namespace {
         todo!()
     }
 
-    pub fn constructNamespace(src: Vec<Operation>, name: String, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
+    pub fn constructNamespace(src: Vec<Operation>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
         let mut n = Namespace::new(name);
         let mut initFunction = FunctionDef{
             name: String::from("__init"),

@@ -56,7 +56,7 @@ pub extern fn dropVm(ptr: *mut VirtualMachine) {
 pub extern fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> usize {
     let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-    let namespace = Namespace::new(name.to_string());
+    let namespace = Namespace::new(name);
 
     vm.registerNamespace(namespace)
 }
@@ -116,7 +116,8 @@ pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
     if DEBUG {
         println!("[ffi] call: {}", name);
     }
-    vm.call(MyStr::Static(name));
+    panic!();
+    // vm.call(MyStr::Static(name));
 }
 
 #[no_mangle]

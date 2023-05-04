@@ -1,15 +1,18 @@
 use std::{intrinsics, ptr};
-use std::alloc::{alloc, Layout};
+use std::alloc::{alloc, dealloc, Layout};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
+use std::mem::size_of;
+
 use libloading::os::unix::Library;
+
 use crate::asm::jitCompiler::JITCompiler;
+use crate::ast::FunctionDef;
 use crate::bytecodeGen::{ExpressionCtx, genFunctionDef, StatementCtx};
 use crate::errors::Errorable;
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
-use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, HayCollector, Heap};
@@ -17,15 +20,16 @@ use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
 use crate::vm::namespaceLoader::NamespaceLoader;
-use crate::vm::nativeObjects::ObjectType;
+use crate::vm::nativeObjects::{ViplObjectMeta, ObjectType, SimpleObjectWrapper, UntypedObject, ViplObject};
 use crate::vm::nativeStack::StackManager;
 use crate::vm::objects::Array;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JmpType {
@@ -238,6 +242,14 @@ impl VirtualMachine<'_> {
         index
     }
 
+    pub fn getNamespace(&self, id: usize) -> &Namespace {
+        self.namespaces.get(id).unwrap()
+    }
+
+    pub fn getNamespaceMut(&mut self, id: usize) -> &mut Namespace {
+        self.namespaces.get_mut(id).unwrap()
+    }
+
     #[inline(always)]
     pub fn pop(&self) -> Value {
         let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
@@ -254,25 +266,31 @@ impl VirtualMachine<'_> {
         self.stack.push(value)
     }
 
-    pub fn gc(&mut self, frame: &StackFrame) {
-        let mut collector = HayCollector::new();
+    pub fn gc(&mut self) {
+        let mut collector = HayCollector::new(&self.heap.allocations);
 
-        for v in &self.stack {
-            println!("num {}", v.asNum() as usize);
-            if self.heap.allocations.contains(&(v.asNum() as usize)) {
-                match v.asRefMeta().objectType {
-                    ObjectType::Simple => {
-                        todo!()
-                    }
-                    ObjectType::Native(v) => {
-                        todo!()
+        println!("gc called");
+
+        for frame in &self.frames {
+            for v in &self.stack {
+                println!("num {}", v.asNum() as usize);
+                if self.heap.allocations.contains(&(v.asUnsigned())) {
+                    match &v.asRefMeta().objectType {
+                        ObjectType::Simple(len) => {
+                            todo!()
+                        }
+                        ObjectType::Native(v) => {
+                            todo!()
+                        }
                     }
                 }
             }
+
+            frame.collect(self, &mut collector);
         }
-        frame.collect(self, &mut collector);
+
         println!("{}", collector.visited.len());
-        self.heap.gc(collector);
+        self.heap.gc(collector.visited);
     }
 
     #[inline(always)]
@@ -285,11 +303,6 @@ impl VirtualMachine<'_> {
     pub fn getTop(&self) -> &Value {
         let s = self.stack.len();
         unsafe { self.stack.get_unchecked(s - 1) }
-    }
-
-    #[inline]
-    pub fn call(&mut self, name: MyStr) {
-        todo!()
     }
 }
 
@@ -364,6 +377,26 @@ impl VirtualMachine<'_> {
     #[inline]
     pub fn popFrame(&mut self) {
         self.frames.pop();
+    }
+
+    #[inline(always)]
+    pub fn call(&mut self, argsCount: usize, namespace: &Namespace, functionID: usize, function: &LoadedFunction) {
+        let mut locals = vec![Value::from(0);argsCount];
+
+        for i in 0..argsCount {
+            let arg = self.pop();
+            locals[(argsCount - 1) - i] = arg;
+        }
+
+        let mut fs = StackFrame{
+            localVariables: &mut locals,
+            previous: None,
+            programCounter: 0,
+            namespace,
+            functionID,
+        };
+
+        function.call(self, fs)
     }
 
     #[inline]
@@ -548,29 +581,11 @@ impl VirtualMachine<'_> {
                     SCall { id } => {
                         let r = self as *const VirtualMachine as *mut VirtualMachine;
                         let frame = self.getFrame();
-                        let fMeta = frame.namespace.functionsMeta.get_unchecked(*id);
-                        let f = frame.namespace.functions.get_unchecked(*id);
+                        let fMeta = frame.namespace.functionsMeta.get(*id).unwrap();
+                        let f = frame.namespace.functions.get(*id).unwrap();
 
+                        (&mut *r).call(fMeta.localsMeta.len(), frame.namespace, *id, f.as_ref().unwrap())
 
-                        let mut locals = fMeta.localsMeta.iter().map(|it| {
-                            it.typ.toDefaultValue()
-                        }).collect::<Vec<_>>();
-
-                        for i in 0..fMeta.argsCount {
-                            let arg = self.pop();
-                            // println!("poped {}", arg.asNum());
-                            locals[(fMeta.argsCount - 1) - i] = arg;
-                        }
-
-                        let mut fs = StackFrame{
-                            localVariables: &mut locals,
-                            previous: None,
-                            programCounter: 0,
-                            namespace: frame.namespace,
-                            functionID: *id,
-                        };
-
-                        f.as_ref().unwrap().call(&mut *r, fs)
                     }
                     LCall { namespace, id} => {
                         let r = self as *const VirtualMachine as *mut VirtualMachine;
@@ -579,25 +594,7 @@ impl VirtualMachine<'_> {
                         let fMeta = namespace.functionsMeta.get(*id).unwrap();
                         let f = namespace.functions.get(*id).unwrap();
 
-                        let mut locals = fMeta.localsMeta.iter().map(|it| {
-                            it.typ.toDefaultValue()
-                        }).collect::<Vec<_>>();
-
-                        for i in 0..fMeta.argsCount {
-                            let arg = self.pop();
-                            // println!("poped {}", arg.asNum());
-                            locals[(fMeta.argsCount - 1) - i] = arg;
-                        }
-
-                        let mut fs = StackFrame{
-                            localVariables: &mut locals,
-                            previous: None,
-                            programCounter: 0,
-                            namespace: frame.namespace,
-                            functionID: *id,
-                        };
-
-                        f.as_ref().unwrap().call(&mut *r, fs)
+                        (&mut *r).call(fMeta.localsMeta.len(), namespace, *id, f.as_ref().unwrap())
                     }
                     PushFunction(namespaceID, functionID) => {
                         self.stack.push(Value::makeFunction(*namespaceID, *functionID));
@@ -607,57 +604,55 @@ impl VirtualMachine<'_> {
                         let namespace = namespaceRaw as usize;
                         let id = idRaw as usize;
 
-
                         let r = self as *const VirtualMachine as *mut VirtualMachine;
                         let frame = self.getFrame();
                         let namespace = self.namespaces.get(namespace).unwrap();
                         let fMeta = namespace.functionsMeta.get(id).unwrap();
                         let f = namespace.functions.get(id).unwrap();
 
-                        let mut locals = fMeta.localsMeta.iter().map(|it| {
-                            it.typ.toDefaultValue()
-                        }).collect::<Vec<_>>();
-
-                        for i in 0..fMeta.argsCount {
-                            let arg = self.pop();
-                            // println!("poped {}", arg.asNum());
-                            locals[(fMeta.argsCount - 1) - i] = arg;
-                        }
-
-                        let mut fs = StackFrame{
-                            localVariables: &mut locals,
-                            previous: None,
-                            programCounter: 0,
-                            namespace: frame.namespace,
-                            functionID: id,
-                        };
-
-                        f.as_ref().unwrap().call(&mut *r, fs)
+                        (&mut *r).call(fMeta.localsMeta.len(), namespace, id, f.as_ref().unwrap())
                     }
-                    New { namespaceID, structID } => {
+                    New { namespaceID, structID } => unsafe {
                         let n = self.namespaces.get(*namespaceID).unwrap();
                         let s = n.structs.get(*structID).unwrap();
 
-                        let alloc = alloc(Layout::array::<Value>(s.fields.len()).unwrap()) as *mut Value;
-                        let d = vec![Value::from(0); s.fields.len()];
+                        let mut l = Layout::new::<()>();
 
-                        let ptr = Box::into_raw(d.into_boxed_slice());
-                        self.heap.allocations.insert(ptr as *mut Value as usize);
+                        l = l.extend(Layout::array::<ViplObjectMeta<()>>(1).unwrap()).unwrap().0;
+                        l = l.extend(Layout::array::<Value>(s.fields.len()).unwrap()).unwrap().0;
 
+                        println!("allocating {} {}", l.size(), size_of::<ViplObjectMeta<()>>());
 
-                        self.stack.push(Value::from(ptr as *mut Value as usize))
+                        let alloc = alloc(l)  as *mut UntypedObject;
+
+                        (*alloc).objectType = ObjectType::Simple(s.fields.len());
+                        (*alloc).structId = *structID;
+                        (*alloc).namespaceId = *namespaceID;
+
+                        println!("allocated {:?}", alloc);
+
+                        self.stack.push(Value::from(alloc as usize))
                     }
                     SetField { namespaceID, structID, fieldID } => {
                         let value = self.pop();
-                        let ptr = self.pop().Reference.inner as *mut Value;
 
-                        *ptr.add(*fieldID) = value;
+                        eprintln!("SetField {:?} {}", value, fieldID);
+
+                        let ptr = ((self.pop().asRefMeta() as *const UntypedObject).add(1)) as *const Value;
+                        let p = ptr.add(*fieldID) as *mut Value;
+
+                        *p = value;
                     }
                     GetField { namespaceID, structID, fieldID } => {
-                        let ptr = self.pop().Reference.inner as *mut Value;
+                        let ptr = self.pop().asRefMeta() as *const UntypedObject;
 
-                        let v = ptr.add(*fieldID).read();
-                        self.stack.push(v);
+                        eprintln!("GetField {:?} {}", ptr, fieldID);
+
+                        let ptr2 = ptr.add(1) as *const Value;
+
+                        let p = ptr2.add(*fieldID)  as *const Value;
+
+                        self.stack.push(p.read());
                     }
                     Swap => {
                         let a = self.pop();

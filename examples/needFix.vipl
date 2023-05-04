@@ -1,0 +1,21 @@
+struct MyStruct {
+  x: int
+}
+
+struct MyStruct2 {
+  x: MyStruct
+}
+
+a = MyStruct2 {
+    x: MyStruct {
+        x: 11
+    }
+}
+
+out::print("before")
+out::print(a.x.x)
+
+a.x.x = 69
+
+out::print("after")
+out::print(a.x.x)
