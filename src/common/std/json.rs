@@ -1,4 +1,5 @@
 use crate::vm::dataType::DataType;
+use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::{Namespace, StructMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::VirtualMachine;

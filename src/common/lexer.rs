@@ -371,31 +371,33 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
 }
 
 #[derive(Debug)]
-struct IdentifierLexingUnit;
+pub struct IdentifierLexingUnit<T: Debug + Clone> {
+    pub tokenType: T
+}
 
-impl IdentifierLexingUnit {
+impl<T: Debug + Clone + Send + Sync + 'static> IdentifierLexingUnit<T> {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Box<dyn LexingUnit<TokenType>> {
-        Box::new(Self {})
+    pub fn new(typ: T) -> Box<dyn LexingUnit<T>> {
+        Box::new(Self { tokenType: typ })
     }
 }
 
-impl LexingUnit<TokenType> for IdentifierLexingUnit {
+impl<T: Debug + Clone + Sync + Send> LexingUnit<T> for IdentifierLexingUnit<T> {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeekChar(|it| {
             it.is_ascii_alphabetic() || it == '_'
         })
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<TokenType>>, Box<dyn Error>> {
+    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, Box<dyn Error>> {
         Ok(lexer.consumeWhileMatches(|it| {
             it.is_alphanumeric() || it == '_'
-        }, Some(Identifier))?)
+        }, Some(self.tokenType.clone()))?)
     }
 }
 
 #[derive(Debug)]
-struct WhitespaceLexingUnit;
+pub struct WhitespaceLexingUnit;
 
 impl WhitespaceLexingUnit {
     #[allow(clippy::new_ret_no_self)]
@@ -495,6 +497,6 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("}", TokenType::CCB),
         RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
         RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
-        IdentifierLexingUnit::new(),
+        IdentifierLexingUnit::new(TokenType::Identifier),
     ]
 }
