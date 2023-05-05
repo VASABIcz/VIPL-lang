@@ -1,5 +1,8 @@
 use std::{env, fs};
+use std::mem::ManuallyDrop;
+
 use libc::link;
+
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;
