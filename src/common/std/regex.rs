@@ -35,7 +35,8 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
 
         let res = Regix::parse(str);
 
-        let a = ViplObject{ meta: ViplObjectMeta {
+        let a = ViplObject{
+            meta: ViplObjectMeta {
             namespaceId: s.namespaceId,
             structId: 0,
             objectType: ObjectType::Native(ViplNativeObject{

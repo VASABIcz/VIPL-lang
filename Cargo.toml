@@ -41,6 +41,6 @@ path = "src/common/lib.rs"
 
 
 [dependencies]
-libloading = "0.7.4"
+# libloading = "0.7.4"
 libc = "0.2"
-lazy_static = "*"
+# lazy_static = "*"

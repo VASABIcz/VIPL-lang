@@ -3,9 +3,8 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
+use std::hint::unreachable_unchecked;
 use std::mem::size_of;
-
-use libloading::os::unix::Library;
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
@@ -44,7 +43,6 @@ pub enum JmpType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
 pub enum OpCode {
     F2I,
     I2F,
@@ -63,14 +61,10 @@ pub enum OpCode {
     },
     SetLocal {
         index: usize,
-        typ: DataType,
     },
     Jmp {
         offset: isize,
         jmpType: JmpType,
-    },
-    Call {
-        encoded: MyStr,
     },
     SCall {
         id: usize
@@ -109,8 +103,8 @@ pub enum OpCode {
         fieldID: usize
     },
     ArrayNew(DataType),
-    ArrayStore(DataType),
-    ArrayLoad(DataType),
+    ArrayStore,
+    ArrayLoad,
     ArrayLength,
     StringLength,
     StrNew(MyStr),
@@ -182,7 +176,7 @@ pub struct VirtualMachine {
     pub nativeWrapper: NativeWrapper,
 
     pub stack: Vec<Value>,
-    pub nativeLibraries: Vec<Library>,
+    // pub nativeLibraries: Vec<Library>,
     pub heap: Heap,
 
     pub stackManager: StackManager<2048>,
@@ -238,7 +232,7 @@ impl VirtualMachine {
         let mut x = HashMap::new();
 
         for n in &self.namespaces {
-            for f in &n.functionsMeta {
+            for (f, _) in &n.functions.actual {
                 let mut buf = String::new();
                 buf += &n.name;
                 buf += "::";
@@ -400,7 +394,7 @@ impl VirtualMachine {
             locals[(argsCount - 1) - i] = arg;
         }
 
-        let mut fs = StackFrame{
+        let fs = StackFrame{
             localVariables: locals.into_boxed_slice(),
             programCounter: 0,
             namespaceId: namespaceId,
@@ -412,11 +406,12 @@ impl VirtualMachine {
 
     #[inline]
     pub fn execute(&mut self, opCodes: &Vec<OpCode>) {
+        let r = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
+
         loop {
             let index = self.getIndex();
             let op = match opCodes.get(index) {
                 None => {
-                    self.popFrame();
                     return;
                 }
                 Some(v) => v
@@ -427,271 +422,256 @@ impl VirtualMachine {
                 println!("evaluating {:?}", op);
             }
 
-            unsafe {
-                match op {
-                    F2I => {
-                        self.getMutTop().f2i()
+            match op {
+                F2I => {
+                    self.getMutTop().f2i()
+                }
+                I2F => {
+                    self.getMutTop().f2i()
+                }
+                PushInt(v) => self.push(Value { Num: *v }),
+                PushIntOne => self.push(Value { Num: 1 }),
+                PushIntZero => self.push(Value { Num: 0 }),
+                PushFloat(v) => self.push((*v).into()),
+                PushBool(v) => self.push((*v).into()),
+                Pop => {
+                    self.pop();
+                }
+                Dup => {
+                    let val = self.getTop();
+                    self.push(*val);
+                },
+                GetLocal { index } => {
+                    self.push(*self.getLocal(*index))
+                }
+                SetLocal { index } => {
+                    let x = self.pop();
+                    self.setLocal(*index, x);
+                }
+                Jmp { offset, jmpType } => match jmpType {
+                    JmpType::One => {
+                        self.pop();
+                        let _b = self.pop();
+                        panic!()
                     }
-                    I2F => {
-                        self.getMutTop().f2i()
+                    JmpType::Zero => {}
+                    JmpType::Jmp => {
+                        let x = *offset;
+                        self.seek(x);
                     }
-                    PushInt(v) => self.stack.push(Value { Num: *v }),
-                    PushIntOne => self.stack.push(Value { Num: 1 }),
-                    PushIntZero => self.stack.push(Value { Num: 0 }),
-                    PushFloat(v) => self.stack.push((*v).into()),
-                    PushBool(v) => self.stack.push((*v).into()),
-                    Pop => {
-                        self.stack.pop();
-                    }
-                    Dup => unsafe {
-                        let val = self.getTop();
-                        self.stack.push(*val);
-                    },
-                    GetLocal { index } => {
-                        self.stack.push(*self.getLocal(*index))
-                    }
-                    SetLocal { index, typ: _ } => {
-                        let x = self.pop();
-                        self.setLocal(*index, x);
-                    }
-                    Jmp { offset, jmpType } => match jmpType {
-                        JmpType::One => {
-                            self.pop();
-                            let _b = self.pop();
-                            panic!()
-                        }
-                        JmpType::Zero => {}
-                        JmpType::Jmp => {
-                            let x = *offset;
-                            self.seek(x);
-                        }
-                        JmpType::Gt => {
-                            let a = self.pop();
-                            let b = self.pop();
-                            if a.gt(&b, &DataType::Float) {
-                                let x = *offset;
-                                self.seek(x)
-                            }
-                        }
-                        JmpType::Less => {
-                            let a = self.pop();
-                            let b = self.pop();
-                            if a.less(&b, &DataType::Float) {
-                                let x = *offset;
-                                self.seek(x)
-                            }
-                        }
-                        JmpType::True => {
-                            let a = self.pop();
-                            if a.getBool() {
-                                let x = *offset;
-                                self.seek(x)
-                            }
-                        }
-                        JmpType::False => {
-                            let a = self.pop();
-                            if !a.getBool() {
-                                let x = *offset;
-                                self.seek(x)
-                            }
-                        }
-                    },
-                    Call { encoded } => panic!("deprecated"),
-                    Return => {
-                        self.popFrame();
-                        return;
-                    },
-                    Add(v) => unsafe {
-                        let a = self.pop();
-                        self.getMutTop().add(a, v, &mut *(self as *const VirtualMachine as *mut VirtualMachine));
-                    },
-                    Sub(v) => {
-                        let a = self.pop();
-                        self.getMutTop().sub(&a, v);
-                    },
-                    Div(v) => {
-                        let a = self.pop();
-                        self.getMutTop().div(&a, v);
-                    },
-                    Mul(v) => {
-                        let a = self.pop();
-                        self.getMutTop().mul(&a, v);
-                    },
-                    Equals(v) => {
-                        let a = self.pop();
-                        self.getMutTop().refEq(&a, v);
-                    },
-                    Greater(v) => {
-                        let a = self.pop();
-                        self.getMutTop().refGt(&a, v);
-                    },
-                    Less(v) => {
-                        let a = self.pop();
-                        self.getMutTop().refLess(&a, v);
-                    },
-                    Or => {
-                        let a = self.pop();
-                        self.getMutTop().or(&a);
-                    },
-                    And => {
-                        let a = self.pop();
-                        self.getMutTop().and(&a);
-                    },
-                    Not => {
-                        self.getMutTop().not();
-                    },
-                    ArrayNew(d) => {
-                        let _size = self.pop();
-                        let a = Value::makeArray(vec![], d.clone(), self);
-                        self.stack.push(a)
-                    }
-                    ArrayStore(_) => {
-                        let index = self.pop().getNum();
-
-                        let value = self.pop();
-
-                        let mut arrayRaw = self.pop();
-                        let array = arrayRaw.getMutArray();
-
-                        if index as usize == array.internal.len() {
-                            array.internal.push(value)
-                        } else {
-                            array.internal[index as usize] = value
-                        }
-                    }
-                    ArrayLoad(_) => {
-                        let index = self.pop().getNum();
-                        let mut value1 = self.pop();
-                        let arr = value1.getMutArray();
-                        self.stack.push(*arr.internal.get(index as usize).unwrap());
-                    }
-                    ArrayLength => {
-                        self.stack.push(Value { Num: self.pop().getReference::<Array>().data.internal.len() as isize });
-                    },
-                    // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
-                    Inc { typ, index } => unsafe {
-                        self.getMutLocal(*index).inc(typ)
-                    },
-                    Dec { typ, index } => unsafe {
-                        self.getMutLocal(*index).dec(typ)
-                    },
-                    PushChar(c) => self.stack.push((*c).into()),
-                    StrNew(s) => {
-                        let a = Value::makeString(s.to_string(), self);
-                        self.stack.push(a)
-                    },
-                    GetChar => {
-                        let index = self.pop().getNum();
-
-                        let opIndex = self.stack.len() - 1;
-
-                        let r = self.stack.get_mut(opIndex).unwrap();
-                        let c = *r.getString().as_bytes().get(index as usize).unwrap() as char;
-                        *r = c.into();
-                    },
-                    SCall { id } => {
-                        let r = self as *const VirtualMachine as *mut VirtualMachine;
-                        let frame = self.getFrame();
-
-                        let namespace = self.getNamespace(frame.namespaceId);
-
-                        let fMeta = namespace.functionsMeta.get(*id).unwrap();
-                        let f = namespace.functions.get(*id).unwrap();
-
-                        (&mut *r).call(fMeta.argsCount, fMeta.localsMeta.len(), frame.namespaceId, *id, f.as_ref().unwrap())
-
-                    }
-                    DynamicCall => {
-                        let (namespaceRaw, idRaw) = self.stack.pop().unwrap().asFunction();
-                        let namespace = namespaceRaw as usize;
-                        let id = idRaw as usize;
-
-                        let r = self as *const VirtualMachine as *mut VirtualMachine;
-                        let frame = self.getFrame();
-                        let namespace = self.namespaces.get(namespace).unwrap();
-                        let fMeta = namespace.functionsMeta.get(id).unwrap();
-                        let f = namespace.functions.get(id).unwrap();
-
-                        (&mut *r).call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, id, f.as_ref().unwrap())
-                    }
-                    LCall { namespace, id} => {
-                        let r = self as *const VirtualMachine as *mut VirtualMachine;
-                        let frame = self.getFrame();
-                        let namespace = self.namespaces.get(*namespace).unwrap();
-                        let fMeta = namespace.functionsMeta.get(*id).unwrap();
-                        let f = namespace.functions.get(*id).unwrap();
-
-                        (&mut *r).call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, *id, f.as_ref().unwrap())
-                    }
-                    PushFunction(namespaceID, functionID) => {
-                        self.stack.push(Value::makeFunction(*namespaceID, *functionID));
-                    }
-                    New { namespaceID, structID } => unsafe {
-                        let n = self.namespaces.get(*namespaceID).unwrap();
-                        let s = n.structs.getFast(*structID).unwrap();
-
-                        let mut l = Layout::new::<()>();
-
-                        l = l.extend(Layout::array::<ViplObjectMeta<()>>(1).unwrap()).unwrap().0;
-                        l = l.extend(Layout::array::<Value>(s.fields.len()).unwrap()).unwrap().0;
-
-                        println!("allocating {} {}", l.size(), size_of::<ViplObjectMeta<()>>());
-
-                        let alloc = alloc(l)  as *mut UntypedObject;
-
-                        (*alloc).objectType = ObjectType::Simple(s.fields.len());
-                        (*alloc).structId = *structID;
-                        (*alloc).namespaceId = *namespaceID;
-
-                        println!("allocated {:?}", alloc);
-
-                        self.stack.push(Value::from(alloc as usize))
-                    }
-                    SetField { namespaceID, structID, fieldID } => {
-                        let value = self.pop();
-
-                        eprintln!("SetField {:?} {}", value, fieldID);
-
-                        let ptr = ((self.pop().asRefMeta() as *const UntypedObject).add(1)) as *const Value;
-                        let p = ptr.add(*fieldID) as *mut Value;
-
-                        *p = value;
-                    }
-                    GetField { namespaceID, structID, fieldID } => {
-                        let ptr = self.pop().asRefMeta() as *const UntypedObject;
-
-                        eprintln!("GetField {:?} {}", ptr, fieldID);
-
-                        let ptr2 = ptr.add(1) as *const Value;
-
-                        let p = ptr2.add(*fieldID)  as *const Value;
-
-                        self.stack.push(p.read());
-                    }
-                    Swap => {
+                    JmpType::Gt => {
                         let a = self.pop();
                         let b = self.pop();
-                        self.stack.push(a);
-                        self.stack.push(b);
+                        if a.gt(&b, &DataType::Float) {
+                            let x = *offset;
+                            self.seek(x)
+                        }
                     }
-                    StringLength => {
+                    JmpType::Less => {
                         let a = self.pop();
-                        let len = a.getString().len();
-                        self.stack.push(len.into());
+                        let b = self.pop();
+                        if a.less(&b, &DataType::Float) {
+                            let x = *offset;
+                            self.seek(x)
+                        }
                     }
-                    SetGlobal { namespaceID, globalID } => {
-                        let v = self.pop();
-                        let n = self.namespaces.get_mut(*namespaceID).unwrap();
-                        let g = n.globals.getFastMut(*globalID).unwrap();
+                    JmpType::True => {
+                        let a = self.pop();
+                        if a.getBool() {
+                            let x = *offset;
+                            self.seek(x)
+                        }
+                    }
+                    JmpType::False => {
+                        let a = self.pop();
+                        if !a.getBool() {
+                            self.seek(*offset)
+                        }
+                    }
+                },
+                Return => {
+                    return;
+                },
+                Add(v) => unsafe {
+                    let a = self.pop();
+                    self.getMutTop().add(a, v, &mut *(self as *const VirtualMachine as *mut VirtualMachine));
+                },
+                Sub(v) => {
+                    let a = self.pop();
+                    self.getMutTop().sub(&a, v);
+                },
+                Div(v) => {
+                    let a = self.pop();
+                    self.getMutTop().div(&a, v);
+                },
+                Mul(v) => {
+                    let a = self.pop();
+                    self.getMutTop().mul(&a, v);
+                },
+                Equals(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refEq(&a, v);
+                },
+                Greater(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refGt(&a, v);
+                },
+                Less(v) => {
+                    let a = self.pop();
+                    self.getMutTop().refLess(&a, v);
+                },
+                Or => {
+                    let a = self.pop();
+                    self.getMutTop().or(&a);
+                },
+                And => {
+                    let a = self.pop();
+                    self.getMutTop().and(&a);
+                },
+                Not => {
+                    self.getMutTop().not();
+                },
+                ArrayNew(d) => {
+                    let _size = self.pop();
+                    let a = Value::makeArray(vec![], d.clone(), self);
+                    self.push(a)
+                }
+                ArrayStore => {
+                    let index = self.pop().getNum();
 
-                        g.1 = v;
-                    }
-                    GetGlobal { namespaceID, globalID } => {
-                        let n = self.namespaces.get(*namespaceID).unwrap();
+                    let value = self.pop();
 
-                        self.push(n.globals.getFast(*globalID).unwrap().1)
+                    let mut arrayRaw = self.pop();
+                    let array = arrayRaw.getMutArray();
+
+                    if index as usize == array.internal.len() {
+                        array.internal.push(value)
+                    } else {
+                        array.internal[index as usize] = value
                     }
-                    o => panic!("unimplemented opcode {:?}", o)
+                }
+                ArrayLoad => {
+                    let index = self.pop().getNum();
+                    let mut value1 = self.pop();
+                    let arr = value1.getMutArray();
+                    self.push(*arr.internal.get(index as usize).unwrap());
+                }
+                ArrayLength => {
+                    self.push(Value { Num: self.pop().getReference::<Array>().data.internal.len() as isize });
+                },
+                // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
+                Inc { typ, index } => unsafe {
+                    self.getMutLocal(*index).inc(typ)
+                },
+                Dec { typ, index } => unsafe {
+                    self.getMutLocal(*index).dec(typ)
+                },
+                PushChar(c) => self.push((*c).into()),
+                StrNew(s) => {
+                    let a = Value::makeString(s.to_string(), self);
+                    self.push(a)
+                },
+                GetChar => {
+                    let index = self.pop().getNum();
+
+                    let opIndex = self.stack.len() - 1;
+
+                    let r = self.stack.get_mut(opIndex).unwrap();
+                    let c = *r.getString().as_bytes().get(index as usize).unwrap() as char;
+                    *r = c.into();
+                },
+                SCall { id } => {
+                    let frame = self.getFrame();
+                    let namespace = self.getNamespace(frame.namespaceId);
+
+                    let (fMeta, f) = namespace.getFunction(*id);
+
+                    (&mut *r).call(fMeta.argsCount, fMeta.localsMeta.len(), frame.namespaceId, *id, f.as_ref().unwrap())
+
+                }
+                DynamicCall => {
+                    let (namespaceRaw, idRaw) = self.stack.pop().unwrap().asFunction();
+                    let namespace = namespaceRaw as usize;
+                    let id = idRaw as usize;
+
+                    let frame = self.getFrame();
+                    let namespace = self.namespaces.get(namespace).unwrap();
+                    let (fMeta, f) = namespace.getFunction(id);
+
+                    r.call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, id, f.as_ref().unwrap())
+                }
+                LCall { namespace, id} => {
+                    let frame = self.getFrame();
+                    let namespace = self.namespaces.get(*namespace).unwrap();
+                    let (fMeta, f) = namespace.getFunction(*id);
+
+                    r.call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, *id, f.as_ref().unwrap())
+                }
+                PushFunction(namespaceID, functionID) => {
+                    self.push(Value::makeFunction(*namespaceID, *functionID));
+                }
+                New { namespaceID, structID } => unsafe {
+                    let n = self.namespaces.get(*namespaceID).unwrap();
+                    let s = n.structs.getFast(*structID).unwrap();
+
+                    let mut l = Layout::new::<()>();
+
+                    l = l.extend(Layout::array::<ViplObjectMeta<()>>(1).unwrap()).unwrap().0;
+                    l = l.extend(Layout::array::<Value>(s.fields.len()).unwrap()).unwrap().0;
+
+                    let alloc = alloc(l)  as *mut UntypedObject;
+
+                    (*alloc).objectType = ObjectType::Simple(s.fields.len());
+                    (*alloc).structId = *structID;
+                    (*alloc).namespaceId = *namespaceID;
+
+                    self.push(Value::from(alloc as usize))
+                }
+                SetField { namespaceID, structID, fieldID } => unsafe {
+                    let value = self.pop();
+
+                    let ptr = ((self.pop().asRefMeta() as *const UntypedObject).add(1)) as *const Value;
+                    let p = ptr.add(*fieldID) as *mut Value;
+
+                    *p = value;
+                }
+                GetField { namespaceID, structID, fieldID } => unsafe {
+                    let ptr = self.pop().asRefMeta() as *const UntypedObject;
+
+                    let ptr2 = ptr.add(1) as *const Value;
+
+                    let p = ptr2.add(*fieldID)  as *const Value;
+
+                    self.push(p.read());
+                }
+                Swap => {
+                    let a = self.pop();
+                    let b = self.pop();
+                    self.push(a);
+                    self.push(b);
+                }
+                StringLength => {
+                    let a = self.pop();
+                    let len = a.getString().len();
+                    self.push(len.into());
+                }
+                SetGlobal { namespaceID, globalID } => {
+                    let v = self.pop();
+                    let n = self.namespaces.get_mut(*namespaceID).unwrap();
+                    let g = n.globals.getFastMut(*globalID).unwrap();
+
+                    g.1 = v;
+                }
+                GetGlobal { namespaceID, globalID } => {
+                    let n = self.namespaces.get(*namespaceID).unwrap();
+
+                    self.push(n.globals.getFast(*globalID).unwrap().1)
+                }
+                o => if !DEBUG && !TRACE {
+                    unsafe { unreachable_unchecked() }
+                }
+                else {
+                    panic!("unimplemented opcode {:?}", o)
                 }
             }
         }
@@ -725,7 +705,7 @@ impl VirtualMachine {
                 }
             }
 
-            for (index, f) in n.functionsMeta.iter_mut().enumerate() {
+            for (index, (f, a)) in n.functions.actual.iter_mut().enumerate() {
                 unsafe {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
                         let mut ops = vec![];
@@ -738,7 +718,7 @@ impl VirtualMachine {
 
                         // let nf = self.jitCompiler.compile(ops, &*v, &*nn);
 
-                        *n.functions.get_mut(index).unwrap() = Some(LoadedFunction::Virtual(ops));
+                        *a = Some(LoadedFunction::Virtual(ops));
                     }
                 }
             }
@@ -752,7 +732,7 @@ impl VirtualMachine {
         Self {
             stack: Vec::with_capacity(128),
             nativeWrapper: NativeWrapper::new(),
-            nativeLibraries: vec![],
+            // nativeLibraries: vec![],
             heap: Default::default(),
             stackManager: StackManager::new(),
             frames: vec![],

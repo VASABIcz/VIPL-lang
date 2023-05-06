@@ -235,7 +235,7 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 generator.push(R12.into());
             }
             OpCode::GetLocal { index } => pushLocal(generator, *index),
-            OpCode::SetLocal { index, typ } => setLocal(generator, *index),
+            OpCode::SetLocal { index } => setLocal(generator, *index),
             OpCode::Jmp { offset, jmpType } => {
                 let l = jmpLookup.get(&i).unwrap().clone();
                 match jmpType {
@@ -256,8 +256,6 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                     JmpType::False => generator.jmpIfOne(l.into()),
                 }
             }
-            // FIXME not sure
-            OpCode::Call { encoded } => asmCall(generator, encoded.as_str()),
             OpCode::Return => generator.ret(),
             OpCode::Add(t) => match t {
                 DataType::Int => {
@@ -334,22 +332,22 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             }
             OpCode::New { .. } => todo!(),
             OpCode::ArrayNew(_) => todo!(),
-            OpCode::ArrayStore(_) => todo!(),
-            OpCode::ArrayLoad(_) => todo!(),
+            OpCode::ArrayStore => todo!(),
+            OpCode::ArrayLoad => todo!(),
             OpCode::ArrayLength => todo!(),
             OpCode::Inc { .. } => todo!(),
             OpCode::Dec { .. } => todo!(),
             OpCode::StrNew(v) => pushStr(generator, v.as_str()),
             OpCode::GetChar => todo!(),
             OpCode::SCall { id } => {
-                let f = namespace.functionsMeta.get(*id).unwrap();
+                let f = namespace.getFunctionMeta(*id).unwrap();
                 let argsCount = f.argsCount;
                 let returns = f.returnType != None;
 
                 genCall(generator, namespace.id, *id, returns, argsCount)
             },
             OpCode::LCall { namespace, id } => {
-                let f = vm.namespaces.get(*namespace).unwrap().functionsMeta.get(*id).unwrap();
+                let f = vm.getNamespace(*namespace).getFunction(*id).0;
                 let returns = f.returnType != None;
                 let argsCount = f.argsCount;
 

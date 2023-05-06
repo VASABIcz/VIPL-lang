@@ -128,24 +128,26 @@ pub enum LoadedFunction {
 impl LoadedFunction {
     #[inline(always)]
     pub fn call(&self, vm: &mut VirtualMachine, mut frame: StackFrame) {
+        vm.pushFrame(frame);
+
         match self {
             LoadedFunction::BuiltIn(b) => {
-                b(vm, &mut frame);
+                // b(vm, f);
             }
-            LoadedFunction::Native(n) => unsafe {
+            LoadedFunction::Native(n) => {
                 panic!();
-                let x: *const () = transmute(n.clone());
+/*              let x: *const () = transmute(n.clone());
                 let d: usize = transmute(vm.nativeWrapper.stringNew);
                 println!("before call");
                 println!("vm: {:?} {}", vm as *const VirtualMachine, vm as *const VirtualMachine as usize);
                 println!("proc: {:?} {}", x, x as usize);
-                n(vm, &mut frame);
+                n(vm, f);*/
             }
             LoadedFunction::Virtual(v) => {
-                vm.pushFrame(frame);
                 vm.execute(v);
             }
         }
+        vm.popFrame()
     }
 }
 
@@ -155,9 +157,7 @@ pub struct Namespace {
     pub name: String,
     pub state: NamespaceState,
 
-    pub functionsLookup: HashMap<String, usize>,
-    pub functionsMeta: Vec<FunctionMeta>,
-    pub functions: Vec<Option<LoadedFunction>>,
+    pub functions: FastAcess<String, (FunctionMeta, Option<LoadedFunction>)>,
 
     pub globals: FastAcess<String, (GlobalMeta, Value)>,
 
@@ -180,13 +180,9 @@ impl Allocation for Namespace {
 
 impl Namespace {
     pub fn findFunction(&self, name: &str) -> Errorable<(&FunctionMeta, usize)> {
-        let id = self.functionsLookup.get(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?;
-        match self.functionsMeta.get(*id) {
-            None => None.ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?,
-            Some(v) => {
-                Ok((v, *id))
-            }
-        }
+        let id = self.functions.getSlowStr(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?;
+
+        Ok((&id.0.0, id.1))
     }
 
     pub fn findGlobal(&self, name: &str) -> Errorable<(&GlobalMeta, usize)> {
@@ -211,8 +207,15 @@ impl Namespace {
         Ok((struc, structId, field, fieldId))
     }
 
-    pub fn getFunction(&self, id: usize) -> &Option<LoadedFunction> {
-        self.functions.get(id).unwrap()
+    pub fn getFunction(&self, id: usize) -> &(FunctionMeta, Option<LoadedFunction>) {
+        self.functions.getFast(id).unwrap()
+    }
+
+    pub fn getFunctionMeta(&self, id: usize) -> Option<&FunctionMeta> {
+        match self.functions.getFast(id) {
+            None => None,
+            Some(v) => Some(&v.0)
+        }
     }
 
     pub fn makeNative(
@@ -225,9 +228,9 @@ impl Namespace {
         let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
-        self.functionsLookup.insert(genName, self.functionsMeta.len());
-        self.functionsMeta.push(FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret)));
-        self.functions.push(Some(LoadedFunction::BuiltIn(fun)));
+        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret));
+
+        self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
     }
 
     // VERY IMPORTANT!!
@@ -237,13 +240,7 @@ impl Namespace {
     pub fn registerFunctionDef(&self, d: FunctionMeta) -> usize {
         let mS = unsafe { &mut *(self as *const Namespace as *mut Namespace) };
 
-        let index = mS.functionsMeta.len();
-
-        mS.functionsLookup.insert(d.genName(), index);
-        mS.functionsMeta.push(d);
-        mS.functions.push(None);
-
-        index
+        mS.functions.insert(d.genName(), (d, None)).unwrap()
     }
 
     pub fn registerStruct(&mut self, d: StructMeta) -> usize {
@@ -263,9 +260,7 @@ impl Namespace {
             id: 0,
             name: name.to_string(),
             state: NamespaceState::PartiallyLoaded,
-            functionsLookup: Default::default(),
-            functionsMeta: vec![],
-            functions: vec![],
+            functions: Default::default(),
             globals: Default::default(),
             structs: Default::default(),
             strings: Default::default(),

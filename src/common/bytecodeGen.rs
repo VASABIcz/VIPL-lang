@@ -649,15 +649,14 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             let namespaceId = ctx.vm.namespaceLookup.get(&r).unwrap();
             let namespace = ctx.vm.namespaces.get(*namespaceId).unwrap();
             let n = genFunName(f.name.as_str(), &t);
-            println!("{}", n);
-            println!("{:?}", namespace.functionsLookup);
-            let funcId = namespace.functionsLookup.get(&n).unwrap();
+
+            let funcId = namespace.functions.getSlow(&n).unwrap().1;
 
             for arg in &f.arguments {
                 genExpression(ctx.makeExpressionCtx(arg, None))?;
             }
 
-            ctx.ops.push(LCall { namespace: *namespaceId, id: *funcId })
+            ctx.ops.push(LCall { namespace: *namespaceId, id: funcId })
         }
         Statement::StatementExpression(v) => {
             let mut eCtx = ctx.makeExpressionCtx(v, None);
@@ -708,12 +707,12 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 Expression::Variable(v) => {
                     let var = ctx.vTable.get(&v.clone().into()).unwrap();
 
-                    ctx.ops.push(SetLocal { index: var.1, typ: DataType::Int })
+                    ctx.ops.push(SetLocal { index: var.1 })
                 }
                 Expression::ArrayIndexing(v) => {
                     ctx.makeExpressionCtx(&v.index, None).genExpression()?;
 
-                    ctx.ops.push(ArrayStore(DataType::Int))
+                    ctx.ops.push(ArrayStore)
                 },
                 Expression::NamespaceAccess(v) => {
                     let namespace = ctx.vm.findNamespaceParts(&v[..v.len()-1])?;
@@ -772,8 +771,8 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             genExpression(arrCtx)?;
             buf.push(Swap);
 
-            buf.push(ArrayLoad(Int));
-            buf.push(SetLocal { index: varID, typ: DataType::Int });
+            buf.push(ArrayLoad);
+            buf.push(SetLocal { index: varID });
 
             for s in body {
                 let mut sCtx = ctx.transfer(s);
@@ -886,7 +885,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 r.ops.push(Dup);
                 genExpression(r.constructCtx(exp))?;
                 r.genPushInt(ind as isize);
-                r.ops.push(ArrayStore(e.clone()));
+                r.ops.push(ArrayStore);
             }
         }
         Expression::ArrayIndexing(i) => {
@@ -907,7 +906,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                             genExpression(r.constructCtx(&i.expr))?;
                             genExpression(r.constructCtx(&i.index))?;
 
-                            r.ops.push(OpCode::ArrayLoad(v.clone()));
+                            r.ops.push(OpCode::ArrayLoad);
                         }
                         Generic::Any => panic!(),
                     }
@@ -961,9 +960,9 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                     if !r.vTable.contains_key(&MyStr::Static(&v)) {
                         let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
-                        let funcId = r.currentNamespace.functionsLookup.get(&genName).ok_or(format!("could not find function with type {}", &genName))?;
+                        let funcId = r.currentNamespace.findFunction(&genName)?.1;
 
-                        r.ops.push(SCall { id: *funcId });
+                        r.ops.push(SCall { id: funcId });
                     }
                     else {
                         genExpression(r.constructCtx(prev))?;

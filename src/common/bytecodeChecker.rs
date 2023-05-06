@@ -11,12 +11,12 @@ pub fn checkFunction(
     opCodes: &mut SeekableOpcodes,
     abstractStack: &mut AbstractStack,
     vm: &mut VirtualMachine,
-    checkedFunctions: &mut HashSet<Box<str>>,
+    checkedFunctions: &mut HashSet<Box<str>>
 ) -> Result<(), Box<dyn Error>> {
     let mut index = opCodes.index;
     let name = match opCodes.getOpcode(index).unwrap() {
         FunName { name } => name,
-        _v => {
+        _ => {
             return Err(Box::new(InvalidOpcode {
                 msg: "FunName".to_string(),
             }))
@@ -25,7 +25,7 @@ pub fn checkFunction(
     index += 1;
     let (vars, argCount) = match opCodes.getOpcode(index).unwrap() {
         LocalVarTable { typ, argsCount } => (typ, argsCount),
-        _v => {
+        _ => {
             return Err(Box::new(InvalidOpcode {
                 msg: "LocalVarTable".to_string(),
             }))

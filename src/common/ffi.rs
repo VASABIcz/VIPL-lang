@@ -5,8 +5,6 @@ use std::mem::forget;
 use std::ptr;
 use std::time::Duration;
 
-use libc::{exit, sleep};
-
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
 use crate::vm::heap::Hay;
@@ -82,7 +80,7 @@ pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] getLocalsInt");
     }
-    unsafe { vm.localVariables.get(index).unwrap() }.getNumRef()
+    vm.localVariables.get(index).unwrap().getNumRef()
 }
 
 #[no_mangle]
@@ -158,15 +156,20 @@ pub extern fn strConcat(
 
 
 #[no_mangle]
-pub extern fn LCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
+pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
     if DEBUG {
         println!("[ffi] LCall")
     }
 
     let d =unsafe { &mut *(vm as *mut VirtualMachine) };
     let namespace = vm.namespaces.get(namespaceID).unwrap();
-    let meta = namespace.functionsMeta.get(functionID).unwrap();
-    let func = namespace.functions.get(functionID).unwrap();
+
+    todo!()
+
+/*    let f = namespace.getFunction(functionID);
+
+
+
     let mut buf = vec![];
 
     for x in 0..meta.argsCount {
@@ -190,7 +193,7 @@ pub extern fn LCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     }
     else {
         Value::from(0)
-    }
+    }*/
 }
 
 
@@ -211,7 +214,7 @@ pub struct NativeWrapper {
     pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,
-    pub LCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value
+    pub lCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value
 }
 
 impl NativeWrapper {
@@ -226,7 +229,7 @@ impl NativeWrapper {
             stringNew,
             stringGetChar,
             strConcat,
-            LCall,
+            lCall,
         }
     }
 }

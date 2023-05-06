@@ -27,15 +27,14 @@ fn main() {
 
 
     let nn = vm.namespaces.get(id).unwrap();
-    let f = nn.functions.last().unwrap();
-    let fMeta = nn.functionsMeta.last().unwrap();
-    let mut xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
+    let (fMeta, f) = nn.functions.actual.last().unwrap();
+    let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     unsafe {
         f.as_ref().unwrap().call(&mut *c, StackFrame {
             localVariables: xd.into_boxed_slice(),
             programCounter: 0,
             namespaceId: nn.id,
-            functionId: nn.functions.len()-1,
+            functionId: nn.functions.actual.len()-1,
         })
     }
     println!("vm: {}", vm.stack.len());
