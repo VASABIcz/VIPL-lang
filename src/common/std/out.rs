@@ -6,7 +6,7 @@ use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{GlobalMeta, Namespace};
 use crate::vm::namespace::NamespaceState::Loaded;
-use crate::vm::objects::Str;
+use crate::vm::objects::{Array, Str};
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
@@ -57,8 +57,12 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         &[DataType::arr(Generic::Any)],
         |_a, b| {
             let c = b.localVariables.get(0).unwrap();
-            let str = &c.asRef::<Str>().data;
-            println!("{}", str.string);
+            let ar = &c.asRef::<Array>();
+
+            for (i, item) in ar.data.internal.iter().enumerate() {
+                print!("{}: {:?}, ", i, item)
+            }
+            println!()
         },
         DataType::Void,
     );
@@ -69,7 +73,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         typ: DataType::Char,
     });
 
-    *namespace.globals.get_mut(index).unwrap() = Value::from('\n');
+    namespace.globals.getFastMut(index).unwrap().1 = Value::from('\n');
 
     namespace.state = Loaded;
     vm.registerNamespace(namespace);

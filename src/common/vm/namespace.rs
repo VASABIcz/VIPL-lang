@@ -1,3 +1,4 @@
+use std::alloc::Global;
 use std::collections::HashMap;
 use std::error::Error;
 use std::mem::transmute;
@@ -5,6 +6,7 @@ use std::mem::transmute;
 use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
 use crate::bytecodeGen::{ExpressionCtx, genFunctionDef};
 use crate::errors::Errorable;
+use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
@@ -124,13 +126,14 @@ pub enum LoadedFunction {
 }
 
 impl LoadedFunction {
-    #[inline(never)]
+    #[inline(always)]
     pub fn call(&self, vm: &mut VirtualMachine, mut frame: StackFrame) {
         match self {
             LoadedFunction::BuiltIn(b) => {
                 b(vm, &mut frame);
             }
             LoadedFunction::Native(n) => unsafe {
+                panic!();
                 let x: *const () = transmute(n.clone());
                 let d: usize = transmute(vm.nativeWrapper.stringNew);
                 println!("before call");
@@ -156,25 +159,21 @@ pub struct Namespace {
     pub functionsMeta: Vec<FunctionMeta>,
     pub functions: Vec<Option<LoadedFunction>>,
 
-    pub globalsLookup: HashMap<String, usize>,
-    pub globalsMeta: Vec<GlobalMeta>,
-    pub globals: Vec<Value>,
+    pub globals: FastAcess<String, (GlobalMeta, Value)>,
 
-    pub structLookup: HashMap<String, usize>,
-    pub structs: Vec<StructMeta>,
+    pub structs: FastAcess<String, StructMeta>,
 
-    pub stringsLookup: HashMap<String, usize>,
-    pub strings: Vec<*mut Str>
+    pub strings: FastAcess<String, *mut Str>,
 }
 
 impl Allocation for Namespace {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
-        for s in &self.strings {
+        for s in &self.strings.actual {
             allocations.visit(*s as usize)
         }
 
-        for s in &self.globals {
-            allocations.visit((*s).into())
+        for s in &self.globals.actual {
+            allocations.visit((s.1).into())
         }
     }
 }
@@ -191,21 +190,17 @@ impl Namespace {
     }
 
     pub fn findGlobal(&self, name: &str) -> Errorable<(&GlobalMeta, usize)> {
-        let gId = self.globalsLookup.get(name)
+        let gId = self.globals.getSlowStr(name)
             .ok_or(format!("failed to find global varibale with name {}, in namespace {}", name, self.name))?;
 
-        let g = self.globalsMeta.get(*gId).ok_or(format!("failed to find global varibale with id {}", gId))?;
-
-        Ok((g, *gId))
+        Ok((&gId.0.0, gId.1))
     }
 
     pub fn findStruct(&self, name: &str) -> Errorable<(&StructMeta, usize)> {
-        let structId = self.structLookup.get(name)
+        let strc = self.structs.getSlowStr(name)
             .ok_or(format!("failed to find struct with name {}, in namespace {}", name, self.name))?;
 
-        let struc = self.structs.get(*structId).ok_or(format!("failed to find struct with id {}", structId))?;
-
-        Ok((struc, *structId))
+        Ok(strc)
     }
 
     pub fn findStructField(&self, structName: &str, fieldName: &str) -> Errorable<(&StructMeta, usize, &VariableMetadata, usize)> {
@@ -235,10 +230,15 @@ impl Namespace {
         self.functions.push(Some(LoadedFunction::BuiltIn(fun)));
     }
 
+    // VERY IMPORTANT!!
+    // removing this annotation will casuese segfault caused propably by rust optimizing mS.functionsMeta.push calls out
+    // exact cause unknown
+    #[inline(always)]
     pub fn registerFunctionDef(&self, d: FunctionMeta) -> usize {
         let mS = unsafe { &mut *(self as *const Namespace as *mut Namespace) };
 
-        let index = self.functionsMeta.len();
+        let index = mS.functionsMeta.len();
+
         mS.functionsLookup.insert(d.genName(), index);
         mS.functionsMeta.push(d);
         mS.functions.push(None);
@@ -247,20 +247,15 @@ impl Namespace {
     }
 
     pub fn registerStruct(&mut self, d: StructMeta) -> usize {
-        let index = self.structs.len();
-        self.structLookup.insert(d.name.clone(), index);
-        self.structs.push(d);
+        let index = self.structs.insert(d.name.clone(), d).unwrap();
 
         index
     }
 
     pub fn registerGlobal(&mut self, global: GlobalMeta) -> usize {
-        let index = self.globals.len();
-        self.globalsLookup.insert(global.name.as_str().to_string(), index);
-        self.globalsMeta.push(global);
-        self.globals.push(Value::from(0));
+        let res = self.globals.insert(global.name.as_str().to_string(), (global, Value::null())).unwrap();
 
-        index
+        res
     }
 
     pub fn new(name: &str) -> Self {
@@ -269,15 +264,11 @@ impl Namespace {
             name: name.to_string(),
             state: NamespaceState::PartiallyLoaded,
             functionsLookup: Default::default(),
-            globalsLookup: Default::default(),
-            structLookup: Default::default(),
             functionsMeta: vec![],
             functions: vec![],
-            globalsMeta: vec![],
-            globals: vec![],
-            structs: vec![],
-            stringsLookup: Default::default(),
-            strings: vec![],
+            globals: Default::default(),
+            structs: Default::default(),
+            strings: Default::default(),
         }
     }
 
@@ -295,7 +286,6 @@ impl Namespace {
             returnType: None,
             isNative: false,
         };
-        println!("{:?}", src);
 
         for s in src {
             match s {

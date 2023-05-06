@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::process::exit;
 use crate::vm::nativeObjects::UntypedObject;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 pub trait Allocation {
     fn collectAllocations(&self, allocations: &mut HayCollector);

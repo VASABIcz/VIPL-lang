@@ -22,7 +22,7 @@ const DEBUG: bool = true;
 
 
 #[no_mangle]
-pub extern fn createVm() -> *mut VirtualMachine<'static> {
+pub extern fn createVm() -> *mut VirtualMachine {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
     forget(ptr);
@@ -125,11 +125,11 @@ pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *c
     if DEBUG {
         println!("[ffi] stringNew");
     }
-    let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap().to_owned();
+    let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
     let d = unsafe { &mut *vm };
-    let a1 = Str::new(st);
-    let aw = ViplObject::<Str>::str(a1);
-    let all = d.heap.allocate(aw);
+
+    let all = d.allocateString(st);
+
     let mut a = Value::from(all);
 
     a.asMutRef() as *mut ViplObject<Str>
@@ -179,11 +179,10 @@ pub extern fn LCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     }
 
     let fr = StackFrame {
-        localVariables: &mut buf,
-        previous: None,
+        localVariables: buf.into_boxed_slice(),
         programCounter: 0,
-        namespace,
-        functionID,
+        namespaceId: namespace.id,
+        functionId: functionID,
     };
     func.as_ref().unwrap().call(d, fr);
     if meta.returnType != None {

@@ -1,12 +1,13 @@
-r = re::compile("[UwU|OwO]+")
+r = re::compile("([UwU|OwO])+")
+
+res = re::match(r, "UwUOwOUwU")
+
+out::print("matches")
+out::print(res[0][2])
 
 if re::doesMatch(r, "UwUOwOUwU") {
     out::print("it does match")
-    vm::gc()
 }
 else {
     out::print("it doesnt match")
-    vm::gc()
 }
-r = null
-vm::gc()

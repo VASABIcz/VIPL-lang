@@ -171,7 +171,7 @@ pub fn registerStd(vm: &mut VirtualMachine) {
      */
 }
 
-pub fn bootStrapVM() -> VirtualMachine<'static> {
+pub fn bootStrapVM() -> VirtualMachine {
     let mut vm = VirtualMachine::new();
 
     registerOut(&mut vm);

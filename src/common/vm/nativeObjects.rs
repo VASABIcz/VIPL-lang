@@ -1,10 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use crate::errors::Errorable;
-use crate::lexer::{AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit, RangeLexingUnit, SourceProvider, tokenize, WhitespaceLexingUnit};
-use crate::lexer::TokenType::Identifier;
-use crate::parser::NumericParsingUnit;
-use crate::vm::dataType::DataType;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::StructMeta;
 use crate::vm::objects::{Array, Str};
@@ -98,7 +93,7 @@ pub struct ViplObject<T: Allocation + Debug> {
     pub data: T
 }
 
-impl<T: Allocation + Debug> ViplObject<T> {
+impl ViplObject<Array> {
     pub fn arr(arr: Array) -> ViplObject<Array> {
         ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
@@ -106,7 +101,9 @@ impl<T: Allocation + Debug> ViplObject<T> {
             objectType: ObjectType::Native(ViplNativeObject::default()),
         }, data: arr }
     }
+}
 
+impl ViplObject<Str> {
     pub fn str(str: Str) -> ViplObject<Str> {
         ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
@@ -155,97 +152,6 @@ impl<T: Debug> Allocation for ViplObjectMeta<T> {
             }
         }
     }
-}
-
-#[derive(Debug)]
-pub enum JSON {
-    JObject(HashMap<String, JSON>),
-    JArray(Vec<JSON>),
-    JBool(bool),
-    JChar(char),
-    JInt(isize),
-    JFloat(f64),
-    JString(ViplObject<Str>),
-    JNull
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum JsonToken {
-    OCB,
-    CCB,
-    OSB,
-    CSB,
-    Colon,
-
-    String,
-    Number,
-
-    Null,
-    True,
-    False,
-
-    Identifier
-}
-
-pub fn jsonTokenizingUnits() -> Vec<Box<dyn LexingUnit<JsonToken>>> {
-    vec![
-        AlphabeticKeywordLexingUnit::new("false", JsonToken::False),
-        AlphabeticKeywordLexingUnit::new("true", JsonToken::False),
-        AlphabeticKeywordLexingUnit::new("null", JsonToken::False),
-
-        KeywordLexingUnit::new("{", JsonToken::OCB),
-        KeywordLexingUnit::new("}", JsonToken::CCB),
-        KeywordLexingUnit::new("[", JsonToken::OSB),
-        KeywordLexingUnit::new("]", JsonToken::CSB),
-        KeywordLexingUnit::new(",", JsonToken::Colon),
-
-        RangeLexingUnit::new("\"", "\"", Some(JsonToken::String)),
-        WhitespaceLexingUnit::new(),
-        IdentifierLexingUnit::new(JsonToken::Identifier)
-    ]
-}
-
-impl JSON {
-    pub fn parse(s: &str) -> Errorable<JSON> {
-        let res = tokenize(&mut jsonTokenizingUnits(), SourceProvider{ data: s, index: 0 })?;
-
-        None.ok_or("fsdfsd")?
-    }
-}
-
-#[derive(Debug)]
-struct JsonObject {
-    data: JSON
-}
-
-impl Allocation for JsonObject {
-    fn collectAllocations(&self, allocations: &mut HayCollector) {
-        todo!()
-    }
-}
-
-impl NativeObject for JsonObject {
-    fn getField(&mut self, field: usize, vm: &mut VirtualMachine) -> Option<Value> {
-        todo!()
-    }
-
-    fn setField(&mut self, field: usize, value: Value, vm: &mut VirtualMachine) {
-        todo!()
-    }
-
-    fn destroy(&mut self, vm: &mut VirtualMachine) {
-        todo!()
-    }
-}
-
-struct RegixObject {
-    regix: String,
-    v: StructMeta
-}
-
-
-impl RegixObject {
-
 }
 
 /*

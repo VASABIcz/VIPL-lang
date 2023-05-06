@@ -1,11 +1,15 @@
 fn fact(n: int): int {
-    return n*fact(n-1)*fact(n*2)
+    if n == 0 {
+        return 1
+    }
+
+    return n*fact(n-1)
 }
 
 x = 0
 
-while true {
-    fact(20)
+while x < 1 {
+    fact(4)
     x += 1
-    print(x)
+    out::print(x)
 }

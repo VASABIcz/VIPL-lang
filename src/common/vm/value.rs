@@ -30,6 +30,12 @@ pub union Value {
     pub FunctionPointer: (u32, u32)
 }
 
+impl Value {
+    pub fn null() -> Self {
+        Value::from(0)
+    }
+}
+
 impl Allocation for Value {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
         if allocations.allocated.contains(&(self.asRefMeta() as *const UntypedObject as usize)) {

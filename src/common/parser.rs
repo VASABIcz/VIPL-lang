@@ -19,12 +19,12 @@ use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::myStr::MyStr;
 
 #[derive(Debug)]
-struct NoSuchParsingUnit<T> {
+struct NoSuchParsingUnit<T: Debug + PartialEq + Clone> {
     typ: ParsingUnitSearchType,
     token: Option<Token<T>>,
 }
 
-impl<T: Debug + Send + Sync> Display for NoSuchParsingUnit<T> {
+impl<T: Debug + Send + Sync + PartialEq + Clone> Display for NoSuchParsingUnit<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -34,7 +34,7 @@ impl<T: Debug + Send + Sync> Display for NoSuchParsingUnit<T> {
     }
 }
 
-impl<T: Debug + Send + Sync> Error for NoSuchParsingUnit<T> {}
+impl<T: Debug + Send + Sync + PartialEq + Clone> Error for NoSuchParsingUnit<T> {}
 
 #[derive(Debug)]
 struct InvalidOperation {
@@ -50,12 +50,12 @@ impl Display for InvalidOperation {
 
 impl Error for InvalidOperation {}
 
-fn getParsingUnit<'a, T>(
-    tokens: &mut TokenProvider,
+fn getParsingUnit<'a, OUT, IN: PartialEq + Clone>(
+    tokens: &mut TokenProvider<IN>,
     typ: ParsingUnitSearchType,
-    parsingUnits: &'a [Box<dyn ParsingUnit<T>>],
-    previous: Option<T>
-) -> Option<&'a Box<dyn ParsingUnit<T>>> {
+    parsingUnits: &'a [Box<dyn ParsingUnit<OUT, IN>>],
+    previous: Option<OUT>
+) -> Option<&'a Box<dyn ParsingUnit<OUT, IN>>> {
     parsingUnits.iter().find(|it| {
         let parserType = it.getType();
 
@@ -74,12 +74,12 @@ fn getParsingUnit<'a, T>(
     })
 }
 
-pub fn parseOne<T: Clone + Debug>(
-    tokens: &mut TokenProvider,
+pub fn parseOne<OUT: Clone + Debug, IN: Clone + Debug + Send + Sync + PartialEq + 'static + Copy>(
+    tokens: &mut TokenProvider<IN>,
     typ: ParsingUnitSearchType,
-    parsingUnits: &[Box<dyn ParsingUnit<T>>],
-    previous: Option<T>,
-) -> Result<T, Box<dyn Error>> {
+    parsingUnits: &[Box<dyn ParsingUnit<OUT, IN>>],
+    previous: Option<OUT>,
+) -> Result<OUT, Box<dyn Error>> {
     let u =
         getParsingUnit(tokens, typ.clone(), parsingUnits, previous.clone()).ok_or(Box::new(NoSuchParsingUnit {
             typ,
@@ -87,22 +87,25 @@ pub fn parseOne<T: Clone + Debug>(
         }))?;
 
     let mut first = u.parse(tokens, previous, parsingUnits)?;
-    println!("first {:?} {:?}", first, tokens.peekOne());
 
     while let Some(v) = getParsingUnit(tokens, ParsingUnitSearchType::Back, parsingUnits, Some(first.clone())) {
+        first = v.parse(tokens, Some(first), parsingUnits)?;
+    }
+
+    if let Some(v) = getParsingUnit(tokens, ParsingUnitSearchType::Around, parsingUnits, Some(first.clone())) {
         first = v.parse(tokens, Some(first), parsingUnits)?;
     }
 
     Ok(first.clone())
 }
 
-pub fn parse<T: Clone>(
-    tokens: &mut TokenProvider,
+pub fn parse<OUT: Clone, IN: Clone + Debug + Sync + Send + PartialEq + 'static + Copy>(
+    tokens: &mut TokenProvider<IN>,
     typ: ParsingUnitSearchType,
-    parsingUnits: &[Box<dyn ParsingUnit<T>>],
-    previous: Option<T>,
+    parsingUnits: &[Box<dyn ParsingUnit<OUT, IN>>],
+    previous: Option<OUT>,
     isPrevUser: &mut bool,
-) -> Result<Vec<T>, Box<dyn Error>> {
+) -> Result<Vec<OUT>, Box<dyn Error>> {
     let mut buf = vec![];
     let mut counter = 0;
     let mut opBuf = None;
@@ -177,7 +180,7 @@ pub fn parse<T: Clone>(
     Ok(buf)
 }
 
-pub fn parseType<T>(parsingUnits: &Vec<Box<dyn ParsingUnit<T>>>, tokens: &mut TokenProvider, typ: ParsingUnitSearchType, buf: &mut Vec<T>) -> Result<bool, Box<dyn Error>> {
+pub fn parseType<OUT, IN: PartialEq + Clone>(parsingUnits: &Vec<Box<dyn ParsingUnit<OUT, IN>>>, tokens: &mut TokenProvider<IN>, typ: ParsingUnitSearchType, buf: &mut Vec<OUT>) -> Result<bool, Box<dyn Error>> {
     for unit in parsingUnits.iter() {
         let parserType = unit.getType();
 
@@ -290,8 +293,8 @@ fn parse(parsingUnits: &mut [Box<dyn ParsingUnit>], mut tokens: TokenProvider, t
 
  */
 
-pub struct TokenProvider {
-    pub tokens: Vec<Token<TokenType>>,
+pub struct TokenProvider<T: PartialEq + Clone> {
+    pub tokens: Vec<Token<T>>,
     pub index: usize,
 }
 
@@ -308,16 +311,24 @@ impl Display for InvalidToken {
 
 impl Error for InvalidToken {}
 
-impl TokenProvider {
-    pub fn new(tokens: Vec<Token<TokenType>>) -> Self {
+impl TokenProvider<TokenType> {
+    pub fn getIdentifier(&mut self) -> Result<String, Box<dyn Error>> {
+        let t = self.getAssert(TokenType::Identifier)?;
+
+        Ok(t.str.clone())
+    }
+}
+
+impl<T: PartialEq + Debug + Clone + Copy> TokenProvider<T> {
+    pub fn new(tokens: Vec<Token<T>>) -> TokenProvider<T> {
         Self { tokens, index: 0 }
     }
 
-    fn peekOne(&self) -> Option<&Token<TokenType>> {
+    fn peekOne(&self) -> Option<&Token<T>> {
         self.tokens.get(self.index)
     }
 
-    fn peekIndex(&self, offset: usize) -> Option<&Token<TokenType>> {
+    fn peekIndex(&self, offset: usize) -> Option<&Token<T>> {
         self.tokens.get(self.index + offset)
     }
 
@@ -325,7 +336,7 @@ impl TokenProvider {
         self.index += 1
     }
 
-    pub fn isPeekTypeMany(&self, types: &[TokenType]) -> bool {
+    pub fn isPeekTypeMany(&self, types: &[T]) -> bool {
         for (index, typ) in types.into_iter().enumerate() {
             if !self.isPeekIndexType(*typ, index) {
                 return false
@@ -335,7 +346,7 @@ impl TokenProvider {
         return true
     }
 
-    pub fn parseManyWithSeparatorUntil<T, F: Fn(&mut TokenProvider) -> Result<T, Box<dyn Error>>>(&mut self, f: F, sep: Option<TokenType>, end: TokenType) -> Result<Vec<T>, Box<dyn Error>> {
+    pub fn parseManyWithSeparatorUntil<F: Fn(&mut TokenProvider<T>) -> Result<OUT, Box<dyn Error>>, OUT>(&mut self, mut f: F, sep: Option<T>, end: T) -> Result<Vec<OUT>, Box<dyn Error>> {
         let mut buf = vec![];
 
         if self.isPeekType(end) {
@@ -367,7 +378,7 @@ impl TokenProvider {
         Ok(buf)
     }
 
-    fn getAssert(&mut self, typ: TokenType) -> Result<&Token<TokenType>, Box<dyn Error>> {
+    pub fn getAssert(&mut self, typ: T) -> Result<&Token<T>, Box<dyn Error>> {
         let i = self.index;
         self.consume();
         let t = match self.tokens.get(i) {
@@ -387,7 +398,7 @@ impl TokenProvider {
         Ok(t)
     }
 
-    fn isPeekType(&self, typ: TokenType) -> bool {
+    pub fn isPeekType(&self, typ: T) -> bool {
         let t = self.peekOne();
 
         match t {
@@ -396,7 +407,7 @@ impl TokenProvider {
         }
     }
 
-    fn isPeekIndexType(&self, typ: TokenType, offset: usize) -> bool {
+    pub fn isPeekIndexType(&self, typ: T, offset: usize) -> bool {
         let t = self.peekIndex(offset);
 
         match t {
@@ -405,13 +416,7 @@ impl TokenProvider {
         }
     }
 
-    fn getIdentifier(&mut self) -> Result<String, Box<dyn Error>> {
-        let t = self.getAssert(TokenType::Identifier)?;
-
-        Ok(t.str.clone())
-    }
-
-    fn getToken(&mut self) -> Result<Token<TokenType>, Box<dyn Error>> {
+    fn getToken(&mut self) -> Result<Token<T>, Box<dyn Error>> {
         let i = self.index;
         self.consume();
         match self.tokens.get(i) {
@@ -485,17 +490,17 @@ pub enum ParsingUnitSearchType {
 }
 
 
-pub trait ParsingUnit<T>: Debug {
+pub trait ParsingUnit<OUT, IN: PartialEq + Clone>: Debug {
     fn getType(&self) -> ParsingUnitSearchType;
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&T>) -> bool;
+    fn canParse(&self, tokenProvider: &TokenProvider<IN>, previous: Option<&OUT>) -> bool;
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
-        previous: Option<T>,
-        parser: &[Box<dyn ParsingUnit<T>>],
-    ) -> Result<T, Box<dyn Error>>;
+        tokenProvider: &mut TokenProvider<IN>,
+        previous: Option<OUT>,
+        parser: &[Box<dyn ParsingUnit<OUT, IN>>],
+    ) -> Result<OUT, Box<dyn Error>>;
 
     fn getPriority(&self) -> usize;
 
@@ -505,20 +510,20 @@ pub trait ParsingUnit<T>: Debug {
 #[derive(Debug)]
 pub struct FunctionParsingUnit;
 
-impl ParsingUnit<Operation> for FunctionParsingUnit {
+impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         ParsingUnitSearchType::Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Fn)
     }
 
     fn parse(
         &self,
-        tokens: &mut TokenProvider,
+        tokens: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         let mut isNative = false;
 
@@ -586,20 +591,20 @@ pub struct ArithmeticParsingUnit {
     pub priority: usize,
 }
 
-impl ParsingUnit<Operation> for ArithmeticParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ArithmeticParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(self.typ)
     }
 
     fn parse(
         &self,
-        tokens: &mut TokenProvider,
+        tokens: &mut TokenProvider<TokenType>,
         previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokens.consume();
         let res = parseOne(tokens, Ahead, parser, None)?;
@@ -646,12 +651,12 @@ impl ParsingUnit<Operation> for ArithmeticParsingUnit {
 #[derive(Debug)]
 pub struct NumericParsingUnit;
 
-impl ParsingUnit<Operation> for NumericParsingUnit {
+impl ParsingUnit<Operation, TokenType> for NumericParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         let peek = match tokenProvider.peekOne() {
             None => return false,
             Some(v) => v,
@@ -685,9 +690,9 @@ impl ParsingUnit<Operation> for NumericParsingUnit {
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         let mut peek = tokenProvider.peekOne().unwrap();
 
@@ -736,20 +741,20 @@ impl ParsingUnit<Operation> for NumericParsingUnit {
 #[derive(Debug)]
 pub struct BoolParsingUnit;
 
-impl ParsingUnit<Operation> for BoolParsingUnit {
+impl ParsingUnit<Operation, TokenType> for BoolParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::True) || tokenProvider.isPeekType(TokenType::False)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         if tokenProvider.isPeekType(TokenType::False) {
             tokenProvider.getAssert(TokenType::False)?;
@@ -769,20 +774,20 @@ impl ParsingUnit<Operation> for BoolParsingUnit {
 #[derive(Debug)]
 pub struct VariableParsingUnit;
 
-impl ParsingUnit<Operation> for VariableParsingUnit {
+impl ParsingUnit<Operation, TokenType> for VariableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         Ok(Operation::Expr(Expression::Variable(
             tokenProvider.getIdentifier()?,
@@ -799,20 +804,20 @@ impl ParsingUnit<Operation> for VariableParsingUnit {
 #[derive(Debug)]
 pub struct ReturnParsingUnit;
 
-impl ParsingUnit<Operation> for ReturnParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ReturnParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Return)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Return)?;
         let exp = parseExpr(tokenProvider, parser)?;
@@ -829,20 +834,20 @@ impl ParsingUnit<Operation> for ReturnParsingUnit {
 #[derive(Debug)]
 pub struct WhileParsingUnit;
 
-impl ParsingUnit<Operation> for WhileParsingUnit {
+impl ParsingUnit<Operation, TokenType> for WhileParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::While)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(TokenType::While)?;
 
@@ -867,8 +872,8 @@ impl ParsingUnit<Operation> for WhileParsingUnit {
 pub struct IfParsingUnit;
 
 fn parseBody(
-    tokenProvider: &mut TokenProvider,
-    parser: &[Box<dyn ParsingUnit<Operation>>],
+    tokenProvider: &mut TokenProvider<TokenType>,
+    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
 ) -> Result<Vec<Statement>, Box<dyn Error>> {
     let mut statements = vec![];
 
@@ -876,7 +881,6 @@ fn parseBody(
 
 
     while !tokenProvider.isPeekType(CCB) {
-        let mut xd = false;
         statements.push(parseOne(tokenProvider, Ahead, parser, None)?.asStatement()?);
     }
 
@@ -886,34 +890,27 @@ fn parseBody(
 }
 
 fn parseExpr(
-    tokenProvider: &mut TokenProvider,
-    parser: &[Box<dyn ParsingUnit<Operation>>],
+    tokenProvider: &mut TokenProvider<TokenType>,
+    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
 ) -> Result<Expression, Box<dyn Error>> {
     let res = parseOne(tokenProvider, Ahead, parser, None)?;
-    let par = getParsingUnit(tokenProvider, Around, parser, None);
-
-    let op = match par {
-        None => res,
-        Some(p) => p.parse(tokenProvider, Some(res), parser)?,
-    };
-
-    op.asExpr()
+    res.asExpr()
 }
 
-impl ParsingUnit<Operation> for IfParsingUnit {
+impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::If)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(TokenType::If)?;
 
@@ -950,20 +947,20 @@ impl ParsingUnit<Operation> for IfParsingUnit {
 #[derive(Debug)]
 struct BracketsParsingUnit;
 
-impl ParsingUnit<Operation> for BracketsParsingUnit {
+impl ParsingUnit<Operation, TokenType> for BracketsParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(ORB)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(ORB)?;
         let expr = Ok(Operation::Expr(parseExpr(tokenProvider, parser)?));
@@ -981,20 +978,20 @@ impl ParsingUnit<Operation> for BracketsParsingUnit {
 #[derive(Debug)]
 struct CharParsingUnit;
 
-impl ParsingUnit<Operation> for CharParsingUnit {
+impl ParsingUnit<Operation, TokenType> for CharParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(CharLiteral)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         let c = tokenProvider.getAssert(CharLiteral)?;
         let mut chars = c.str.chars();
@@ -1035,20 +1032,20 @@ impl ParsingUnit<Operation> for CharParsingUnit {
 #[derive(Debug)]
 struct StringParsingUnit;
 
-impl ParsingUnit<Operation> for StringParsingUnit {
+impl ParsingUnit<Operation, TokenType> for StringParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::StringLiteral)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         let str = tokenProvider.getAssert(StringLiteral)?;
         Ok(Operation::Expr(Expression::StringLiteral(str.str.clone())))
@@ -1061,7 +1058,7 @@ impl ParsingUnit<Operation> for StringParsingUnit {
     fn setPriority(&mut self, _priority: usize) {}
 }
 
-pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Error>> {
+pub fn parseDataType(tokens: &mut TokenProvider<TokenType>) -> Result<DataType, Box<dyn Error>> {
     if tokens.isPeekType(Identifier) && tokens.isPeekIndexType(Gt, 1) {
         let mut generics = vec![];
 
@@ -1112,20 +1109,20 @@ pub fn parseDataType(tokens: &mut TokenProvider) -> Result<DataType, Box<dyn Err
 #[derive(Debug)]
 struct ArrayLiteralParsingUnit;
 
-impl ParsingUnit<Operation> for ArrayLiteralParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ArrayLiteralParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(OSB)?;
 
@@ -1152,20 +1149,20 @@ impl ParsingUnit<Operation> for ArrayLiteralParsingUnit {
 #[derive(Debug)]
 struct ArrayIndexingParsingUnit;
 
-impl ParsingUnit<Operation> for ArrayIndexingParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ArrayIndexingParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(OSB)?;
         let expr = parseExpr(tokenProvider, parser)?;
@@ -1189,20 +1186,20 @@ impl ParsingUnit<Operation> for ArrayIndexingParsingUnit {
 #[derive(Debug)]
 struct ContinueParsingUnit;
 
-impl ParsingUnit<Operation> for ContinueParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ContinueParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Continue)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Continue)?;
         Ok(Operation::Statement(Statement::Continue))
@@ -1220,20 +1217,20 @@ impl ParsingUnit<Operation> for ContinueParsingUnit {
 #[derive(Debug)]
 struct BreakParsingUnit;
 
-impl ParsingUnit<Operation> for BreakParsingUnit {
+impl ParsingUnit<Operation, TokenType> for BreakParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Break)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(TokenType::Break)?;
         Ok(Operation::Statement(Statement::Break))
@@ -1251,20 +1248,20 @@ impl ParsingUnit<Operation> for BreakParsingUnit {
 #[derive(Debug)]
 struct LoopParsingUnit;
 
-impl ParsingUnit<Operation> for LoopParsingUnit {
+impl ParsingUnit<Operation, TokenType> for LoopParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Loop)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Loop)?;
         let body = parseBody(tokenProvider, parser)?;
@@ -1283,20 +1280,20 @@ impl ParsingUnit<Operation> for LoopParsingUnit {
 #[derive(Debug)]
 struct NotParsingUnit;
 
-impl ParsingUnit<Operation> for NotParsingUnit {
+impl ParsingUnit<Operation, TokenType> for NotParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Not)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation>>],
+        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Not)?;
 
@@ -1317,20 +1314,20 @@ impl ParsingUnit<Operation> for NotParsingUnit {
 #[derive(Debug)]
 struct StructParsingUnit;
 
-impl ParsingUnit<Operation> for StructParsingUnit {
+impl ParsingUnit<Operation, TokenType> for StructParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Struct)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider,
+        tokenProvider: &mut TokenProvider<TokenType>,
         _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation>>],
+        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Struct)?;
         let name = tokenProvider.getIdentifier()?;
@@ -1371,16 +1368,16 @@ impl ParsingUnit<Operation> for StructParsingUnit {
 #[derive(Debug)]
 struct ImportParsingUnit;
 
-impl ParsingUnit<Operation> for ImportParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ImportParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Import)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Import)?;
         let mut buf = vec![];
 
@@ -1403,16 +1400,16 @@ impl ParsingUnit<Operation> for ImportParsingUnit {
 #[derive(Debug)]
 struct NamespaceParsingUnit;
 
-impl ParsingUnit<Operation> for NamespaceParsingUnit {
+impl ParsingUnit<Operation, TokenType> for NamespaceParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(Namespace, 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         let mut buf = vec![];
 
         while tokenProvider.isPeekType(Identifier) {
@@ -1441,17 +1438,16 @@ impl ParsingUnit<Operation> for NamespaceParsingUnit {
 #[derive(Debug)]
 struct CallableParsingUnit;
 
-impl ParsingUnit<Operation> for CallableParsingUnit {
+impl ParsingUnit<Operation, TokenType> for CallableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(ORB) && previous.map(|it| it.asExprRef().map(|it| { it.isCallable() }).unwrap_or(false)).unwrap_or(false)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
-        eprintln!("AIDS!!!!");
+    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokens.getAssert(ORB)?;
 
         let mut args = vec![];
@@ -1488,16 +1484,16 @@ impl ParsingUnit<Operation> for CallableParsingUnit {
 #[derive(Debug)]
 struct LambdaParsingUnit;
 
-impl ParsingUnit<Operation> for LambdaParsingUnit {
+impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(OCB)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(OCB)?;
         let res = tokenProvider.parseManyWithSeparatorUntil(|it| {
             let argName = it.getIdentifier()?;
@@ -1533,14 +1529,14 @@ impl ParsingUnit<Operation> for LambdaParsingUnit {
 #[derive(Debug)]
 struct IncParsingUnit;
 
-impl ParsingUnit<Operation> for IncParsingUnit {
+impl ParsingUnit<Operation, TokenType> for IncParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {Back}
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Inc) || tokenProvider.isPeekType(TokenType::Dec)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         let prev = previous.ok_or("fuck")?.asExpr()?;
 
         if tokenProvider.isPeekType(TokenType::Inc) {
@@ -1567,16 +1563,16 @@ impl ParsingUnit<Operation> for IncParsingUnit {
 #[derive(Debug)]
 struct StructInitParsingUnit;
 
-impl ParsingUnit<Operation> for StructInitParsingUnit {
+impl ParsingUnit<Operation, TokenType> for StructInitParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(OCB, 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         let name = tokenProvider.getIdentifier()?;
 
         tokenProvider.getAssert(OCB)?;
@@ -1604,16 +1600,16 @@ impl ParsingUnit<Operation> for StructInitParsingUnit {
 #[derive(Debug)]
 struct FieldAccessParsingUnit;
 
-impl ParsingUnit<Operation> for FieldAccessParsingUnit {
+impl ParsingUnit<Operation, TokenType> for FieldAccessParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Dot)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Dot)?;
         let fieldName = tokenProvider.getIdentifier()?;
 
@@ -1632,12 +1628,12 @@ impl ParsingUnit<Operation> for FieldAccessParsingUnit {
 #[derive(Debug)]
 struct AssignableParsingUnit;
 
-impl ParsingUnit<Operation> for AssignableParsingUnit {
+impl ParsingUnit<Operation, TokenType> for AssignableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Equals)
             || tokenProvider.isPeekType(AddAs)
             || tokenProvider.isPeekType(SubAs)
@@ -1650,7 +1646,7 @@ impl ParsingUnit<Operation> for AssignableParsingUnit {
         }).unwrap_or(false)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         let mut typ = None;
 
         if tokenProvider.isPeekType(AddAs) {
@@ -1684,16 +1680,16 @@ impl ParsingUnit<Operation> for AssignableParsingUnit {
 #[derive(Debug)]
 struct GlobalParsingUnit;
 
-impl ParsingUnit<Operation> for GlobalParsingUnit {
+impl ParsingUnit<Operation, TokenType> for GlobalParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(TokenType::Global)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Global)?;
 
         let name = tokenProvider.getIdentifier()?;
@@ -1729,16 +1725,16 @@ impl ParsingUnit<Operation> for GlobalParsingUnit {
 #[derive(Debug)]
 struct ForParsingUnit;
 
-impl ParsingUnit<Operation> for ForParsingUnit {
+impl ParsingUnit<Operation, TokenType> for ForParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(For)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(For)?;
 
         let varName = tokenProvider.getIdentifier()?;
@@ -1764,16 +1760,16 @@ impl ParsingUnit<Operation> for ForParsingUnit {
 #[derive(Debug)]
 struct NullParsingUnit;
 
-impl ParsingUnit<Operation> for NullParsingUnit {
+impl ParsingUnit<Operation, TokenType> for NullParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
         tokenProvider.isPeekType(Null)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation>>]) -> Result<Operation, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, Box<dyn Error>> {
         tokenProvider.getAssert(Null)?;
 
         Ok(Operation::Expr(Expression::Null))
@@ -1788,7 +1784,7 @@ impl ParsingUnit<Operation> for NullParsingUnit {
     }
 }
 
-pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation>>> {
+pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
     vec![
         Box::new(AssignableParsingUnit),
         Box::new(StructInitParsingUnit),

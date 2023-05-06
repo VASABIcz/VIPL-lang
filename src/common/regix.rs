@@ -85,7 +85,6 @@ impl Regix {
             l.assertConsume("]")?;
 
             regixes.push(Regix::Group(buf));
-            *captures += 1;
         }
         else if l.isPeek("|") {
             l.consumeOne();

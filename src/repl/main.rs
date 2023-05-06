@@ -113,8 +113,8 @@ fn main() {
                 objects: None,
                 previous: None,
                 programCounter: 0,
-                namespace: nn,
-                functionID: nn.functions.len()-1,
+                namespaceId: nn,
+                functionId: nn.functions.len()-1,
             })
         }
     }

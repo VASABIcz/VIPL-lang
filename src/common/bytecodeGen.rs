@@ -30,7 +30,7 @@ pub struct ExpressionCtx<'a> {
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>,
+    pub vm: &'a VirtualMachine,
 }
 
 impl ExpressionCtx<'_> {
@@ -210,7 +210,6 @@ impl ExpressionCtx<'_> {
                 unsafe {
                     if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                         if !self.vTable.contains_key(&MyStr::Static(&v)) {
-                            println!("hello {:?} {:?} {:?}", prev, args, self.vTable);
                             let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
                             let funcId = self.currentNamespace.findFunction(&genName)?;
                             return Ok(funcId.0.returnType.clone())
@@ -256,8 +255,7 @@ impl ExpressionCtx<'_> {
                             _ => {}
                         }
 
-                        let structID = self.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
-                        let structMeta = self.currentNamespace.structs.get(*structID).unwrap();
+                        let (structMeta, structID) = self.currentNamespace.findStruct(o.name.as_str())?;
                         let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
                         let t = structMeta.fields.get(*fieldID).unwrap();
                         Ok(Some(t.typ.clone()))
@@ -276,7 +274,7 @@ pub struct PartialExprCtx<'a> {
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>,
+    pub vm: &'a VirtualMachine,
 }
 
 impl PartialExprCtx<'_> {
@@ -335,7 +333,7 @@ pub struct StatementCtx<'a> {
     pub vTable: &'a mut HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
     pub currentNamespace: &'a Namespace,
-    pub vm: &'a VirtualMachine<'a>,
+    pub vm: &'a VirtualMachine,
     pub handle: fn(&mut StatementCtx, DataType) -> ()
 }
 
@@ -516,7 +514,6 @@ pub fn genFunctionDef(
         }
 
         for statement in body {
-            println!("gening {:?}", statement);
             genStatement(StatementCtx{
                 statement,
                 ops,
@@ -559,7 +556,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     for s in &w.body {
                         let mut ctx2 = ctx.copy(s);
                         ctx2.ops = &mut bodyBuf;
-                        println!("{}", size);
                         ctx2.loopContext = Some(size);
                         genStatement(ctx2)?;
                     }
@@ -733,8 +729,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     };
 
                     let namespaceID = cd.currentNamespace.id;
-                    let structID = *cd.currentNamespace.structLookup.get(class.name.as_str()).unwrap();
-                    let str = cd.currentNamespace.structs.get(structID).unwrap();
+                    let (str, structID) = cd.currentNamespace.findStruct(class.name.as_str())?;
                     let fieldID = *str.fieldsLookup.get(field).unwrap();
 
                     ctx.ops.push(SetField {
@@ -962,7 +957,6 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 }
             }
 
-            println!("COZE? {:?}", prev);
             unsafe {
                 if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                     if !r.vTable.contains_key(&MyStr::Static(&v)) {
@@ -1028,15 +1022,13 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         }
                     }
 
-                    let structID = r.currentNamespace.structLookup.get(o.name.as_str()).unwrap();
-                    let structMeta = r.currentNamespace.structs.get(*structID).unwrap();
-                    let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
+                    let (structMeta, structID, field, fieldID) = r.currentNamespace.findStructField(o.name.as_str(), fieldName)?;
 
 
                     r.ops.push(GetField {
                         namespaceID: r.currentNamespace.id,
-                        structID: *structID,
-                        fieldID: *fieldID,
+                        structID: structID,
+                        fieldID: fieldID,
                     });
                 }
                 _ => panic!(),

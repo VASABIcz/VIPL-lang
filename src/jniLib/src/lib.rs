@@ -65,10 +65,10 @@ pub extern fn Java_org_example_VIPLSDK_registerNamespace(mut env: JNIEnv, class:
 #[no_mangle]
 pub extern fn route(vm: &mut VirtualMachine, stack: &mut StackFrame) {
     println!("hello my friens :3");
-    let r = getRouter().get(&(stack.namespace.id, stack.functionID));
+    let r = getRouter().get(&(stack.namespaceId.id, stack.functionId));
     match r {
         None => {
-            eprintln!("failed to lookup {} {}", stack.namespace.id, stack.functionID);
+            eprintln!("failed to lookup {} {}", stack.namespaceId.id, stack.functionId);
         },
         Some(v) => {
             let env = getEnv();
@@ -140,8 +140,8 @@ pub extern fn Java_org_example_VIPLSDK_call(mut env: JNIEnv, class: JClass, vm: 
         objects: None,
         previous: None,
         programCounter: 0,
-        namespace: vm.namespaces.get(namespaceID as usize).unwrap(),
-        functionID: 0,
+        namespaceId: vm.namespaces.get(namespaceID as usize).unwrap(),
+        functionId: 0,
     };
 
 
