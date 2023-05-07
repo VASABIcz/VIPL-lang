@@ -268,6 +268,17 @@ impl ExpressionCtx<'_> {
     }
 }
 
+#[derive(Debug)]
+struct OpCodeManager<'a> {
+    pub ops: &'a mut Vec<OpCode>
+}
+
+impl OpCodeManager<'_> {
+    pub fn push(&mut self, op: OpCode) {
+        self.ops.push(op)
+    }
+}
+
 pub struct PartialExprCtx<'a> {
     pub ops: &'a mut Vec<OpCode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
@@ -278,19 +289,20 @@ pub struct PartialExprCtx<'a> {
 }
 
 impl PartialExprCtx<'_> {
+    #[inline(always)]
     pub fn push(&mut self, op: OpCode) {
         self.ops.push(op)
     }
 
     pub fn genPushInt(&mut self, value: isize) {
         if value == 1 {
-            self.ops.push(PushIntOne)
+            self.push(PushIntOne)
         }
         else if value == 0 {
-            self.ops.push(PushIntZero)
+            self.push(PushIntZero)
         }
         else {
-            self.ops.push(PushInt(value))
+            self.push(PushInt(value))
         }
     }
 }
@@ -502,7 +514,7 @@ pub fn genFunctionDef(
         for s in body {
             let mut ctx = StatementCtx{
                 statement: &Statement::Continue,
-                ops,
+                ops: ops,
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
@@ -516,7 +528,7 @@ pub fn genFunctionDef(
         for statement in body {
             genStatement(StatementCtx{
                 statement,
-                ops,
+                ops: ops,
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
@@ -560,12 +572,12 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                         genStatement(ctx2)?;
                     }
                     let len = bodyBuf.len();
-                    ctx.ops.push(OpCode::Jmp {
+                    ctx.push(OpCode::Jmp {
                         offset: len as isize + 1,
                         jmpType: JmpType::False,
                     });
                     ctx.ops.extend(bodyBuf);
-                    ctx.ops.push(OpCode::Jmp {
+                    ctx.push(OpCode::Jmp {
                         offset: -(ctx.ops.len() as isize - size as isize + 1),
                         jmpType: JmpType::Jmp,
                     })
@@ -585,7 +597,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             if flow.elseBody.is_some() {
                 jumpDist += 1;
             }
-            ctx.ops.push(Jmp {
+            ctx.push(Jmp {
                 offset: jumpDist,
                 jmpType: JmpType::False,
             });
@@ -601,7 +613,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                         genStatement(ctx1)?;
                     }
 
-                    ctx.ops.push(OpCode::Jmp {
+                    ctx.push(OpCode::Jmp {
                         offset: buf.len() as isize,
                         jmpType: JmpType::Jmp,
                     });
@@ -611,13 +623,13 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         }
         Statement::Return(ret) => {
             genExpression(ctx.makeExpressionCtx(&ret.exp, None))?;
-            ctx.ops.push(OpCode::Return)
+            ctx.push(OpCode::Return)
         }
         Statement::Continue => {
             let index = ctx
                 .loopContext
                 .ok_or("continue can be only used in loops")?;
-            ctx.ops.push(Jmp {
+            ctx.push(Jmp {
                 offset: (index - ctx.ops.len() + 2) as isize,
                 jmpType: JmpType::Jmp,
             })
@@ -634,7 +646,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             }
             let bufLen = buf.len() as isize;
             ctx.ops.extend(buf);
-            ctx.ops.push(Jmp {
+            ctx.push(Jmp {
                 offset: -(bufLen + 1),
                 jmpType: JmpType::Jmp,
             });
@@ -656,7 +668,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 genExpression(ctx.makeExpressionCtx(arg, None))?;
             }
 
-            ctx.ops.push(LCall { namespace: *namespaceId, id: funcId })
+            ctx.push(LCall { namespace: *namespaceId, id: funcId })
         }
         Statement::StatementExpression(v) => {
             let mut eCtx = ctx.makeExpressionCtx(v, None);
@@ -707,18 +719,18 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                 Expression::Variable(v) => {
                     let var = ctx.vTable.get(&v.clone().into()).unwrap();
 
-                    ctx.ops.push(SetLocal { index: var.1 })
+                    ctx.push(SetLocal { index: var.1 })
                 }
                 Expression::ArrayIndexing(v) => {
                     ctx.makeExpressionCtx(&v.index, None).genExpression()?;
 
-                    ctx.ops.push(ArrayStore)
+                    ctx.push(ArrayStore)
                 },
                 Expression::NamespaceAccess(v) => {
                     let namespace = ctx.vm.findNamespaceParts(&v[..v.len()-1])?;
                     let global = namespace.0.findGlobal(v.last().unwrap())?;
 
-                    ctx.ops.push(SetGlobal { namespaceID: namespace.1, globalID: global.1 })
+                    ctx.push(SetGlobal { namespaceID: namespace.1, globalID: global.1 })
                 },
                 Expression::FieldAccess(obj, field) => {
                     let mut cd = ctx.makeExpressionCtx(obj, None);
@@ -731,7 +743,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
                     let (str, structID) = cd.currentNamespace.findStruct(class.name.as_str())?;
                     let fieldID = *str.fieldsLookup.get(field).unwrap();
 
-                    ctx.ops.push(SetField {
+                    ctx.push(SetField {
                         namespaceID,
                         structID,
                         fieldID,
@@ -745,7 +757,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             let varID = ctx.vTable.get(&var.clone().into()).unwrap().1;
 
             // BEGIN
-            ctx.ops.push(PushIntZero);
+            ctx.push(PushIntZero);
 
             let beginIndex = ctx.ops.len();
 
@@ -794,7 +806,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             ctx.ops.extend(bodyOps);
 
             // END
-            ctx.ops.push(Pop);
+            ctx.push(Pop);
         }
     }
     Ok(())
@@ -831,22 +843,22 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         BinaryOp::And => OpCode::And,
                         BinaryOp::Or => OpCode::Or,
                     };
-                    r.ops.push(t);
+                    r.push(t);
                 }
             }
         }
         Expression::IntLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
         Expression::LongLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
-        Expression::FloatLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
-        Expression::DoubleLiteral(i) => r.ops.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
+        Expression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
+        Expression::DoubleLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
         Expression::StringLiteral(i) => {
             r.ops
                 .push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
         }
-        Expression::BoolLiteral(i) => r.ops.push(OpCode::PushBool(*i)),
+        Expression::BoolLiteral(i) => r.push(OpCode::PushBool(*i)),
         Expression::Variable(v) => unsafe {
             if r.vTable.contains_key(&v.clone().into()) {
-                r.ops.push(OpCode::GetLocal {
+                r.push(OpCode::GetLocal {
                     index: r
                         .vTable
                         .get(&MyStr::Runtime(v.clone().into_boxed_str()))
@@ -857,10 +869,10 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             else {
                 let f = r.lookupFunctionByBaseName(v).unwrap();
                 let a = r.currentNamespace.findFunction(&f).unwrap();
-                r.ops.push(PushFunction(r.currentNamespace.id as u32, a.1 as u32))
+                r.push(PushFunction(r.currentNamespace.id as u32, a.1 as u32))
             }
         }
-        Expression::CharLiteral(c) => r.ops.push(PushChar(*c)),
+        Expression::CharLiteral(c) => r.push(PushChar(*c)),
         Expression::ArrayLiteral(i) => {
             let d = match r.typeHint {
                 None => Some(
@@ -880,12 +892,12 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let e = d.ok_or("")?;
             // let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
             r.genPushInt(i.len() as isize);
-            r.ops.push(ArrayNew(e.clone()));
+            r.push(ArrayNew(e.clone()));
             for (ind, exp) in i.iter().enumerate() {
-                r.ops.push(Dup);
+                r.push(Dup);
                 genExpression(r.constructCtx(exp))?;
                 r.genPushInt(ind as isize);
-                r.ops.push(ArrayStore);
+                r.push(ArrayStore);
             }
         }
         Expression::ArrayIndexing(i) => {
@@ -897,7 +909,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     if o.name.as_str() == "String" {
                         genExpression(r.constructCtx(&i.expr))?;
                         genExpression(r.constructCtx(&i.index))?;
-                        r.ops.push(GetChar);
+                        r.push(GetChar);
                         return Ok(());
                     }
 
@@ -906,7 +918,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                             genExpression(r.constructCtx(&i.expr))?;
                             genExpression(r.constructCtx(&i.index))?;
 
-                            r.ops.push(OpCode::ArrayLoad);
+                            r.push(OpCode::ArrayLoad);
                         }
                         Generic::Any => panic!(),
                     }
@@ -916,14 +928,14 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         }
         Expression::NotExpression(e) => {
             genExpression(r.constructCtx(e))?;
-            r.ops.push(Not)
+            r.push(Not)
         }
         Expression::NamespaceAccess(parts) => {
             let namespace = r.vm.findNamespaceParts(&parts[..parts.len()-1])?;
 
             let global = namespace.0.findGlobal(parts.last().unwrap())?;
 
-            r.ops.push(OpCode::GetGlobal { namespaceID: namespace.1, globalID: global.1 })
+            r.push(OpCode::GetGlobal { namespaceID: namespace.1, globalID: global.1 })
         },
         Expression::Lambda(args, body) => {
             // procedure to determine return type of a fucntion
@@ -936,6 +948,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 functionType: FunctionTypeMeta::Builtin,
                 localsMeta: Box::new([]),
                 returnType: None,
+                isPure: false,
             };
 
             ctx.currentNamespace.registerFunctionDef(m);
@@ -962,11 +975,11 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                         let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
                         let funcId = r.currentNamespace.findFunction(&genName)?.1;
 
-                        r.ops.push(SCall { id: funcId });
+                        r.push(SCall { id: funcId });
                     }
                     else {
                         genExpression(r.constructCtx(prev))?;
-                        r.ops.push(DynamicCall)
+                        r.push(DynamicCall)
                     }
                 }
                 else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
@@ -976,11 +989,11 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
 
                     let (func, funcId) = namespace.findFunction(&genName)?;
 
-                    r.ops.push(LCall { namespace: namespaceId, id: funcId });
+                    r.push(LCall { namespace: namespaceId, id: funcId });
                 }
                 else {
                     genExpression(r.constructCtx(prev))?;
-                    r.ops.push(DynamicCall)
+                    r.push(DynamicCall)
                 }
             }
         }
@@ -989,14 +1002,14 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let (structMeta, structID) = r.currentNamespace.findStruct(name)?;
             let namespaceID = r.currentNamespace.id;
 
-            r.ops.push(New { namespaceID, structID });
+            r.push(New { namespaceID, structID });
 
             for (fieldName, value) in init {
-                r.ops.push(Dup);
+                r.push(Dup);
                 let (_, fieldID) = structMeta.findField(fieldName)?;
                 let ctx = r.constructCtx(value);
                 genExpression(ctx)?;
-                r.ops.push(SetField {
+                r.push(SetField {
                     namespaceID,
                     structID,
                     fieldID,
@@ -1012,11 +1025,11 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 Object(ref o) => {
                     if fieldName == "size" || fieldName == "length" {
                         if e.isArray() {
-                            r.ops.push(ArrayLength);
+                            r.push(ArrayLength);
                             return Ok(())
                         }
                         else if e.isString() {
-                            r.ops.push(StringLength);
+                            r.push(StringLength);
                             return Ok(())
                         }
                     }
@@ -1024,7 +1037,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     let (structMeta, structID, field, fieldID) = r.currentNamespace.findStructField(o.name.as_str(), fieldName)?;
 
 
-                    r.ops.push(GetField {
+                    r.push(GetField {
                         namespaceID: r.currentNamespace.id,
                         structID: structID,
                         fieldID: fieldID,

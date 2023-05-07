@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Formatter};
-use std::mem::transmute;
+use std::hint::unreachable_unchecked;
 use crate::ast::Expression;
 use crate::vm;
 use crate::vm::dataType::DataType;
@@ -23,6 +23,7 @@ impl Allocation for Xd {
 #[derive(Copy, Clone)]
 pub union Value {
     pub Num: isize,
+    pub UNum: usize,
     pub Flo: f64,
     pub Bol: bool,
     pub Chr: char,
@@ -31,6 +32,7 @@ pub union Value {
 }
 
 impl Value {
+    #[inline(always)]
     pub fn null() -> Self {
         Value::from(0)
     }
@@ -53,7 +55,7 @@ impl Debug for Value {
 impl Into<usize> for Value {
     #[inline]
     fn into(self) -> usize {
-        unsafe { transmute(self) }
+        unsafe { self.UNum }
     }
 }
 
@@ -163,7 +165,7 @@ impl Value {
 
     #[inline(always)]
     pub fn asUnsigned(&self) -> usize {
-        unsafe { transmute(self) }
+        unsafe { self.UNum }
     }
 
     #[inline(always)]
@@ -199,14 +201,12 @@ impl Value {
                         buf.push_str(str1);
                         buf.push_str(str2);
 
-                        unsafe { self.Reference = Value::makeString(buf, vm).asHayUntyped() }
+                        self.Reference = Value::makeString(buf, vm).asHayUntyped()
                     }
-                    _ => panic!()
+                    _ => unreachable!(),
                 }
             }
-            DataType::Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -219,11 +219,7 @@ impl Value {
             DataType::Float => {
                 *self.getRefFlo() -= value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Object { .. } => {}
-            DataType::Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -236,11 +232,7 @@ impl Value {
             DataType::Float => {
                 *self.getRefFlo() *= value.getFlo();
             }
-            DataType::Bool => {}
-            DataType::Object { .. } => {}
-            DataType::Char => panic!(),
-            Void => panic!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -253,11 +245,7 @@ impl Value {
             Float => {
                 *self.getRefFlo() /= value.getFlo();
             }
-            Bool => {}
-            Object { .. } => {}
-            Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -287,11 +275,7 @@ impl Value {
             Char => {
                 Expression::CharLiteral(self.asChar())
             }
-            Object(_) => {
-                panic!()
-            }
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unsafe { unreachable_unchecked() },
         }
     }
 }
@@ -303,10 +287,7 @@ impl Value {
             Int => self.getNumRef() > val.getNumRef(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            Object { .. } => panic!(),
-            Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -319,7 +300,7 @@ impl Value {
             Float => {
                 *self.getRefFlo() += 1.;
             }
-            _ => panic!(),
+            _ => unreachable!(),
         }
     }
 
@@ -332,7 +313,7 @@ impl Value {
             Float => {
                 *self.getRefFlo() -= 1.;
             }
-            _ => panic!(),
+            _ => unreachable!(),
         }
     }
 
@@ -342,10 +323,7 @@ impl Value {
             Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            Object { .. } => panic!(),
-            Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!()
         }
     }
 
@@ -355,7 +333,7 @@ impl Value {
             Int => self.getNumRef() > val.getNumRef(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            _ => panic!()
+            _ => unreachable!()
         };
 
         *self = l.into()
@@ -367,10 +345,7 @@ impl Value {
             Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            Object { .. } => panic!(),
-            Char => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!()
         };
 
         *self = l.into()
@@ -383,9 +358,7 @@ impl Value {
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
-            Object { .. } => panic!(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!()
         }
     }
 
@@ -397,8 +370,7 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
             Object(a) => self.getNumRef() == val.getNumRef(),
-            Void => unreachable!(),
-            Function { .. } => unreachable!()
+            _ => unreachable!()
         };
         *self = x.into()
     }
@@ -410,7 +382,7 @@ impl Value {
 
     #[inline]
     pub fn toDataType(&self) -> DataType {
-        panic!()
+        unreachable!()
     }
 }
 
@@ -504,12 +476,6 @@ impl Value {
 
     pub fn makeFunction(namespaceID: u32, functionID: u32) -> Value {
         Value{FunctionPointer: (namespaceID, functionID)}
-    }
-
-    #[inline]
-    pub fn makeObject(_obj: Box<dyn vm::objects::Object>) -> Value {
-        todo!();
-        // Value{Reference: ManuallyDrop::new(Rice::new(ViplObject::Runtime(Box::leak(obj))))}
     }
 
     #[inline]

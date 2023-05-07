@@ -15,6 +15,7 @@ impl<LOOKUP: Debug, VALUE: Debug> Default for FastAcess<LOOKUP, VALUE> {
 }
 
 impl<VALUE: Debug> FastAcess<String, VALUE> {
+    #[inline]
     pub fn getSlowStr(&self, key: &str) -> Option<(&VALUE, usize)> {
         let v = *self.lookupTable.get(key)?;
         let s = self.actual.get(v)?;
@@ -34,6 +35,7 @@ impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALU
         self.actual.get_mut(key)
     }
 
+    #[inline]
     pub fn getSlow(&self, key: &LOOKUP) -> Option<(&VALUE, usize)> {
         let v = *self.lookupTable.get(key)?;
         let s = self.actual.get(v)?;
@@ -41,6 +43,7 @@ impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALU
         Some((s, v))
     }
 
+    #[inline]
     pub fn insert(&mut self, key: LOOKUP, value: VALUE) -> Option<usize> {
         self.actual.push(value);
         let index = self.actual.len()-1;
@@ -50,6 +53,7 @@ impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALU
         Some(index)
     }
 
+    #[inline]
     pub fn replaceValue(&mut self, key: usize, value: VALUE) {
         *self.actual.get_mut(key).unwrap() = value;
     }

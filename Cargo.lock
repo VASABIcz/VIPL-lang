@@ -9,8 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edc207893e85c5d6be840e969b496b53d94cec8be2d501b214f50daa97fa8024"
 
 [[package]]
+name = "offset"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "130c0b387eddc88f54c7373ec110d0de911a19742e17b8ced6bb516511983f36"
+
+[[package]]
 name = "vipl"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "offset",
 ]

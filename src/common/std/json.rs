@@ -234,43 +234,43 @@ pub fn registerJson(vm: &mut VirtualMachine) {
 
         vm.push(v)
 
-    }, DataType::obj("Json"));
+    }, DataType::obj("Json"), false);
 
     n.makeNative("save", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::str());
+    }, DataType::str(), false);
 
     n.makeNative("getIndex", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("Json"));
+    }, DataType::obj("Json"), false);
 
     n.makeNative("length", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("JInt"));
+    }, DataType::obj("JInt"), false);
 
     n.makeNative("hasKey", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("JBool"));
+    }, DataType::obj("JBool"), false);
 
     n.makeNative("getField", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("Json"));
+    }, DataType::obj("Json"), false);
 
     n.makeNative("asString", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::str());
+    }, DataType::str(), false);
 
     n.makeNative("asInt", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("JInt"));
+    }, DataType::obj("JInt"), false);
 
     n.makeNative("asBool", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("JBool"));
+    }, DataType::obj("JBool"), false);
 
     n.makeNative("asNull", &[DataType::obj("Json")], |vm, s| {
         todo!()
-    }, DataType::obj("JNull"));
+    }, DataType::obj("JNull"), false);
 
     vm.registerNamespace(n);
 }

@@ -13,10 +13,11 @@ use crate::errors::Errorable;
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
 use crate::vm::dataType::DataType;
-use crate::vm::dataType::DataType::Void;
+use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
+use crate::vm::namespace::LoadedFunction::Native;
 use crate::vm::namespace::NamespaceState::Loaded;
 use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeObjects::{ViplObjectMeta, ObjectType, SimpleObjectWrapper, UntypedObject, ViplObject};
@@ -125,7 +126,43 @@ pub enum OpCode {
         namespaceID: usize,
         globalID: usize
     },
-    ConstStr(usize)
+    ConstStr(usize),
+    MulInt,
+    AddInt,
+    SubInt,
+    LessInt,
+    GetLocalZero,
+    SetLocalZero,
+}
+
+fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
+    for op in ops {
+        match op {
+            SCall { id } => {
+                let f = namespace.getFunction(*id);
+                if !f.0.isPure {
+                    return false
+                }
+            }
+            LCall { namespace, id } => {
+                let f = vm.getNamespace(*namespace).getFunction(*id);
+                if !f.0.isPure {
+                    return false
+                }
+            }
+            DynamicCall => {
+                return false
+            }
+            SetGlobal { .. } => {
+                return false
+            }
+            GetGlobal { .. } => {
+                return false
+            }
+            _ => {}
+        }
+    }
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -170,13 +207,12 @@ impl Debug for FuncType {
     }
 }
 
-#[repr(C)]
 #[derive(Debug)]
+#[repr(C)]
 pub struct VirtualMachine {
     pub nativeWrapper: NativeWrapper,
 
     pub stack: Vec<Value>,
-    // pub nativeLibraries: Vec<Library>,
     pub heap: Heap,
 
     pub stackManager: StackManager<2048>,
@@ -193,6 +229,7 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
+    #[inline]
     pub fn allocateString(&mut self, st: &str) ->  Hay<ViplObject<Str>> {
         let a1 = Str::new(String::from(st));
         let aw = ViplObject::<Str>::str(a1);
@@ -201,6 +238,7 @@ impl VirtualMachine {
         self.heap.allocate(aw)
     }
 
+    #[inline]
     pub fn allocateArray(&mut self, vec: Vec<Value>, t: DataType) -> Hay<ViplObject<Array>> {
         let arr = Array{
             internal: vec,
@@ -209,6 +247,7 @@ impl VirtualMachine {
         self.heap.allocate(ViplObject::<Array>::arr(arr))
     }
 
+    #[inline]
     pub fn findNamespace(&self, name: &str) -> Errorable<(&Namespace, usize)> {
         let namespaceId = self.namespaceLookup.get(name)
             .ok_or(format!("failed to find namespace {}", name))?;
@@ -218,16 +257,19 @@ impl VirtualMachine {
         Ok((namespace, *namespaceId))
     }
 
+    #[inline]
     pub fn findNamespaceParts(&self, parts: &[String]) -> Errorable<(&Namespace, usize)> {
         let namespaceName = parts.join("::");
 
         self.findNamespace(&namespaceName)
     }
 
+    #[inline]
     pub fn rawPtr(&self) -> *mut VirtualMachine {
         self as *const VirtualMachine as *mut VirtualMachine
     }
 
+    #[inline]
     pub fn buildFunctionReturn(&self) -> HashMap<MyStr, Option<DataType>> {
         let mut x = HashMap::new();
 
@@ -244,6 +286,7 @@ impl VirtualMachine {
         x
     }
 
+    #[inline]
     pub fn registerNamespace(&mut self, mut namespace: Namespace) -> usize {
         let index = self.namespaces.len();
         namespace.id = index;
@@ -253,23 +296,31 @@ impl VirtualMachine {
         index
     }
 
+    #[inline]
     pub fn getNamespace(&self, id: usize) -> &Namespace {
         self.namespaces.get(id).unwrap()
     }
 
+    #[inline]
     pub fn getNamespaceMut(&mut self, id: usize) -> &mut Namespace {
         self.namespaces.get_mut(id).unwrap()
     }
 
     #[inline(always)]
     pub fn pop(&self) -> Value {
-        let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
-        let mut buf: Value = Value{Num: 0};
-        res.size -= 1;
+        if DEBUG || TRACE {
+            unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).stack.pop().unwrap() }
+        }
+        else {
+            let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
+            let mut buf: Value = Value::null();
 
-        unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
+            unsafe { res.size = res.size.unchecked_sub(1) };
 
-        buf
+            unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
+
+            buf
+        }
     }
 
     #[inline(always)]
@@ -277,6 +328,7 @@ impl VirtualMachine {
         self.stack.push(value)
     }
 
+    #[inline]
     pub fn gc(&mut self) {
         let mut collector = HayCollector::new(&self.heap.allocations);
 
@@ -316,20 +368,20 @@ impl VirtualMachine {
 impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
-        unsafe { self.frames.get_unchecked(self.frames.len() - 1) }
+        unsafe { self.frames.get_unchecked(self.frames.len().unchecked_sub(1)) }
     }
 
     #[inline(always)]
     pub fn getMutFrame(&self) -> &mut StackFrame {
-        let i = self.frames.len() - 1;
-        unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).frames.get_unchecked_mut(i) }
+        unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).frames.get_unchecked_mut(self.frames.len().unchecked_sub(1)) }
     }
 
-    #[inline]
-    pub fn nextOpcode2<'a>(&'a self, ops: &'a Vec<OpCode>) -> (Option<&OpCode>, usize) {
+    #[inline(always)]
+    pub fn nextOpcode2<'a>(&'a self, ops: &'a [OpCode]) -> (Option<&OpCode>, usize) {
         let x = self.getMutFrame();
-        x.programCounter += 1;
-        (ops.get(x.programCounter-1), x.programCounter-1)
+        let a = x.programCounter;
+        unsafe { x.programCounter = x.programCounter.unchecked_add(1); }
+        (ops.get(a), a)
     }
 
     #[inline]
@@ -386,37 +438,48 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn call(&mut self, argsCount: usize, localsCount: usize, namespaceId: usize, functionID: usize, function: &LoadedFunction) {
-        let mut locals = vec![Value::from(0);localsCount];
+    pub fn call(&mut self, namespaceId: usize, functionId: usize) {
+        let namespace = self.namespaces.get(namespaceId).unwrap();
+        let (fMeta, f) = namespace.getFunction(functionId);
 
-        for i in 0..argsCount {
-            let arg = self.pop();
-            locals[(argsCount - 1) - i] = arg;
+        println!("gona call");
+
+        let mut locals = vec![Value::from(0);fMeta.argsCount];
+
+        println!("gona call");
+
+        for i in (0..fMeta.argsCount).rev() {
+            locals[i] = self.pop();
         }
+
+        println!("gona call");
 
         let fs = StackFrame{
             localVariables: locals.into_boxed_slice(),
             programCounter: 0,
             namespaceId: namespaceId,
-            functionId: functionID,
+            functionId,
         };
 
-        function.call(self, fs)
+        let x = f.as_ref().unwrap();
+
+        unsafe { x.call(&mut *(self as *const VirtualMachine as *mut VirtualMachine), fs) }
     }
 
     #[inline]
-    pub fn execute(&mut self, opCodes: &Vec<OpCode>) {
+    pub fn execute(&mut self, opCodes: &[OpCode]) {
         let r = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
+        let r1 = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
 
         loop {
-            let index = self.getIndex();
-            let op = match opCodes.get(index) {
+            let (op1, index) = (&mut *r1).nextOpcode2(opCodes);
+
+            let op = match op1 {
                 None => {
                     return;
                 }
                 Some(v) => v
             };
-            self.getMutFrame().programCounter += 1;
 
             if TRACE {
                 println!("evaluating {:?}", op);
@@ -582,30 +645,19 @@ impl VirtualMachine {
                 },
                 SCall { id } => {
                     let frame = self.getFrame();
-                    let namespace = self.getNamespace(frame.namespaceId);
 
-                    let (fMeta, f) = namespace.getFunction(*id);
-
-                    (&mut *r).call(fMeta.argsCount, fMeta.localsMeta.len(), frame.namespaceId, *id, f.as_ref().unwrap())
+                    (&mut *r).call(frame.namespaceId, *id)
 
                 }
                 DynamicCall => {
-                    let (namespaceRaw, idRaw) = self.stack.pop().unwrap().asFunction();
+                    let (namespaceRaw, idRaw) = self.pop().asFunction();
                     let namespace = namespaceRaw as usize;
                     let id = idRaw as usize;
 
-                    let frame = self.getFrame();
-                    let namespace = self.namespaces.get(namespace).unwrap();
-                    let (fMeta, f) = namespace.getFunction(id);
-
-                    r.call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, id, f.as_ref().unwrap())
+                    r.call(namespace, id)
                 }
                 LCall { namespace, id} => {
-                    let frame = self.getFrame();
-                    let namespace = self.namespaces.get(*namespace).unwrap();
-                    let (fMeta, f) = namespace.getFunction(*id);
-
-                    r.call(fMeta.argsCount, fMeta.localsMeta.len(), namespace.id, *id, f.as_ref().unwrap())
+                    r.call(*namespace, *id)
                 }
                 PushFunction(namespaceID, functionID) => {
                     self.push(Value::makeFunction(*namespaceID, *functionID));
@@ -667,6 +719,29 @@ impl VirtualMachine {
 
                     self.push(n.globals.getFast(*globalID).unwrap().1)
                 }
+                MulInt => {
+                    let a = self.pop();
+                    *self.getMutTop().getRefNum() *= a.getNum();
+                }
+                AddInt => {
+                    let a = self.pop();
+                    *self.getMutTop().getRefNum() += a.getNum();
+                }
+                SubInt => {
+                    let a = self.pop();
+                    *self.getMutTop().getRefNum() -= a.getNum();
+                }
+                LessInt => {
+                    let a = self.pop();
+                    *self.getMutTop() = (self.getTop().getNumRef() > a.getNumRef()).into()
+                }
+                SetLocalZero => {
+                    let x = self.pop();
+                    self.setLocal(0, x);
+                }
+                GetLocalZero => {
+                    self.push(*self.getLocal(0))
+                }
                 o => if !DEBUG && !TRACE {
                     unsafe { unreachable_unchecked() }
                 }
@@ -693,8 +768,8 @@ impl VirtualMachine {
             for (index, g) in n.globals.actual.iter_mut().enumerate() {
                 unsafe {
                     let mut ctx = ExpressionCtx{
-                        exp: &g.0.default,
                         ops: &mut vec![],
+                        exp: &g.0.default,
                         functionReturns: &functionReturns,
                         vTable: &Default::default(),
                         typeHint: None,
@@ -712,13 +787,16 @@ impl VirtualMachine {
                         let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression)? };
                         f.localsMeta = res.into_boxed_slice();
 
+                        let opt = optimizeOps(ops);
+
                         if DEBUG {
-                            println!("link opcodes {} {:?}", f.name, ops);
+                            println!("link opcodes {} {:?}", f.name, opt);
                         }
 
-                        // let nf = self.jitCompiler.compile(ops, &*v, &*nn);
+                        let nf = self.jitCompiler.compile(opt, &*v, &*nn);
+                        *a = Some(Native(nf))
 
-                        *a = Some(LoadedFunction::Virtual(ops));
+                        // *a = Some(LoadedFunction::Virtual(opt));
                     }
                 }
             }
@@ -732,7 +810,6 @@ impl VirtualMachine {
         Self {
             stack: Vec::with_capacity(128),
             nativeWrapper: NativeWrapper::new(),
-            // nativeLibraries: vec![],
             heap: Default::default(),
             stackManager: StackManager::new(),
             frames: vec![],
@@ -743,6 +820,36 @@ impl VirtualMachine {
             handleStatementExpression: |it, t| { if t != Void { it.push(Pop) } },
         }
     }
+}
+
+fn optimizeOps(i: Vec<OpCode>) -> Vec<OpCode> {
+    let mut res = vec![];
+
+    for op in i.into_iter() {
+        if op == OpCode::Add(Int) {
+            res.push(OpCode::AddInt)
+        }
+        else if op == OpCode::Sub(Int) {
+            res.push(OpCode::SubInt)
+        }
+        else if op == OpCode::Mul(Int) {
+            res.push(OpCode::MulInt)
+        }
+        else if op == OpCode::Less(Int) {
+            res.push(OpCode::LessInt)
+        }
+        else if (op == OpCode::GetLocal{index: 0}) {
+            res.push(OpCode::GetLocalZero)
+        }
+        else if (op == OpCode::SetLocal{index: 0}) {
+            res.push(OpCode::SetLocalZero)
+        }
+        else {
+            res.push(op)
+        }
+    }
+
+    res
 }
 
 pub struct SeekableOpcodes<'a> {

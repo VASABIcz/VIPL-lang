@@ -52,7 +52,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
 
         vm.push(ptr.into())
 
-    }, DataType::obj("Regex"));
+    }, DataType::obj("Regex"), false);
 
     n.makeNative("doesMatch", &[DataType::obj("Regex"), DataType::str()], |vm, s| {
         let reg = s.localVariables.get(0).unwrap().getReference::<RegixData>();
@@ -69,7 +69,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
 
         vm.push(isMatch.into());
 
-    }, DataType::Bool);
+    }, DataType::Bool, false);
 
     n.makeNative("match", &[DataType::obj("Regex"), DataType::str()], |vm, s| {
         let reg = s.localVariables.get(0).unwrap().getReference::<RegixData>();
@@ -92,7 +92,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
 
         vm.push(aloc.into())
 
-    },  DataType::arr(Generic::Type(DataType::arr(Generic::Type(DataType::str())))));
+    },  DataType::arr(Generic::Type(DataType::arr(Generic::Type(DataType::str())))), false);
 
     let namespaceId = vm.registerNamespace(n);
 }

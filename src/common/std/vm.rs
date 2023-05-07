@@ -7,7 +7,7 @@ pub fn registerVm(vm: &mut VirtualMachine) {
 
     n.makeNative("gc", &[], |vm, s| {
        vm.gc();
-    }, DataType::Void);
+    }, DataType::Void, false);
 
     vm.registerNamespace(n);
 }

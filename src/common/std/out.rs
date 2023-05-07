@@ -18,6 +18,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         &[Int],
         |_a, b| println!("{}", b.localVariables[0].getNumRef()),
         DataType::Void,
+        false
     );
 
     namespace.makeNative(
@@ -25,6 +26,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         &[Bool],
         |_a, b| println!("{}", b.localVariables[0].getBool()),
         DataType::Void,
+        false
     );
 
     namespace.makeNative(
@@ -32,6 +34,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         &[Float],
         |_a, b| println!("{}", b.localVariables[0].getFlo()),
         DataType::Void,
+        false
     );
 
     namespace.makeNative(
@@ -39,6 +42,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         &[Char],
         |_a, b| println!("{}", b.localVariables[0].getChar()),
         DataType::Void,
+        false
     );
 
     namespace.makeNative(
@@ -50,6 +54,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             println!("{}", str.string);
         },
         DataType::Void,
+        false
     );
 
     namespace.makeNative(
@@ -65,6 +70,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             println!()
         },
         DataType::Void,
+        false
     );
 
     let index = namespace.registerGlobal(GlobalMeta{

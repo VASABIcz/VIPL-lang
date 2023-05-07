@@ -39,6 +39,7 @@ pub struct FunctionMeta {
     pub functionType: FunctionTypeMeta,
     pub localsMeta: Box<[VariableMetadata]>,
     pub returnType: Option<DataType>,
+    pub isPure: bool
 }
 
 #[derive(Clone, Debug)]
@@ -87,23 +88,25 @@ impl FunctionMeta {
         }).collect::<Vec<_>>())
     }
 
-    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>) -> Self {
+    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, pure: bool) -> Self {
         Self {
             name,
             argsCount,
             functionType: FunctionTypeMeta::Native,
             localsMeta: locals,
             returnType: ret,
+            isPure: pure,
         }
     }
 
-    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>) -> Self {
+    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, pure: bool) -> Self {
         Self {
             name,
             argsCount,
             functionType: FunctionTypeMeta::Native,
             localsMeta: locals,
             returnType: ret,
+            isPure: pure,
         }
     }
 
@@ -114,6 +117,7 @@ impl FunctionMeta {
             functionType: FunctionTypeMeta::Runtime(body),
             localsMeta: locals,
             returnType: ret,
+            isPure: false,
         }
     }
 }
@@ -127,21 +131,22 @@ pub enum LoadedFunction {
 
 impl LoadedFunction {
     #[inline(always)]
-    pub fn call(&self, vm: &mut VirtualMachine, mut frame: StackFrame) {
+    pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame) {
         vm.pushFrame(frame);
 
+        let a = vm.getMutFrame();
+
         match self {
-            LoadedFunction::BuiltIn(b) => {
-                // b(vm, f);
+            LoadedFunction::BuiltIn(b) => unsafe {
+                b(&mut *(vm as *const VirtualMachine as *mut VirtualMachine), a);
             }
-            LoadedFunction::Native(n) => {
-                panic!();
-/*              let x: *const () = transmute(n.clone());
+            LoadedFunction::Native(n) => unsafe {
+                let x: *const () = transmute(n.clone());
                 let d: usize = transmute(vm.nativeWrapper.stringNew);
                 println!("before call");
                 println!("vm: {:?} {}", vm as *const VirtualMachine, vm as *const VirtualMachine as usize);
                 println!("proc: {:?} {}", x, x as usize);
-                n(vm, f);*/
+                n(&mut *(vm as *const VirtualMachine as *mut VirtualMachine), a);
             }
             LoadedFunction::Virtual(v) => {
                 vm.execute(v);
@@ -224,11 +229,12 @@ impl Namespace {
         args: &[DataType],
         fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
         ret: DataType,
+        pure: bool
     ) {
         let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
-        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret));
+        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret), pure);
 
         self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
     }

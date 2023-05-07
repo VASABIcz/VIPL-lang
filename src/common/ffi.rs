@@ -4,6 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::mem::forget;
 use std::ptr;
 use std::time::Duration;
+use libc::exit;
 
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
@@ -60,7 +61,7 @@ pub extern fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> u
 }
 
 #[no_mangle]
-pub extern fn pushInt(vm: &mut VirtualMachine, v: isize) {
+pub extern fn pushValue(vm: &mut VirtualMachine, v: isize) {
     if DEBUG {
         println!("[ffi] pushInt {}", v);
     }
@@ -68,7 +69,7 @@ pub extern fn pushInt(vm: &mut VirtualMachine, v: isize) {
 }
 
 #[no_mangle]
-pub extern fn popInt(vm: &mut VirtualMachine) -> isize {
+pub extern fn popValue(vm: &mut VirtualMachine) -> isize {
     if DEBUG {
         println!("[ffi] popInt");
     }
@@ -76,7 +77,7 @@ pub extern fn popInt(vm: &mut VirtualMachine) -> isize {
 }
 
 #[no_mangle]
-pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
+pub extern fn getLocalsValue(vm: &mut StackFrame, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] getLocalsInt");
     }
@@ -84,7 +85,7 @@ pub extern fn getLocalsInt(vm: &mut StackFrame, index: usize) -> isize {
 }
 
 #[no_mangle]
-pub extern fn arrSetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize, value: isize) {
+pub extern fn arrSetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize, value: isize) {
     if DEBUG {
         println!("[ffi] arrSetInt");
     }
@@ -101,21 +102,11 @@ pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject<Str>,
 }
 
 #[no_mangle]
-pub extern fn arrGetInt(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize) -> isize {
+pub extern fn arrGetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] arrGetInt");
     }
     obj.data.internal.get(index).unwrap().getNumRef()
-}
-
-#[no_mangle]
-pub extern fn call(vm: &mut VirtualMachine, s: *const c_char) {
-    let name = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
-    if DEBUG {
-        println!("[ffi] call: {}", name);
-    }
-    panic!();
-    // vm.call(MyStr::Static(name));
 }
 
 #[no_mangle]
@@ -158,42 +149,36 @@ pub extern fn strConcat(
 #[no_mangle]
 pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
     if DEBUG {
-        println!("[ffi] LCall")
+        println!("[ffi] LCall {} {} {:?}", namespaceID, functionID, rsp)
     }
 
-    let d =unsafe { &mut *(vm as *mut VirtualMachine) };
+    let d =unsafe { &mut *  (vm as *mut VirtualMachine) };
     let namespace = vm.namespaces.get(namespaceID).unwrap();
+    let f = namespace.getFunction(functionID);
 
-    todo!()
-
-/*    let f = namespace.getFunction(functionID);
-
-
-
-    let mut buf = vec![];
-
-    for x in 0..meta.argsCount {
-        let v = unsafe { rsp.add(x).read() };
-        buf.push(v);
+    if DEBUG {
+        println!("[ffi] before call");
     }
 
-    for _ in 0..meta.localsMeta.len()-meta.argsCount {
-        buf.push(Value::from(0))
+    d.call(namespaceID, functionID);
+
+
+    if DEBUG {
+        println!("[ffi] after call");
     }
 
-    let fr = StackFrame {
-        localVariables: buf.into_boxed_slice(),
-        programCounter: 0,
-        namespaceId: namespace.id,
-        functionId: functionID,
-    };
-    func.as_ref().unwrap().call(d, fr);
-    if meta.returnType != None {
+    if f.0.returnType != None {
         vm.pop()
     }
     else {
         Value::from(0)
-    }*/
+    }
+}
+
+#[no_mangle]
+pub extern fn printDigit(n: isize) {
+    println!("[debug] dec: \"{}\"", n);
+    println!("[debug] hex: \"{:#01x}\"", n);
 }
 
 
@@ -210,26 +195,32 @@ pub struct NativeWrapper {
 
     pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
-    pub call: extern fn(&mut VirtualMachine, *const c_char),
     pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,
-    pub lCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value
+    pub lCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,
+    pub printDigit: extern fn(isize)
+}
+
+fn getNativeWrapperOffset(n: &NativeWrapper, fieldPtr: usize) -> usize {
+    let ptr = n as *const NativeWrapper as usize;
+
+    fieldPtr-ptr
 }
 
 impl NativeWrapper {
     pub fn new() -> Self {
         Self {
-            pushValue: pushInt,
-            popValue: popInt,
-            getLocalsValue: getLocalsInt,
-            arrGetValue: arrGetInt,
-            arrSetValue: arrSetInt,
-            call,
+            pushValue,
+            popValue,
+            getLocalsValue,
+            arrGetValue,
+            arrSetValue,
             stringNew,
             stringGetChar,
             strConcat,
             lCall,
+            printDigit
         }
     }
 }

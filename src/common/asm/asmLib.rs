@@ -183,6 +183,7 @@ pub trait AsmGen {
     fn sub(&mut self, dest: Location, src: AsmValue);
     fn mul(&mut self, dest: Location, src: AsmValue);
     fn imul(&mut self, dest: Location, src: AsmValue);
+    fn idiv(&mut self, dest: Location);
 
     fn sysCall(&mut self);
     fn makeString(&mut self, str: &str) -> String;
@@ -219,6 +220,218 @@ pub trait AsmGen {
 
     fn setg(&mut self, reg: Register);
     fn setl(&mut self, reg: Register);
+}
+
+pub enum AsmOpcode {
+    Mov(Location, AsmValue),
+    Lea(Location, AsmValue),
+    Push(AsmValue),
+    Pop(Register),
+
+    Or,
+    And,
+    Not,
+
+    Add,
+    Sub,
+    Mul,
+    Imul,
+
+    SysCall,
+    MakeString,
+    Ret,
+
+    JmpLabel,
+    Compare,
+    Jmp,
+    JmpIfEqual,
+    JmpIfNotEqual,
+    JmpIfGt,
+    JmpIfLess,
+    JmpIfOne,
+    JmpIfZero,
+
+    Inc,
+    Dec,
+
+    Xor,
+
+    Call,
+
+    MakeLabel,
+    NextLabel,
+
+    Comment,
+
+    NewLine,
+
+    OffsetStack,
+
+    Setle,
+    Setge,
+
+    Setg,
+    Setl
+}
+
+pub struct OptimizingGen {
+    pub data: Vec<AsmOpcode>
+}
+
+impl OptimizingGen {
+    pub fn push(&mut self, v: AsmOpcode) {
+        self.data.push(v)
+    }
+}
+
+impl AsmGen for OptimizingGen {
+    fn mov(&mut self, dest: Location, src: AsmValue) {
+        self.push(AsmOpcode::Mov(dest, src))
+    }
+
+    fn lea(&mut self, dest: Location, src: AsmValue) {
+        self.push(AsmOpcode::Lea(dest, src))
+    }
+
+    fn push(&mut self, reg: AsmValue) {
+        self.push(AsmOpcode::Push(reg))
+    }
+
+    fn pop(&mut self, reg: Register) {
+        self.push(AsmOpcode::Pop(reg))
+    }
+
+    fn or(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn and(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn not(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn add(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn sub(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn mul(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn imul(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn sysCall(&mut self) {
+        todo!()
+    }
+
+    fn makeString(&mut self, str: &str) -> String {
+        todo!()
+    }
+
+    fn ret(&mut self) {
+        todo!()
+    }
+
+    fn jmpLabel(&mut self) -> String {
+        todo!()
+    }
+
+    fn compare(&mut self, a: AsmValue, b: AsmValue) {
+        todo!()
+    }
+
+    fn jmp(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfEqual(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfNotEqual(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfGt(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfLess(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfOne(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn jmpIfZero(&mut self, dest: Location) {
+        todo!()
+    }
+
+    fn inc(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn dec(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn xor(&mut self, dest: Location, src: AsmValue) {
+        todo!()
+    }
+
+    fn call(&mut self, location: Location) {
+        todo!()
+    }
+
+    fn makeLabel(&mut self, label: &str) {
+        todo!()
+    }
+
+    fn nextLabel(&mut self) -> String {
+        todo!()
+    }
+
+    fn comment(&mut self, txt: &str) {
+        todo!()
+    }
+
+    fn newLine(&mut self) {
+        todo!()
+    }
+
+    fn offsetStack(&mut self, offset: isize) {
+        todo!()
+    }
+
+    fn setle(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn setge(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn setg(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn setl(&mut self, reg: Register) {
+        todo!()
+    }
+
+    fn idiv(&mut self, dest: Location) {
+        todo!()
+    }
 }
 
 pub struct NasmGen {
@@ -508,6 +721,10 @@ impl AsmGen for NasmGen {
     fn setl(&mut self, reg: Register) {
         self.writeOp1("setl", "al");
         self.mov(reg.into(), Rax.into());
+    }
+
+    fn idiv(&mut self, dest: Location) {
+        self.writeOp1("div", &dest.toString())
     }
 }
 

@@ -7,6 +7,7 @@ use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct StackFrame {
     pub localVariables: Box<[Value]>,
     pub programCounter: usize,

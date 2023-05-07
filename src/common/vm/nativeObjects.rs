@@ -94,6 +94,7 @@ pub struct ViplObject<T: Allocation + Debug> {
 }
 
 impl ViplObject<Array> {
+    #[inline]
     pub fn arr(arr: Array) -> ViplObject<Array> {
         ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
@@ -104,6 +105,7 @@ impl ViplObject<Array> {
 }
 
 impl ViplObject<Str> {
+    #[inline]
     pub fn str(str: Str) -> ViplObject<Str> {
         ViplObject{ meta: ViplObjectMeta {
             namespaceId: 0,
@@ -127,7 +129,7 @@ impl<T: Debug> ViplObjectMeta<T> {
         match &self.objectType {
             ObjectType::Simple(_) => {}
             ObjectType::Native(v) => unsafe {
-                let offsetPtr = unsafe { (self as *const ViplObjectMeta<T>).add(1) };
+                let offsetPtr = (self as *const ViplObjectMeta<T>).add(1);
 
                 v.destroy.call((&mut *(offsetPtr as *mut T), ))
             }
