@@ -45,9 +45,9 @@ pub fn compileAssembly(asm: &str) -> Box<[u8]> {
 pub struct JITCompiler {}
 
 impl JITCompiler {
-    pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
+    pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
         let mut nasm = NasmGen::new();
-        generateAssembly(&mut nasm, ops, vm, namespace);
+        generateAssembly(&mut nasm, ops, vm, namespace, returns);
 
         let genAsm = nasm.generate();
         println!("genAsm");

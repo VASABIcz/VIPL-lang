@@ -7,7 +7,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 /*
 rax - FFI return value
@@ -185,7 +185,7 @@ fn initCode<T: AsmGen>(this: &mut T) {
     this.newLine();
 }
 
-pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace) {
+pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
     initCode(generator);
 
     let mut jmpCounter = 0usize;
@@ -256,7 +256,10 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 }
             }
             OpCode::Return => {
-                generator.pop(Rax.into());
+                // FIXME
+                if returns {
+                    generator.pop(Rax.into());
+                }
                 printDigit(generator, Rsp.into());
                 generator.ret()
             },

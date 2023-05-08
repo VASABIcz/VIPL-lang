@@ -798,7 +798,7 @@ impl VirtualMachine {
                             println!("link opcodes {} {:?}", f.name, opt);
                         }
 
-                        let nf = self.jitCompiler.compile(opt, &*v, &*nn);
+                        let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
                         *a = Some(Native(nf))
 
                         // *a = Some(LoadedFunction::Virtual(opt));
