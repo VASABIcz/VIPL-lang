@@ -10,7 +10,7 @@ rustflags = ["-C target-cpu=native"]
 lto = true
 codegen-units = 1
 panic = "abort"
-opt-level = 1
+opt-level = 3
 strip = false
 debug = true
 

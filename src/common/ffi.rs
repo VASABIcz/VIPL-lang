@@ -17,7 +17,7 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 
 #[no_mangle]
@@ -188,7 +188,9 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
 
     if returns {
         let v = vm.pop();
-        println!("[ffi] function returned {:?}", v);
+        if DEBUG {
+            println!("[ffi] function returned {:?}", v);
+        }
 
         v
     }

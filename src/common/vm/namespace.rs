@@ -280,7 +280,7 @@ pub fn printRegisters() {
 
 impl LoadedFunction {
     pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) {
-        println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
+        // println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
 
         vm.pushFrame(frame);
 

@@ -7,7 +7,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 /*
 rax - FFI return value
