@@ -28,6 +28,7 @@ fn main() {
 
 
     let nn = vm.namespaces.get(id).unwrap();
+    println!("{:?}", nn);
     let (fMeta, f) = nn.functions.actual.last().unwrap();
     let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     let now = Instant::now();
@@ -37,7 +38,7 @@ fn main() {
             programCounter: 0,
             namespaceId: nn.id,
             functionId: nn.functions.actual.len()-1,
-        })
+        }, false)
     }
     let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);

@@ -26,7 +26,9 @@ pub enum Register {
     R12,
     R13,
     R14,
-    R15
+    R15,
+
+    Bl
 }
 
 impl Into<Location> for Register {
@@ -61,6 +63,7 @@ impl Register {
             Register::R13 => "r13",
             Register::R14 => "r14",
             Register::R15 => "r15",
+            Register::Bl => "bl"
         }
     }
 }
@@ -514,7 +517,6 @@ impl NasmGen {
     }
 
     pub fn writeComment(&mut self, data: &str) {
-        self.executable.push('\n');
         self.executable.push_str("; ");
         self.executable.push_str(data);
         self.executable.push('\n');
@@ -546,9 +548,9 @@ impl AsmGen for NasmGen {
         self.writeOp2("lea", &dest.toString(), &src.toString())
     }
 
-    fn push(&mut self, reg: AsmValue) {
+    fn push(&mut self, value: AsmValue) {
         self.stackSize += 1;
-        self.writeOp1("push", &reg.toString());
+        self.writeOp1("push", &value.toString());
     }
 
     fn pop(&mut self, reg: Register) {

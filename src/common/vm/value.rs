@@ -48,7 +48,7 @@ impl Allocation for Value {
 
 impl Debug for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.asNum())
+        write!(f, "{}", self.asUnsigned())
     }
 }
 

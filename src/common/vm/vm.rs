@@ -368,7 +368,12 @@ impl VirtualMachine {
 impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
-        unsafe { self.frames.get_unchecked(self.frames.len().unchecked_sub(1)) }
+        if DEBUG || TRACE {
+            self.frames.get(self.frames.len()-1).unwrap()
+        }
+        else {
+            unsafe { self.frames.get_unchecked(self.frames.len().unchecked_sub(1)) }
+        }
     }
 
     #[inline(always)]
@@ -427,7 +432,7 @@ impl VirtualMachine {
     #[inline]
     pub fn pushFrame(&mut self, frame: StackFrame) {
         if self.frames.len() > 2048 {
-            panic!()
+            panic!("stack overflow")
         }
         self.frames.push(frame);
     }
@@ -463,7 +468,7 @@ impl VirtualMachine {
 
         let x = f.as_ref().unwrap();
 
-        unsafe { x.call(&mut *(self as *const VirtualMachine as *mut VirtualMachine), fs) }
+        unsafe { x.call(&mut *(self as *const VirtualMachine as *mut VirtualMachine), fs, fMeta.returns()) }
     }
 
     #[inline]

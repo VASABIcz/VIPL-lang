@@ -149,26 +149,48 @@ pub extern fn strConcat(
 #[no_mangle]
 pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
     if DEBUG {
-        println!("[ffi] LCall {} {} {:?}", namespaceID, functionID, rsp)
+        println!("[ffi] LCall {:?} {} {} {:?}", vm as *mut VirtualMachine, namespaceID, functionID, rsp)
     }
 
     let d =unsafe { &mut *  (vm as *mut VirtualMachine) };
     let namespace = vm.namespaces.get(namespaceID).unwrap();
     let f = namespace.getFunction(functionID);
 
-    if DEBUG {
-        println!("[ffi] before call");
+    let returns = f.0.returnType != None;
+
+    let mut args = vec![Value::null(); f.0.localsMeta.len()];
+
+    unsafe {
+        for i in 0..f.0.argsCount {
+            let v = rsp.add(i).read();
+            args[i] = v;
+        }
     }
 
-    d.call(namespaceID, functionID);
-
-
     if DEBUG {
-        println!("[ffi] after call");
+        println!("[ffi] before call {:?}", args);
     }
 
-    if f.0.returnType != None {
-        vm.pop()
+    let callable = f.1.as_ref().unwrap();
+
+    let frame = StackFrame{
+        localVariables: args.into_boxed_slice(),
+        programCounter: 0,
+        namespaceId: namespaceID,
+        functionId: functionID,
+    };
+
+    unsafe { callable.call(&mut *vm.rawPtr(), frame, f.0.returns()); }
+
+    if DEBUG {
+        println!("[ffi] after call {} {:?}", vm.frames.len(), vm.getFrame().localVariables);
+    }
+
+    if returns {
+        let v = vm.pop();
+        println!("[ffi] function returned {:?}", v);
+
+        v
     }
     else {
         Value::from(0)

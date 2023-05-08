@@ -951,7 +951,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 isPure: false,
             };
 
-            ctx.currentNamespace.registerFunctionDef(m);
+            unsafe { &mut *ctx.currentNamespace.asPtr() }.registerFunctionDef(m);
 
             todo!()
         },

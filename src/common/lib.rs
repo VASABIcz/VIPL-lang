@@ -14,6 +14,8 @@
 #![feature(generic_const_exprs)]
 #![feature(fn_traits)]
 #![feature(unchecked_math)]
+#![feature(abi_c_cmse_nonsecure_call)]
+#![no_mangle]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

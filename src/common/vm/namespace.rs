@@ -1,7 +1,10 @@
 use std::alloc::Global;
+use std::arch::asm;
 use std::collections::HashMap;
 use std::error::Error;
+use std::hint::black_box;
 use std::mem::transmute;
+use libc::printf;
 
 use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
 use crate::bytecodeGen::{ExpressionCtx, genFunctionDef};
@@ -40,6 +43,12 @@ pub struct FunctionMeta {
     pub localsMeta: Box<[VariableMetadata]>,
     pub returnType: Option<DataType>,
     pub isPure: bool
+}
+
+impl FunctionMeta {
+    pub fn returns(&self) -> bool {
+        self.returnType != None
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -125,28 +134,49 @@ impl FunctionMeta {
 #[derive(Debug)]
 pub enum LoadedFunction {
     BuiltIn(fn (&mut VirtualMachine, &mut StackFrame)),
-    Native(extern fn (&mut VirtualMachine, &mut StackFrame)),
+    Native(extern fn (&mut VirtualMachine, &mut StackFrame) -> Value),
     Virtual(Vec<OpCode>)
 }
 
+#[inline(always)]
+pub fn printStack() {
+    let mut ptr = 0usize;
+    unsafe {
+        asm!(
+        "mov {ptr}, rsp",
+        ptr = out(reg) ptr
+        );
+    }
+    println!("rsp is {}", ptr)
+}
+
+#[inline(never)]
+pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value, vm: &mut VirtualMachine, frame: &mut StackFrame) -> Value {
+    f(vm, frame)
+}
+
 impl LoadedFunction {
-    #[inline(always)]
-    pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame) {
+    pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) {
+        println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
+
         vm.pushFrame(frame);
+
+        let vm2 = unsafe { &mut *vm.rawPtr() };
 
         let a = vm.getMutFrame();
 
         match self {
-            LoadedFunction::BuiltIn(b) => unsafe {
-                b(&mut *(vm as *const VirtualMachine as *mut VirtualMachine), a);
+            LoadedFunction::BuiltIn(b) => {
+                b(vm2, a);
             }
-            LoadedFunction::Native(n) => unsafe {
-                let x: *const () = transmute(n.clone());
-                let d: usize = transmute(vm.nativeWrapper.stringNew);
-                println!("before call");
-                println!("vm: {:?} {}", vm as *const VirtualMachine, vm as *const VirtualMachine as usize);
-                println!("proc: {:?} {}", x, x as usize);
-                n(&mut *(vm as *const VirtualMachine as *mut VirtualMachine), a);
+            LoadedFunction::Native(n) => {
+
+                // FIXME in release problem with return value
+                let v = callNative(n, vm2, a);
+
+                if returns {
+                    vm.push(v.into())
+                }
             }
             LoadedFunction::Virtual(v) => {
                 vm.execute(v);
@@ -184,6 +214,10 @@ impl Allocation for Namespace {
 }
 
 impl Namespace {
+    pub fn asPtr(&self) -> *mut Namespace {
+        self as *const Namespace as *mut Namespace
+    }
+
     pub fn findFunction(&self, name: &str) -> Errorable<(&FunctionMeta, usize)> {
         let id = self.functions.getSlowStr(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?;
 
@@ -239,14 +273,8 @@ impl Namespace {
         self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
     }
 
-    // VERY IMPORTANT!!
-    // removing this annotation will casuese segfault caused propably by rust optimizing mS.functionsMeta.push calls out
-    // exact cause unknown
-    #[inline(always)]
-    pub fn registerFunctionDef(&self, d: FunctionMeta) -> usize {
-        let mS = unsafe { &mut *(self as *const Namespace as *mut Namespace) };
-
-        mS.functions.insert(d.genName(), (d, None)).unwrap()
+    pub fn registerFunctionDef(&mut self, d: FunctionMeta) -> usize {
+        self.functions.insert(d.genName(), (d, None)).unwrap()
     }
 
     pub fn registerStruct(&mut self, d: StructMeta) -> usize {

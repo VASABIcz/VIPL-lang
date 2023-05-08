@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use offset::offset_of;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
-use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
 use crate::ffi::NativeWrapper;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
+
+const DEBUG: bool = false;
 
 /*
 rax - FFI return value
@@ -34,10 +36,10 @@ r15 - VIPL vm ptr
  */
 
 fn getLocal<T: AsmGen>(this: &mut T, index: usize) {
-    this.comment(&format!("pushLocal {}", index));
+    this.comment(&format!("getlocal {}", index));
+    printDigit(this, Rbx.into());
     this.mov(R10.into(), AsmValue::Indexing(Rbx.into(), index as isize));
     this.push(R10.into());
-    this.newLine();
 }
 
 fn saveRegisters<T: AsmGen>(this: &mut T) {
@@ -46,7 +48,6 @@ fn saveRegisters<T: AsmGen>(this: &mut T) {
     this.push(Rdi.into());
     this.push(Rsi.into());
     this.push(Rdx.into());
-    this.newLine();
 }
 
 fn restoreRegisters<T: AsmGen>(this: &mut T) {
@@ -55,10 +56,13 @@ fn restoreRegisters<T: AsmGen>(this: &mut T) {
     this.pop(Rsi.into());
     this.pop(Rdi.into());
     this.pop(Rax.into());
-    this.newLine();
 }
 
 fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
+    if !DEBUG {
+        return;
+    }
+
     let t = text.replace("\"", "");
     this.comment(&format!("debugPrint {}", text));
     saveRegisters(this);
@@ -68,8 +72,7 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     this.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
     this.mov(Rdx.into(), (t.len()).into());
     this.sysCall();
-    saveRegisters(this);
-    this.newLine();
+    restoreRegisters(this);
 }
 
 fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
@@ -80,43 +83,36 @@ fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, retur
     this.mov(Rdx.into(), namespaceID.into());
     this.mov(Rcx.into(), Rsp.into());
 
+    this.push(Rbx.into());
+
     this.call(Location::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
 
+    this.pop(Rbx.into());
+
+    this.offsetStack(argsCount as isize); // consume args
+
     if returns {
+        printDigit(this, Rax.into());
         this.push(Rax.into());
     }
-    this.newLine();
-}
-
-fn alignStack<T: AsmGen>(this: &mut T) {
-    // FIXME where does the stack get restored?????
-    this.comment("alignStack");
-    let finishLabel = this.nextLabel();
-
-    this.push(R10.into());
-
-    this.mov(R10.into(), Rsp.into());
-    this.and(R10.into(), 15.into());
-    this.compare(R10.into(), 0.into());
-    this.jmpIfNotEqual(finishLabel.clone().into());
-
-    this.sub(Rsp.into(), 8.into());
-
-    this.makeLabel(&finishLabel);
-
-    this.pop(R10);
-    this.newLine();
 }
 
 fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
+    if !DEBUG {
+        return;
+    }
+
     this.comment(&format!("debugCrash {}", asmValue.clone().toString()));
     this.mov(Rax.into(), 60.into()); // syscall code
     this.mov(Rdi.into(), asmValue.into()); // status code
     this.sysCall();
-    this.newLine();
 }
 
 fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
+    if !DEBUG {
+        return;
+    }
+
     this.comment(&format!("printDigit {}", asmValue.clone().toString()));
 
     println!("offset {}", offset_of!(NativeWrapper::printDigit).as_u32() as isize);
@@ -160,14 +156,14 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.call(R10.into());
     // popNoStore(this);
     this.push(Rax.into());
-    this.newLine();
 }
 
 fn setLocal<T: AsmGen>(this: &mut T, index: usize) {
     this.comment(&format!("setLocal {}", index));
+
     this.pop(R10.into());
+
     this.mov(Location::Indexing(Rbx.into(), index as isize), R10.into());
-    this.newLine();
 }
 
 fn popStack<T: AsmGen>(this: &mut T) {
@@ -176,7 +172,6 @@ fn popStack<T: AsmGen>(this: &mut T) {
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::popValue).as_u32() as isize));
     this.call(R10.into());
     this.push(Rax.into());
-    this.newLine();
 }
 
 fn initCode<T: AsmGen>(this: &mut T) {
@@ -184,6 +179,9 @@ fn initCode<T: AsmGen>(this: &mut T) {
     this.mov(R15.into(), Rdi.into()); // vm ptr
     this.mov(R14.into(), Rsi.into()); // frame ptr
     this.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+
+    printDigit(this, Rsp.into());
+
     this.newLine();
 }
 
@@ -216,6 +214,8 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
 
     for (i, op) in opCodes.iter().enumerate() {
         debugPrint(generator, &format!("executing {:?}\n", op));
+        generator.comment(&format!("start opcode {:?}", op));
+
         if let Some(v) = makeLabelsGreatAgain.get(&i) {
             generator.makeLabel(v)
         }
@@ -226,7 +226,10 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::PushFloat(_) => todo!(),
             OpCode::PushBool(b) => generator.push((*b as isize).into()),
             OpCode::PushChar(c) => generator.push((*c as isize).into()),
-            OpCode::Pop => generator.pop(R12),
+            OpCode::Pop => {
+                printDigit(generator, R12.into());
+                generator.pop(R12)
+            },
             OpCode::Dup => {
                 generator.pop(R12);
                 generator.push(R12.into());
@@ -252,7 +255,11 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                     JmpType::Less => generator.jmpIfLess(l.into()),
                 }
             }
-            OpCode::Return => generator.ret(),
+            OpCode::Return => {
+                generator.pop(Rax.into());
+                printDigit(generator, Rsp.into());
+                generator.ret()
+            },
             OpCode::Add(t) => match t {
                 DataType::Int => {
                     generator.pop(R12);
@@ -293,8 +300,11 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 DataType::Int | DataType::Bool | DataType::Char => {
                     generator.pop(R12);
                     generator.pop(R13);
+
+                    generator.xor(Rax.into(), Rax.into());
                     generator.compare(R13.into(), R12.into());
                     generator.setl(R12);
+
                     generator.push(R12.into())
                 }
                 _ => todo!()
@@ -303,8 +313,11 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
                 DataType::Int | DataType::Bool | DataType::Char => {
                     generator.pop(R12);
                     generator.pop(R13);
+
+                    generator.xor(Rax.into(), Rax.into());
                     generator.compare(R13.into(), R12.into());
                     generator.setg(R12);
+
                     generator.push(R12.into())
                 }
                 _ => todo!()
@@ -350,14 +363,23 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::LessInt => {
                 generator.pop(R12);
                 generator.pop(R13);
+                printDigit(generator, R12.into());
+                printDigit(generator, R13.into());
+                generator.xor(Rax.into(), Rax.into());
                 generator.compare(R13.into(), R12.into());
                 generator.setg(R12);
+                printDigit(generator, R12.into());
                 generator.push(R12.into())
             }
             OpCode::SubInt => {
-                generator.pop(R12);
                 generator.pop(R13);
+                generator.pop(R12);
+
+                printDigit(generator, R12.into());
+                printDigit(generator, R13.into());
+
                 generator.sub(R12.into(), R13.into());
+                printDigit(generator, R12.into());
                 generator.push(R12.into());
             }
             OpCode::MulInt => {
@@ -369,10 +391,18 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::AddInt => {
                 generator.pop(R12);
                 generator.pop(R13);
+
+                printDigit(generator, R12.into());
+                printDigit(generator, R13.into());
+
                 generator.add(R12.into(), R13.into());
+
+                printDigit(generator, R12.into());
+
                 generator.push(R12.into());
             }
             e => todo!("{:?}", e)
         }
+        generator.comment(&format!("end opcode {:?}\n", op));
     }
 }

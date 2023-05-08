@@ -43,7 +43,7 @@ impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALU
         Some((s, v))
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn insert(&mut self, key: LOOKUP, value: VALUE) -> Option<usize> {
         self.actual.push(value);
         let index = self.actual.len()-1;
