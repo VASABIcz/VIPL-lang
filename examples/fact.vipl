@@ -7,7 +7,7 @@ fn fact(n: int): int {
 
 x = 0
 
-while x < 10_000_000 {
-    fact(1)
+while x < 10 {
+    fact(2)
     x += 1
 }

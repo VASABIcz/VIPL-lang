@@ -343,13 +343,13 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
             OpCode::SCall { id } => {
                 let f = namespace.getFunctionMeta(*id).unwrap();
                 let argsCount = f.argsCount;
-                let returns = f.returnType != None;
+                let returns = f.returns();
 
                 genCall(generator, namespace.id, *id, returns, argsCount)
             },
             OpCode::LCall { namespace, id } => {
                 let f = &vm.getNamespace(*namespace).getFunction(*id).0;
-                let returns = f.returnType != None;
+                let returns = f.returns();
                 let argsCount = f.argsCount;
 
                 genCall(generator, *namespace, *id, returns, argsCount)

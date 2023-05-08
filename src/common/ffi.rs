@@ -153,10 +153,10 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     }
 
     let d =unsafe { &mut *  (vm as *mut VirtualMachine) };
-    let namespace = vm.namespaces.get(namespaceID).unwrap();
+    let namespace = vm.namespaces.get(namespaceID).unwrap();//
     let f = namespace.getFunction(functionID);
 
-    let returns = f.0.returnType != None;
+    let returns = f.0.returns();
 
     let mut args = vec![Value::null(); f.0.localsMeta.len()];
 
