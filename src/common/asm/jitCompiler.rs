@@ -5,7 +5,8 @@ use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::asm::asmExec::allocateBinFunction;
 use crate::asm::asmGen::generateAssembly;
-use crate::asm::asmLib::NasmGen;
+use crate::asm::nasmGen::NasmGen;
+use crate::asm::optimizedGen::OptimizingGen;
 use crate::vm::namespace::Namespace;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
@@ -46,10 +47,23 @@ pub struct JITCompiler {}
 
 impl JITCompiler {
     pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
-        let mut nasm = NasmGen::new();
-        generateAssembly(&mut nasm, ops, vm, namespace, returns);
+        let mut gen = OptimizingGen::new();
+        let mut nasmGen = NasmGen::new();
 
-        let genAsm = nasm.generate();
+        if true {
+            generateAssembly(&mut gen, ops, vm, namespace, returns);
+
+            println!("{:?}", gen.data);
+            let optimzed = gen.optimize();
+            println!("{:?}", optimzed.data);
+
+            optimzed.compile(&mut nasmGen);
+        }
+        else {
+            generateAssembly(&mut nasmGen, ops, vm, namespace, returns)
+        }
+
+        let genAsm = nasmGen.generate();
         println!("genAsm");
 
         let mut bin = compileAssembly(&genAsm);

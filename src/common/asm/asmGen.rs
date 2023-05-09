@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use offset::offset_of;
-use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, Location, Register};
+use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
 use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
 use crate::ffi::NativeWrapper;
 use crate::vm::dataType::DataType;
@@ -85,7 +85,7 @@ fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, retur
 
     this.push(Rbx.into());
 
-    this.call(Location::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
+    this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
 
     this.pop(Rbx.into());
 
@@ -120,7 +120,7 @@ fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
 
     this.mov(Rdi.into(),asmValue);
     saveRegisters(this);
-    this.call(Location::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize));
+    this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize));
     restoreRegisters(this);
 }
 
@@ -163,7 +163,7 @@ fn setLocal<T: AsmGen>(this: &mut T, index: usize) {
 
     this.pop(R10.into());
 
-    this.mov(Location::Indexing(Rbx.into(), index as isize), R10.into());
+    this.mov(AsmLocation::Indexing(Rbx.into(), index as isize), R10.into());
 }
 
 fn popStack<T: AsmGen>(this: &mut T) {
