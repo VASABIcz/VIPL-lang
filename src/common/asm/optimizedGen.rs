@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use crate::asm::asmLib::{AsmGen, AsmValue, AsmLocation, Register};
 use crate::asm::asmLib::Register::Rsi;
 use crate::asm::optimizedGen::AsmJumpType::Zero;
@@ -21,7 +22,7 @@ pub enum AsmOpcode {
     Imul(AsmLocation, AsmValue),
 
     SysCall,
-    MakeString,
+    MakeString(String),
     Ret,
 
     JmpLabel(String),
@@ -55,6 +56,9 @@ pub enum AsmOpcode {
 
     Setg(Register),
     Setl(Register),
+
+    BeginIgnore,
+    EndIgnore
 }
 
 impl AsmOpcode {
@@ -74,6 +78,10 @@ impl AsmOpcode {
             AsmOpcode::MakeLabel(l) => gen.makeLabel(&l),
             AsmOpcode::Comment(m) => gen.comment(&m),
             AsmOpcode::NewLine => gen.newLine(),
+            AsmOpcode::SysCall => gen.sysCall(),
+            AsmOpcode::MakeString(s) => { gen.makeString(&s); },
+            AsmOpcode::Push(v) => gen.push(v),
+            AsmOpcode::Pop(reg) => gen.pop(reg),
             AsmOpcode::Jmp(loc, jmp) => {
                 match jmp {
                     Zero => gen.jmpIfZero(loc),
@@ -81,6 +89,8 @@ impl AsmOpcode {
                     _ => todo!()
                 }
             }
+            AsmOpcode::EndIgnore => gen.endIgnore(),
+            AsmOpcode::BeginIgnore => gen.beginIgnore(),
             e => todo!("unimplemented opcode {:?}", e)
         }
     }
@@ -99,7 +109,10 @@ pub enum AsmJumpType {
 }
 
 pub struct OptimizingGen {
-    pub data: Vec<AsmOpcode>
+    pub data: Vec<AsmOpcode>,
+    pub stringCounter: usize,
+    pub stringCache: HashMap<String, String>,
+    pub availableRegisters: Vec<Register>
 }
 
 impl OptimizingGen {
@@ -110,74 +123,104 @@ impl OptimizingGen {
     pub fn optimize(self) -> OptimizingGen {
         let mut pushBuf = vec![];
         let mut resBuf = vec![];
+        let mut isIgnored = false;
 
         for op in self.data {
-            if let AsmOpcode::Push(v) = op {
-                if let Some(reg) = v.tryGetRegister() {
-                    if reg == Register::Rbx {
-                        pushBuf.push((None, true));
+            match op {
+                AsmOpcode::Push(v) => {
+                    if isIgnored {
+                        resBuf.push(AsmOpcode::Push(v));
                         continue
                     }
-                }
 
-                pushBuf.push((Some(v), false))
-            }
-            else if let AsmOpcode::Pop(reg) = op {
-                let v = match pushBuf.pop() {
-                    None => {
-                        continue
-                    }
-                    Some(v) => v.0.unwrap()
-                };
-                if let Some(reg) = v.tryGetRegister() {
-                    if reg == Register::Rbx {
-                        continue
-                    }
+                    pushBuf.push(Some(v))
                 }
+                AsmOpcode::Pop(reg) => {
+                    if isIgnored {
+                        resBuf.push(AsmOpcode::Pop(reg));
+                        continue
+                    }
 
-                resBuf.push(AsmOpcode::Mov(reg.into(), v))
-            }
-            else if let AsmOpcode::Add(dest, v) = op {
-                let d = dest.clone();
-                if let AsmLocation::Register(reg) = dest {
-                    if reg == Register::Rsp {
-                        if let Some(v) = v.tryGetAmount() {
-                            let amount = v/8;
-                            for _ in 0..amount {
-                                println!("pooping");
-                                pushBuf.pop();
+                    let v = match pushBuf.pop() {
+                        None => {
+                            continue
+                        }
+                        Some(v) => v.unwrap()
+                    };
+
+                    resBuf.push(AsmOpcode::Mov(reg.into(), v))
+                }
+                AsmOpcode::Add(dest, v) => {
+                    let d = dest.clone();
+                    if let AsmLocation::Register(reg) = dest {
+                        if reg == Register::Rsp {
+                            if let Some(v) = v.tryGetAmount() {
+                                let amount = v/8;
+                                for _ in 0..amount {
+                                    println!("pooping");
+                                    pushBuf.pop();
+                                }
                             }
                         }
                     }
+                    resBuf.push(AsmOpcode::Add(d, v))
                 }
-                resBuf.push(AsmOpcode::Add(d, v))
-            }
-            else if let AsmOpcode::Sub(dest, v) = op {
-                let d = dest.clone();
-                if let AsmLocation::Register(reg) = dest {
-                    if reg == Register::Rsp {
-                        if let Some(v) = v.tryGetAmount() {
-                            let amount = v/8;
-                            for _ in 0..amount {
-                                println!("pooping");
-                                pushBuf.push((None, false));
+                AsmOpcode::Sub(dest, v) => {
+                    let d = dest.clone();
+                    if let AsmLocation::Register(reg) = dest {
+                        if reg == Register::Rsp {
+                            if let Some(v) = v.tryGetAmount() {
+                                let amount = v/8;
+                                for _ in 0..amount {
+                                    println!("pooping");
+                                    pushBuf.push(None);
+                                }
                             }
                         }
                     }
+                    resBuf.push(AsmOpcode::Sub(d, v))
                 }
-                resBuf.push(AsmOpcode::Sub(d, v))
-            }
-            else {
-                resBuf.push(op)
+                AsmOpcode::BeginIgnore => {
+                    isIgnored = true;
+                }
+                AsmOpcode::EndIgnore => {
+                    isIgnored = false;
+                }
+                _ => {
+                    resBuf.push(op);
+                }
             }
         }
 
-        OptimizingGen{ data: resBuf }
+        OptimizingGen{ data: resBuf, stringCounter: self.stringCounter, stringCache: self.stringCache, availableRegisters: vec![] }
     }
 
     pub fn new() -> Self {
+        // rsp - stack
+        // rbs - stack
+        // r15 - vm
+        // r14 - frame
+        // rbx - locals
+        let mut v = vec![
+            Register::R13,
+            Register::R12,
+            Register::R11,
+            Register::R10,
+            Register::R9,
+            Register::R8,
+            Register::Rcx,
+            Register::Rdx,
+            Register::Rsi,
+            Register::Rdi,
+            Register::Rax
+        ];
+        v.reverse();
+
         Self {
             data: vec![],
+            stringCounter: 0,
+            stringCache: Default::default(),
+            availableRegisters: v
         }
     }
 
@@ -238,7 +281,18 @@ impl AsmGen for OptimizingGen {
     }
 
     fn makeString(&mut self, str: &str) -> String {
-        todo!()
+        self.push(AsmOpcode::MakeString(str.to_string()));
+        match self.stringCache.get(str) {
+            None => {
+                // FIXME sanitaze str
+                let id = format!("str{}", self.stringCounter);
+                self.stringCounter += 1;
+
+                self.stringCache.insert(str.to_string(), id.clone());
+                id
+            }
+            Some(v) => v.clone()
+        }
     }
 
     fn ret(&mut self) {
@@ -345,5 +399,13 @@ impl AsmGen for OptimizingGen {
     fn idiv(&mut self, dest: AsmLocation) {
         todo!()
         // self.push(AsmOpcode::Add(dest, src))
+    }
+
+    fn beginIgnore(&mut self) {
+        self.push(AsmOpcode::BeginIgnore)
+    }
+
+    fn endIgnore(&mut self) {
+        self.push(AsmOpcode::EndIgnore)
     }
 }

@@ -294,6 +294,10 @@ impl AsmGen for NasmGen {
     fn idiv(&mut self, dest: AsmLocation) {
         self.writeOp1("div", &dest.toString())
     }
+
+    fn beginIgnore(&mut self) {}
+
+    fn endIgnore(&mut self) {}
 }
 
 #[test]

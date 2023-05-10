@@ -8,7 +8,7 @@ use std::ptr::write;
 
 use crate::asm::asmLib::Register::{R13, Rax, Rdi, Rdx, Rsi, Rsp};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Register {
     Rax,
     Rbx,
@@ -269,6 +269,9 @@ pub trait AsmGen {
 
     fn setg(&mut self, reg: Register);
     fn setl(&mut self, reg: Register);
+
+    fn beginIgnore(&mut self);
+    fn endIgnore(&mut self);
 }
 
 pub fn writeToFile(file: &str, s: &str) {

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use offset::offset_of;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
 use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
@@ -43,25 +44,30 @@ fn getLocal<T: AsmGen>(this: &mut T, index: usize) {
 }
 
 fn saveRegisters<T: AsmGen>(this: &mut T) {
+    this.beginIgnore();
     this.comment(&format!("saveRegisters"));
     this.push(Rax.into());
     this.push(Rdi.into());
     this.push(Rsi.into());
     this.push(Rdx.into());
+    this.endIgnore();
 }
 
 fn restoreRegisters<T: AsmGen>(this: &mut T) {
+    this.beginIgnore();
     this.comment(&format!("restoreRegisters"));
     this.pop(Rdx.into());
     this.pop(Rsi.into());
     this.pop(Rdi.into());
     this.pop(Rax.into());
+    this.endIgnore();
 }
 
 fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     if !DEBUG {
         return;
     }
+    this.beginIgnore();
 
     let t = text.replace("\"", "");
     this.comment(&format!("debugPrint {}", text));
@@ -73,6 +79,7 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     this.mov(Rdx.into(), (t.len()).into());
     this.sysCall();
     restoreRegisters(this);
+    this.endIgnore();
 }
 
 fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
@@ -83,6 +90,7 @@ fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, retur
     this.mov(Rdx.into(), namespaceID.into());
     this.mov(Rcx.into(), Rsp.into());
 
+    this.beginIgnore();
     this.push(Rbx.into());
 
     this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
@@ -90,6 +98,7 @@ fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, retur
     this.pop(Rbx.into());
 
     this.offsetStack(argsCount as isize); // consume args
+    this.endIgnore();
 
     if returns {
         printDigit(this, Rax.into());
@@ -112,6 +121,7 @@ fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
     if !DEBUG {
         return;
     }
+    this.beginIgnore();
 
     this.comment(&format!("printDigit {}", asmValue.clone().toString()));
 
@@ -122,6 +132,7 @@ fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
     saveRegisters(this);
     this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize));
     restoreRegisters(this);
+    this.endIgnore();
 }
 
 fn debugProgram<T: AsmGen>(this: &mut T) {
@@ -172,6 +183,28 @@ fn popStack<T: AsmGen>(this: &mut T) {
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::popValue).as_u32() as isize));
     this.call(R10.into());
     this.push(Rax.into());
+}
+
+fn aquireRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
+    if regs.aquireSpecific(reg) {
+        this.push(reg.into())
+    }
+}
+
+fn aquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
+    let aq = regs.aquireAny();
+
+    if aq.1 {
+        this.push(aq.0.into());
+    }
+
+    aq.0
+}
+
+fn releaseRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
+    if regs.release(reg) {
+        this.pop(reg)
+    }
 }
 
 fn initCode<T: AsmGen>(this: &mut T) {
