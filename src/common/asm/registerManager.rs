@@ -1,3 +1,4 @@
+use core::slice::GetManyMutError;
 use crate::asm::asmLib::Register;
 
 pub struct RegisterRecord {
@@ -15,7 +16,8 @@ impl RegisterRecord {
 }
 
 pub struct RegisterManager {
-    pub registers: Vec<RegisterRecord>
+    pub registers: Vec<RegisterRecord>,
+    aquires: Vec<Register>
 }
 
 impl RegisterManager {
@@ -40,6 +42,7 @@ impl RegisterManager {
             registers: regs.into_iter().map(|it| {
                 RegisterRecord::new(it)
             }).collect::<Vec<_>>(),
+            aquires: vec![],
         }
     }
 }
@@ -48,17 +51,27 @@ impl RegisterManager {
     // acquires gona use
 
     pub fn aquireSpecific(&mut self, reg: Register) -> bool {
-        let res = self.registers.iter().find(|it| {
+        let res = self.registers.iter_mut().find(|it| {
             it.reg == reg
         }).unwrap();
 
-        res.aquires != 0
+        res.aquires += 1;
+
+        self.aquires.push(reg);
+
+        res.aquires != 1
     }
 
     pub fn release(&mut self, reg: Register) -> bool {
         let res = self.registers.iter_mut().find(|it| {
             it.reg == reg
         }).unwrap();
+
+        let r = self.aquires.pop().unwrap();
+
+        if r != reg {
+            panic!("registers restored in invalid order {:?} vs {:?} | {:?}", r, reg, self.aquires)
+        }
 
         res.aquires-=1;
 
@@ -69,19 +82,24 @@ impl RegisterManager {
         let mut counter = 0usize;
 
         loop {
-            let a = self.registers.get(counter).unwrap();
-            let b = match self.registers.get(counter+1) {
-                None => {
-                    return (a.reg.clone(), a.aquires > 0)
+            let items = match self.registers.get_many_mut([counter, counter+1]) {
+                Ok(v) => v,
+                Err(_) => {
+                    let a = self.registers.get_mut(counter).unwrap();
+                    self.aquires.push(a.reg);
+                    a.aquires += 1;
+                    return (a.reg, a.aquires > 1)
                 }
-                Some(v) => v,
             };
 
-            if b.aquires <= a.aquires {
+            if items[1].aquires <= items[0].aquires {
                 counter += 1;
                 continue
             }
-            return (a.reg.clone(), a.aquires > 0)
+            self.aquires.push(items[0].reg);
+            items[0].aquires += 1;
+
+            return (items[0].reg, items[0].aquires > 1)
         }
     }
 }

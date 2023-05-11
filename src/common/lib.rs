@@ -15,6 +15,7 @@
 #![feature(fn_traits)]
 #![feature(unchecked_math)]
 #![feature(abi_c_cmse_nonsecure_call)]
+#![feature(get_many_mut)]
 #![no_mangle]
 
 // FIXME this is just quick workaround

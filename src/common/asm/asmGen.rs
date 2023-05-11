@@ -8,7 +8,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 /*
 rax - FFI return value
@@ -82,15 +82,26 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
     this.endIgnore();
 }
 
-fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
+fn genCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, s: &mut Vec<Register>, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
     this.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
+
+    aquireRegister(this, regs, Rdi);
+    aquireRegister(this, regs, Rsi);
+    aquireRegister(this, regs, Rdx);
+    aquireRegister(this, regs, Rcx);
+    aquireRegister(this, regs, Rax);
+
+    this.beginIgnore();
+
+    for _ in 0..argsCount {
+        this.push(s.pop().unwrap().into());
+    }
 
     this.mov(Rdi.into(), R15.into());
     this.mov(Rsi.into(), functionID.into());
     this.mov(Rdx.into(), namespaceID.into());
     this.mov(Rcx.into(), Rsp.into());
 
-    this.beginIgnore();
     this.push(Rbx.into());
 
     this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
@@ -100,9 +111,17 @@ fn genCall<T: AsmGen>(this: &mut T, namespaceID: usize, functionID: usize, retur
     this.offsetStack(argsCount as isize); // consume args
     this.endIgnore();
 
+    releaseRegister(this, regs, Rax);
+    releaseRegister(this, regs, Rcx);
+    releaseRegister(this, regs, Rdx);
+    releaseRegister(this, regs, Rsi);
+    releaseRegister(this, regs, Rdi);
+
     if returns {
         printDigit(this, Rax.into());
-        this.push(Rax.into());
+        let r = aquireAny(this, regs);
+        this.mov(r.into(), Rax.into());
+        s.push(r);
     }
 }
 
@@ -189,6 +208,7 @@ fn aquireRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Regi
     if regs.aquireSpecific(reg) {
         this.push(reg.into())
     }
+    println!("aquring {:?}", reg);
 }
 
 fn aquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
@@ -198,10 +218,12 @@ fn aquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
         this.push(aq.0.into());
     }
 
+    println!("aquring {:?}", aq.0);
     aq.0
 }
 
 fn releaseRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
+    println!("releasing {:?}", reg);
     if regs.release(reg) {
         this.pop(reg)
     }
@@ -218,13 +240,16 @@ fn initCode<T: AsmGen>(this: &mut T) {
     this.newLine();
 }
 
-pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
-    initCode(generator);
+pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
+    initCode(gen);
 
     let mut jmpCounter = 0usize;
+    let mut regs = RegisterManager::new();
+    let mut emulatedStack = vec![];
 
     let mut makeLabelsGreatAgain = HashMap::new();
     let mut jmpLookup = HashMap::new();
+    let mut prevRet = false;
 
     for (i, op) in opCodes.iter().enumerate() {
         if let OpCode::Jmp { offset, jmpType } = op {
@@ -246,199 +271,250 @@ pub fn generateAssembly<T: AsmGen>(generator: &mut T, opCodes: Vec<OpCode>, vm: 
     }
 
     for (i, op) in opCodes.iter().enumerate() {
-        debugPrint(generator, &format!("executing {:?}\n", op));
-        generator.comment(&format!("start opcode {:?}", op));
+        println!("genning {:?}", op);
+        debugPrint(gen, &format!("executing {:?}\n", op));
+        gen.comment(&format!("start opcode {:?}", op));
 
         if let Some(v) = makeLabelsGreatAgain.get(&i) {
-            generator.makeLabel(v)
+            gen.makeLabel(v)
         }
+
+        let mut aqireReg = || {
+            let r = aquireAny(gen, &mut regs);
+            emulatedStack.push(r);
+            r
+        };
+
         match op {
-            OpCode::PushInt(v) => generator.push((*v).into()),
-            OpCode::PushIntOne => generator.push(1.into()),
-            OpCode::PushIntZero => generator.push(0.into()),
+            OpCode::PushInt(v) => {
+                let r = aqireReg();
+                gen.mov(r.into(), (*v).into());
+            },
+            OpCode::PushIntOne => {
+                let r = aqireReg();
+                gen.mov(r.into(), 1.into());
+            },
+            OpCode::PushIntZero => {
+                let r = aqireReg();
+                gen.mov(r.into(), 0.into());
+            },
             OpCode::PushFloat(_) => todo!(),
-            OpCode::PushBool(b) => generator.push((*b as isize).into()),
-            OpCode::PushChar(c) => generator.push((*c as isize).into()),
+            OpCode::PushBool(b) => {
+                let r = aqireReg();
+                gen.mov(r.into(), ((*b) as usize).into());
+            },
+            OpCode::PushChar(c) => {
+                let r = aqireReg();
+                gen.mov(r.into(), ((*c) as usize).into());
+            },
             OpCode::Pop => {
-                printDigit(generator, R12.into());
-                generator.pop(R12)
+                let r = emulatedStack.pop().unwrap();
+                releaseRegister(gen, &mut regs, r)
             },
             OpCode::Dup => {
-                generator.pop(R12);
-                generator.push(R12.into());
-                generator.push(R12.into());
+                todo!();
+                let r = emulatedStack.pop().unwrap();
             }
-            OpCode::GetLocal { index } => getLocal(generator, *index),
-            OpCode::SetLocal { index } => setLocal(generator, *index),
+            OpCode::GetLocal { index } => {
+                let r = aqireReg();
+                gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
+            },
+            OpCode::SetLocal { index } => {
+                let r = emulatedStack.pop().unwrap();
+                gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+                releaseRegister(gen, &mut regs, r)
+            },
             OpCode::Jmp { offset, jmpType } => {
                 let l = jmpLookup.get(&i).unwrap().clone();
                 match jmpType {
                     JmpType::One | JmpType::True => {
-                        generator.pop(R12.into());
-                        generator.compare(R12.into(), 1.into());
-                        generator.jmpIfOne(l.into())
+                        let r = emulatedStack.pop().unwrap();
+                        releaseRegister(gen, &mut regs, r);
+                        gen.compare(r.into(), 1.into());
+                        gen.jmpIfOne(l.into())
                     },
                     JmpType::Zero | JmpType::False => {
-                        generator.pop(R12.into());
-                        generator.compare(R12.into(), 0.into());
-                        generator.jmpIfZero(l.into())
+                        let r = emulatedStack.pop().unwrap();
+                        releaseRegister(gen, &mut regs, r);
+                        gen.compare(r.into(), 0.into());
+                        gen.jmpIfZero(l.into())
                     },
-                    JmpType::Jmp => generator.jmp(l.into()),
-                    JmpType::Gt => generator.jmpIfGt(l.into()),
-                    JmpType::Less => generator.jmpIfLess(l.into()),
+                    JmpType::Jmp => gen.jmp(l.into()),
+                    _ => todo!()
                 }
             }
             OpCode::Return => {
+                println!("UwU");
+                if prevRet {
+                    return;
+                }
+                prevRet = true;
                 // FIXME
                 if returns {
-                    generator.pop(Rax.into());
+                    let r = emulatedStack.pop().unwrap();
+                    gen.mov(Rax.into(), r.into());
+                    // releaseRegister(gen, &mut regs, r)
                 }
-                printDigit(generator, Rsp.into());
-                generator.ret()
+                printDigit(gen, Rsp.into());
+                gen.ret()
             },
             OpCode::Add(t) => match t {
                 DataType::Int => {
-                    generator.pop(R12);
-                    generator.pop(R13);
-                    generator.add(R12.into(), R13.into());
-                    generator.push(R12.into());
+                    let r2 = emulatedStack.pop().unwrap();
+                    let r1 = emulatedStack.pop().unwrap();
+                    gen.add(r1.into(), r2.into());
+                    releaseRegister(gen, &mut regs, r2);
+                    emulatedStack.push(r1)
                 }
                 _ => todo!()
             }
             OpCode::Sub(t) => match t {
                 DataType::Int => {
-                    generator.pop(R12);
-                    generator.pop(R13);
-                    generator.sub(R12.into(), R13.into());
-                    generator.push(R12.into());
+                    let r2 = emulatedStack.pop().unwrap();
+                    let r1 = emulatedStack.pop().unwrap();
+                    gen.sub(r1.into(), r2.into());
+                    releaseRegister(gen, &mut regs, r2);
+                    emulatedStack.push(r1)
                 }
                 _ => todo!()
             }
             OpCode::Div(_) => todo!(),
             OpCode::Mul(t) => match t {
                 DataType::Int => {
-                    generator.pop(R12);
-                    generator.pop(R13);
-                    generator.imul(R12.into(), R13.into());
-                    generator.push(R12.into());
+                    let r2 = emulatedStack.pop().unwrap();
+                    let r1 = emulatedStack.pop().unwrap();
+                    gen.imul(r1.into(), r2.into());
+                    releaseRegister(gen, &mut regs, r2);
+                    emulatedStack.push(r1)
                 }
                 _ => todo!()
             }
-            OpCode::Equals(t) => match t {
-                DataType::Int | DataType::Bool | DataType::Char => {
-                    generator.pop(R12);
-                    generator.pop(R13);
-                    generator.compare(R12.into(), R13.into());
-                }
-                _ => todo!()
+            OpCode::Equals(t) => {
+                todo!()
             }
             OpCode::Greater(t) => match t {
                 DataType::Int | DataType::Bool | DataType::Char => {
-                    generator.pop(R12);
-                    generator.pop(R13);
+                    let r2 = emulatedStack.pop().unwrap();
+                    let r1 = emulatedStack.pop().unwrap();
 
-                    generator.xor(Rax.into(), Rax.into());
-                    generator.compare(R13.into(), R12.into());
-                    generator.setl(R12);
+                    aquireRegister(gen, &mut regs, Rax);
 
-                    generator.push(R12.into())
+                    gen.xor(Rax.into(), Rax.into());
+                    gen.compare(r1.into(), r2.into());
+                    gen.setl(r1.into());
+
+                    releaseRegister(gen,  &mut regs, Rax);
+
+                    releaseRegister(gen, &mut regs, r2);
+                    emulatedStack.push(r1);
                 }
                 _ => todo!()
             }
             OpCode::Less(t) => match t {
                 DataType::Int | DataType::Bool | DataType::Char => {
-                    generator.pop(R12);
-                    generator.pop(R13);
+                    let r2 = emulatedStack.pop().unwrap();
+                    let r1 = emulatedStack.pop().unwrap();
 
-                    generator.xor(Rax.into(), Rax.into());
-                    generator.compare(R13.into(), R12.into());
-                    generator.setg(R12);
+                    aquireRegister(gen, &mut regs, Rax);
 
-                    generator.push(R12.into())
+                    gen.xor(Rax.into(), Rax.into());
+                    gen.compare(r1.into(), r2.into());
+                    gen.setl(r1.into());
+
+                    releaseRegister(gen,  &mut regs, Rax);
+
+                    releaseRegister(gen, &mut regs, r2);
+                    emulatedStack.push(r1);
                 }
                 _ => todo!()
             }
             OpCode::Or => {
-                generator.pop(R12);
-                generator.pop(R13);
-                generator.or(R12.into(), R13.into());
-                generator.push(R12.into());
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
+                gen.or(r1.into(), r2.into());
+                releaseRegister(gen, &mut regs, r2);
+                emulatedStack.push(r1)
             }
             OpCode::And => {
-                generator.pop(R12);
-                generator.pop(R13);
-                generator.and(R12.into(), R13.into());
-                generator.push(R12.into());
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
+                gen.and(r1.into(), r2.into());
+                releaseRegister(gen, &mut regs, r2);
+                emulatedStack.push(r1)
             }
             OpCode::Not => {
-                generator.pop(R12);
-                generator.not(R12.into());
-                generator.push(R12.into());
+                let r1 = emulatedStack.pop().unwrap();
+                gen.not(r1.into());
+                emulatedStack.push(r1)
             }
-            OpCode::StrNew(v) => pushStr(generator, v.as_str()),
+            OpCode::StrNew(v) => {
+                todo!();
+                pushStr(gen, v.as_str())
+            },
             OpCode::SCall { id } => {
                 let f = namespace.getFunctionMeta(*id).unwrap();
                 let argsCount = f.argsCount;
                 let returns = f.returns();
 
-                genCall(generator, namespace.id, *id, returns, argsCount)
+                genCall(gen, &mut regs, &mut emulatedStack, namespace.id, *id, returns, argsCount)
             },
             OpCode::LCall { namespace, id } => {
                 let f = &vm.getNamespace(*namespace).getFunction(*id).0;
                 let returns = f.returns();
                 let argsCount = f.argsCount;
 
-                genCall(generator, *namespace, *id, returns, argsCount)
+                genCall(gen, &mut regs, &mut emulatedStack, *namespace, *id, returns, argsCount)
             }
             OpCode::GetLocalZero => {
-                getLocal(generator, 0)
+                let r = aqireReg();
+                gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
             }
             OpCode::SetLocalZero => {
-                setLocal(generator, 0)
+                let r = emulatedStack.pop().unwrap();
+                gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
+                releaseRegister(gen, &mut regs, r)
             }
             OpCode::LessInt => {
-                generator.pop(R12);
-                generator.pop(R13);
-                printDigit(generator, R12.into());
-                printDigit(generator, R13.into());
-                generator.xor(Rax.into(), Rax.into());
-                generator.compare(R13.into(), R12.into());
-                generator.setg(R12);
-                printDigit(generator, R12.into());
-                generator.push(R12.into())
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
+
+                aquireRegister(gen, &mut regs, Rax);
+
+                gen.xor(Rax.into(), Rax.into());
+                gen.compare(r1.into(), r2.into());
+                gen.setg(r1.into());
+
+                releaseRegister(gen,  &mut regs, Rax);
+
+                releaseRegister(gen, &mut regs, r2);
+                emulatedStack.push(r1);
             }
             OpCode::SubInt => {
-                generator.pop(R13);
-                generator.pop(R12);
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
 
-                printDigit(generator, R12.into());
-                printDigit(generator, R13.into());
+                gen.sub(r1.into(), r2.into());
 
-                generator.sub(R12.into(), R13.into());
-                printDigit(generator, R12.into());
-                generator.push(R12.into());
+                releaseRegister(gen, &mut regs, r2);
+
+                emulatedStack.push(r1)
             }
             OpCode::MulInt => {
-                generator.pop(R12);
-                generator.pop(R13);
-                generator.imul(R12.into(), R13.into());
-                generator.push(R12.into());
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
+                gen.imul(r1.into(), r2.into());
+                releaseRegister(gen, &mut regs, r2);
+                emulatedStack.push(r1)
             }
             OpCode::AddInt => {
-                generator.pop(R12);
-                generator.pop(R13);
-
-                printDigit(generator, R12.into());
-                printDigit(generator, R13.into());
-
-                generator.add(R12.into(), R13.into());
-
-                printDigit(generator, R12.into());
-
-                generator.push(R12.into());
+                let r2 = emulatedStack.pop().unwrap();
+                let r1 = emulatedStack.pop().unwrap();
+                gen.add(r1.into(), r2.into());
+                releaseRegister(gen, &mut regs, r2);
+                emulatedStack.push(r1)
             }
             e => todo!("{:?}", e)
         }
-        generator.comment(&format!("end opcode {:?}\n", op));
+        gen.comment(&format!("end opcode {:?}\n", op));
     }
 }
