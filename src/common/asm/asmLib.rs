@@ -272,6 +272,8 @@ pub trait AsmGen {
 
     fn beginIgnore(&mut self);
     fn endIgnore(&mut self);
+
+    fn getStackOffset(&mut self) -> usize;
 }
 
 pub fn writeToFile(file: &str, s: &str) {

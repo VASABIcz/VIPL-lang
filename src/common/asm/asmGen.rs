@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use libc::THOUSEP;
 use offset::offset_of;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
 use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
@@ -12,6 +13,8 @@ use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 const DEBUG: bool = false;
 
 /*
+rdi, rsi, rdx, rcx, r8, r9
+
 rax - FFI return value
 
 rbx - VIPL locals ptr
@@ -37,89 +40,160 @@ r14 - VIPL stack ptr
 r15 - VIPL vm ptr
  */
 
-fn getLocal<T: AsmGen>(this: &mut T, index: usize) {
-    this.comment(&format!("getlocal {}", index));
-    printDigit(this, Rbx.into());
-    this.mov(R10.into(), AsmValue::Indexing(Rbx.into(), index as isize));
-    this.push(R10.into());
+static ARG_REGS: [Register; 6] = [Rdi, Rsi, Rdx, Rcx, Register::R8, Register::R8];
+
+struct Jitter<T: AsmGen> {
+    pub gen: T,
+    pub regs: RegisterManager,
+    pub stack: Vec<Register>
 }
 
-fn saveRegisters<T: AsmGen>(this: &mut T) {
-    this.beginIgnore();
-    this.comment(&format!("saveRegisters"));
-    this.push(Rax.into());
-    this.push(Rdi.into());
-    this.push(Rsi.into());
-    this.push(Rdx.into());
-    this.endIgnore();
-}
-
-fn restoreRegisters<T: AsmGen>(this: &mut T) {
-    this.beginIgnore();
-    this.comment(&format!("restoreRegisters"));
-    this.pop(Rdx.into());
-    this.pop(Rsi.into());
-    this.pop(Rdi.into());
-    this.pop(Rax.into());
-    this.endIgnore();
-}
-
-fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
+fn debugPrint<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, text: &str) {
     if !DEBUG {
         return;
     }
+    return;
     this.beginIgnore();
 
     let t = text.replace("\"", "");
     this.comment(&format!("debugPrint {}", text));
-    saveRegisters(this);
+
+    acquireRegister(this, regs, Rax);
+    acquireRegister(this, regs, Rdi);
+    acquireRegister(this, regs, Rsi);
+    acquireRegister(this, regs, Rdx);
+
     this.mov(Rax.into(), 1.into());
     this.mov(Rdi.into(), 1.into());
     let lejbl = this.makeString(&t);
     this.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
     this.mov(Rdx.into(), (t.len()).into());
     this.sysCall();
-    restoreRegisters(this);
+
+    releaseRegister(this, regs, Rdx);
+    releaseRegister(this, regs, Rsi);
+    releaseRegister(this, regs, Rdi);
+    releaseRegister(this, regs, Rax);
+
     this.endIgnore();
+}
+
+fn saveAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, except: &[Register]) {
+    this.comment("saveAquiredRegisters");
+    let rs = regs.usedRegisters();
+
+    for r in rs {
+        if except.contains(&r) {
+            continue;
+        }
+        this.push(r.into());
+    }
+}
+
+fn restoreAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, except: &[Register]) {
+    this.comment("restoreAquiredRegisters");
+    let mut rs = regs.usedRegisters();
+
+    rs.reverse();
+
+    for r in rs {
+        if except.contains(&r) {
+            continue;
+        }
+        this.pop(r.into());
+    }
+}
+
+fn safeCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, f: AsmLocation, args: &[AsmValue]) {
+    let argsCount = args.len();
+
+    if argsCount > 6 {
+        panic!("more than 6 args is not supported yet")
+    }
+
+    this.comment("occupie args registers");
+    for (i, arg) in args.iter().enumerate() {
+        let r = ARG_REGS[i];
+
+        acquireRegister(this, regs, r);
+
+        this.mov(r.into(), arg.clone());
+    }
+
+    saveAquiredRegisters(this, regs, &ARG_REGS[..argsCount]);
+    saveCoreRegisters(this);
+
+
+    let offset = this.getStackOffset();
+
+    // FIXME
+    let needsAlignment = (offset + 1) % 2 == 0;
+
+    if needsAlignment {
+        this.offsetStack(-1);
+    }
+
+    this.comment("perform call");
+    this.call(f);
+
+    if needsAlignment {
+        this.offsetStack(1);
+    }
+
+    restoreCoreRegisters(this);
+    restoreAquiredRegisters(this, regs, &ARG_REGS[..argsCount]);
+
+    this.comment("restore args registers");
+    for i in 0..argsCount {
+        releaseRegister(this, regs, ARG_REGS[(argsCount-1)-i])
+    }
+}
+
+fn saveCoreRegisters<T: AsmGen>(this: &mut T) {
+    this.comment("saveCoreRegisters");
+    this.push(Rbx.into());
+    this.push(R15.into());
+    this.push(R14.into());
+}
+
+fn restoreCoreRegisters<T: AsmGen>(this: &mut T) {
+    this.comment("restoreCoreRegisters");
+    this.pop(R14.into());
+    this.pop(R15.into());
+    this.pop(Rbx.into());
 }
 
 fn genCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, s: &mut Vec<Register>, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
     this.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
 
-    acquireRegister(this, regs, Rdi);
-    acquireRegister(this, regs, Rsi);
-    acquireRegister(this, regs, Rdx);
-    acquireRegister(this, regs, Rcx);
-    acquireRegister(this, regs, Rax);
-
     this.beginIgnore();
 
+    this.comment("push args to stack");
     for _ in 0..argsCount {
-        this.push(s.pop().unwrap().into());
+        let r = s.pop().unwrap();
+        this.push(r.into());
+        regs.release(r);
     }
 
-    this.mov(Rdi.into(), R15.into());
-    this.mov(Rsi.into(), functionID.into());
-    this.mov(Rdx.into(), namespaceID.into());
-    this.mov(Rcx.into(), Rsp.into());
+    this.comment("save pointer to stack args");
+    let r = acquireAny(this, regs);
+    this.mov(r.into(), Rsp.into());
 
-    this.push(Rbx.into());
+    safeCall(this, regs, AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize),
+             &[
+                 R15.into(),
+                 functionID.into(),
+                 namespaceID.into(),
+                 r.into()
+             ]);
 
-    this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize));
-
-    this.pop(Rbx.into());
+    releaseRegister(this, regs, r);
 
     this.offsetStack(argsCount as isize); // consume args
     this.endIgnore();
 
-    releaseRegister(this, regs, Rax);
-    releaseRegister(this, regs, Rcx);
-    releaseRegister(this, regs, Rdx);
-    releaseRegister(this, regs, Rsi);
-    releaseRegister(this, regs, Rdi);
-
     if returns {
-        printDigit(this, Rax.into());
+        // printDigit(this, regs, Rax.into());
         let r = acquireAny(this, regs);
         this.mov(r.into(), Rax.into());
         s.push(r);
@@ -132,12 +206,12 @@ fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
     }
 
     this.comment(&format!("debugCrash {}", asmValue.clone().toString()));
-    this.mov(Rax.into(), 60.into()); // syscall code
-    this.mov(Rdi.into(), asmValue.into()); // status code
+    this.mov(Rax.into(), 60.into());
+    this.mov(Rdi.into(), asmValue.into());
     this.sysCall();
 }
 
-fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
+fn printDigit<T: AsmGen>(this: &mut T, regs: &mut  RegisterManager, asmValue: AsmValue) {
     if !DEBUG {
         return;
     }
@@ -147,31 +221,11 @@ fn printDigit<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
 
     println!("offset {}", offset_of!(NativeWrapper::printDigit).as_u32() as isize);
 
+    safeCall(this, regs, AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize), &[
+        asmValue
+    ]);
 
-    this.mov(Rdi.into(),asmValue);
-    saveRegisters(this);
-    this.call(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize));
-    restoreRegisters(this);
     this.endIgnore();
-}
-
-fn debugProgram<T: AsmGen>(this: &mut T) {
-    initCode(this);
-    debugPrint(this, "debug program");
-
-    pushStr(this, "UwU");
-    this.pop(R11);
-
-    debugPrint(this, "returning");
-    this.ret();
-}
-
-fn popNoStore<T: AsmGen>(this: &mut T) {
-    this.add(Rsp.into(), 8.into());
-}
-
-fn pushNoStore<T: AsmGen>(this: &mut T) {
-    this.sub(Rsp.into(), 8.into());
 }
 
 fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
@@ -181,26 +235,6 @@ fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
     this.mov(Rsi.into(), R14.into());
     this.lea(Rdx.into(), label.into());
     this.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::stringNew).as_u32() as isize));
-    // alignStack(this);
-    // pushNoStore(this);
-    // debugPrint(this, "push str");
-    this.call(R10.into());
-    // popNoStore(this);
-    this.push(Rax.into());
-}
-
-fn setLocal<T: AsmGen>(this: &mut T, index: usize) {
-    this.comment(&format!("setLocal {}", index));
-
-    this.pop(R10.into());
-
-    this.mov(AsmLocation::Indexing(Rbx.into(), index as isize), R10.into());
-}
-
-fn popStack<T: AsmGen>(this: &mut T) {
-    this.comment("popStack");
-    this.mov(Rdi.into(), R15.into());
-    this.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::popValue).as_u32() as isize));
     this.call(R10.into());
     this.push(Rax.into());
 }
@@ -236,20 +270,18 @@ fn releaseRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Reg
     }
 }
 
-fn initCode<T: AsmGen>(this: &mut T) {
+fn initCode<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) {
     this.comment("init code");
     this.mov(R15.into(), Rdi.into()); // vm ptr
     this.mov(R14.into(), Rsi.into()); // frame ptr
     this.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
 
-    printDigit(this, Rsp.into());
+    // printDigit(this, regs, Rsp.into());
 
     this.newLine();
 }
 
 pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
-    initCode(gen);
-
     let mut jmpCounter = 0usize;
     let mut regs = RegisterManager::new();
     let mut emulatedStack = vec![];
@@ -257,6 +289,8 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
     let mut makeLabelsGreatAgain = HashMap::new();
     let mut jmpLookup = HashMap::new();
     let mut lastRet = -1isize;
+
+    initCode(gen, &mut regs);
 
     for (i, op) in opCodes.iter().enumerate() {
         if let OpCode::Jmp { offset, jmpType } = op {
@@ -282,7 +316,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
         if DEBUG {
             println!("genning {:?}", op);
         }
-        debugPrint(gen, &format!("executing {:?}\n", op));
+        debugPrint(gen, &mut regs, &format!("executing {:?}\n", op));
         gen.comment(&format!("start opcode {:?}", op));
 
         if let Some(v) = makeLabelsGreatAgain.get(&i) {
@@ -367,7 +401,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
                         }
                     }
                 }
-                printDigit(gen, Rsp.into());
+                printDigit(gen, &mut regs, Rax.into());
                 gen.ret()
             },
             OpCode::Add(t) => match t {
@@ -461,7 +495,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
             }
             OpCode::StrNew(v) => {
                 todo!();
-                pushStr(gen, v.as_str())
+                // pushStr(gen, v.as_str())
             },
             OpCode::SCall { id } => {
                 let f = namespace.getFunctionMeta(*id).unwrap();

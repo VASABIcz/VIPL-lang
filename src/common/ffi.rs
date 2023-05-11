@@ -189,7 +189,7 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     if returns {
         let v = vm.pop();
         if DEBUG {
-            println!("[ffi] function returned {:?}", v);
+            println!("[ffi] function {} returned {:?} {:?}", f.0.name, v, v.asUnsigned() as *const ());
         }
 
         v

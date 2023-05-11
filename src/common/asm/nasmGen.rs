@@ -22,7 +22,7 @@ impl NasmGen {
             jmpCounter: 0,
             labelCounter: 0,
             stringCache: Default::default(),
-            stackSize: 10,
+            stackSize: 0,
         }
     }
 
@@ -298,6 +298,10 @@ impl AsmGen for NasmGen {
     fn beginIgnore(&mut self) {}
 
     fn endIgnore(&mut self) {}
+
+    fn getStackOffset(&mut self) -> usize {
+        self.stackSize
+    }
 }
 
 #[test]

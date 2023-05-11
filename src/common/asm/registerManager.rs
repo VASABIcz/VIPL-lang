@@ -102,4 +102,16 @@ impl RegisterManager {
             return (items[0].reg, items[0].aquires > 1)
         }
     }
+
+    pub fn usedRegisters(&self) -> Vec<Register> {
+        let mut buf = vec![];
+
+        for reg in &self.registers {
+            if reg.aquires > 0 {
+                buf.push(reg.reg)
+            }
+        }
+
+        return buf;
+    }
 }

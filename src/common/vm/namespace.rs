@@ -295,7 +295,6 @@ impl LoadedFunction {
             LoadedFunction::Native(n) => {
                 // FIXME in release problem with return value
                 let v = callNative(n, vm2, a);
-                // println!("UwU");
 
                 if returns {
                     vm.push(v.into())
