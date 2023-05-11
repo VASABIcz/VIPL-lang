@@ -212,7 +212,7 @@ impl ExpressionCtx<'_> {
                         if !self.vTable.contains_key(&MyStr::Static(&v)) {
                             let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
                             let funcId = self.currentNamespace.findFunction(&genName)?;
-                            return Ok(funcId.0.returnType.clone())
+                            return Ok(Some(funcId.0.returnType.clone()))
                         }
                         else {
                             let var = self.vTable.get(&MyStr::Static(&v)).unwrap();
@@ -236,7 +236,7 @@ impl ExpressionCtx<'_> {
                         println!("lookup {}", &genName);
 
                         let funcId = namespace.findFunction(&genName)?;
-                        return Ok(funcId.0.returnType.clone())
+                        return Ok(Some(funcId.0.returnType.clone()))
                     }
                 }
                 todo!("{:?} {:?}", prev, args)
@@ -940,18 +940,6 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         Expression::Lambda(args, body) => {
             // procedure to determine return type of a fucntion
             // better typehinting
-
-            let m = FunctionMeta {
-                // gen name
-                name: "".to_string(),
-                argsCount: 0,
-                functionType: FunctionTypeMeta::Builtin,
-                localsMeta: Box::new([]),
-                returnType: None,
-                isPure: false,
-            };
-
-            unsafe { &mut *ctx.currentNamespace.asPtr() }.registerFunctionDef(m);
 
             todo!()
         },

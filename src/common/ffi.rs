@@ -10,7 +10,7 @@ use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
 use crate::vm::heap::Hay;
 use crate::vm::myStr::MyStr;
-use crate::vm::namespace::Namespace;
+use crate::vm::namespace::{callNative, LoadedFunction, Namespace};
 use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::{Array, Str};
 use crate::vm::stackFrame::StackFrame;
@@ -180,7 +180,31 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
         functionId: functionID,
     };
 
-    unsafe { callable.call(&mut *vm.rawPtr(), frame, f.0.returns()); }
+    // println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
+
+    d.pushFrame(frame);
+
+    let vm2 = unsafe { &mut *vm.rawPtr() };
+
+    let a = vm.getMutFrame();
+
+    match callable {
+        LoadedFunction::BuiltIn(b) => {
+            b(vm2, a);
+        }
+        LoadedFunction::Native(n) => {
+            // FIXME in release problem with return value
+            let v = callNative(n, vm2, a);
+
+            if returns {
+                d.push(v.into())
+            }
+        }
+        LoadedFunction::Virtual(v) => {
+            d.execute(v);
+        }
+    }
+    d.popFrame();
 
     if DEBUG {
         println!("[ffi] after call {} {:?}", vm.frames.len(), vm.getFrame().localVariables);

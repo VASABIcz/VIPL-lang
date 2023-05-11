@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
+use std::intrinsics::unlikely;
 use std::mem::size_of;
 
 use crate::asm::jitCompiler::JITCompiler;
@@ -279,7 +280,7 @@ impl VirtualMachine {
                 buf += &n.name;
                 buf += "::";
                 buf += &f.genName();
-                x.insert(buf.into(), f.returnType.clone());
+                x.insert(buf.into(), Some(f.returnType.clone()));
             }
         }
 
@@ -429,15 +430,15 @@ impl VirtualMachine {
         self.getMutFrame().programCounter = index;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn pushFrame(&mut self, frame: StackFrame) {
-        if self.frames.len() > 2048 {
+        if unlikely(self.frames.len() > 2048) {
             panic!("stack overflow")
         }
         self.frames.push(frame);
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn popFrame(&mut self) {
         self.frames.pop();
     }

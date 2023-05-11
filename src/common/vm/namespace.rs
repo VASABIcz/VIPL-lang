@@ -16,6 +16,7 @@ use crate::parser::{Operation, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
+use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
@@ -41,16 +42,15 @@ pub struct FunctionMeta {
     pub argsCount: usize,
     pub functionType: FunctionTypeMeta,
     pub localsMeta: Box<[VariableMetadata]>,
-    pub returnType: Option<DataType>,
-    pub isPure: bool
+    pub returnType: DataType,
+    pub isPure: bool,
+    pub returns: bool
 }
 
 impl FunctionMeta {
+    #[inline(always)]
     pub fn returns(&self) -> bool {
-        match &self.returnType {
-            None => false,
-            Some(v) => v != &DataType::Void
-        }
+        self.returns
     }
 }
 
@@ -83,13 +83,13 @@ impl StructMeta {
 
 impl FunctionMeta {
     pub fn toFunctionType(&self) -> DataType {
-        DataType::Function { args: self.localsMeta.iter().map(|it|{it.typ.clone()}).collect::<Vec<_>>(), ret: Box::new(self.returnType.clone().unwrap_or(DataType::Void)) }
+        DataType::Function { args: self.localsMeta.iter().map(|it|{it.typ.clone()}).collect::<Vec<_>>(), ret: Box::new(self.returnType.clone()) }
     }
 }
 
 impl Into<FunctionMeta> for FunctionDef {
     fn into(self) -> FunctionMeta {
-        FunctionMeta::makeRuntime(self.name, self.localsMeta.into_boxed_slice(), self.argsCount, self.returnType, self.body)
+        FunctionMeta::makeRuntime(self.name, self.localsMeta.into_boxed_slice(), self.argsCount, self.returnType.unwrap_or(Void), self.body)
     }
 }
 
@@ -100,34 +100,37 @@ impl FunctionMeta {
         }).collect::<Vec<_>>())
     }
 
-    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, pure: bool) -> Self {
+    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, pure: bool) -> Self {
         Self {
             name,
             argsCount,
             functionType: FunctionTypeMeta::Native,
             localsMeta: locals,
+            returns: ret != Void,
             returnType: ret,
             isPure: pure,
         }
     }
 
-    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, pure: bool) -> Self {
+    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, pure: bool) -> Self {
         Self {
             name,
             argsCount,
             functionType: FunctionTypeMeta::Native,
             localsMeta: locals,
+            returns: ret != Void,
             returnType: ret,
             isPure: pure,
         }
     }
 
-    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: Option<DataType>, body: Vec<Statement>) -> Self {
+    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, body: Vec<Statement>) -> Self {
         Self {
             name,
             argsCount,
             functionType: FunctionTypeMeta::Runtime(body),
             localsMeta: locals,
+            returns: ret != Void,
             returnType: ret,
             isPure: false,
         }
@@ -390,7 +393,7 @@ impl Namespace {
         let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
-        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, Some(ret), pure);
+        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, ret, pure);
 
         self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
     }
