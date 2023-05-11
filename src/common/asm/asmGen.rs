@@ -83,7 +83,7 @@ fn saveAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, exc
     let rs = regs.usedRegisters();
 
     for r in rs {
-        if except.contains(&r) {
+        if except.contains(&r) || r == Register::R12 || r == Register::R13 {
             continue;
         }
         this.push(r.into());
@@ -97,7 +97,7 @@ fn restoreAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, 
     rs.reverse();
 
     for r in rs {
-        if except.contains(&r) {
+        if except.contains(&r) || r == Register::R12 || r == Register::R13 {
             continue;
         }
         this.pop(r.into());
@@ -150,6 +150,7 @@ fn safeCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, f: AsmLocation,
 }
 
 fn saveCoreRegisters<T: AsmGen>(this: &mut T) {
+    return;
     this.comment("saveCoreRegisters");
     this.push(Rbx.into());
     this.push(R15.into());
@@ -157,6 +158,7 @@ fn saveCoreRegisters<T: AsmGen>(this: &mut T) {
 }
 
 fn restoreCoreRegisters<T: AsmGen>(this: &mut T) {
+    return;
     this.comment("restoreCoreRegisters");
     this.pop(R14.into());
     this.pop(R15.into());

@@ -153,7 +153,6 @@ pub fn printStack() {
     println!("rsp is {}", ptr)
 }
 
-#[inline(never)]
 pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value, vm: &mut VirtualMachine, frame: &mut StackFrame) -> Value {
     saveRegisters();
     let res = f(vm, frame);
@@ -178,7 +177,7 @@ pub fn saveRegisters() {
         "push r13",
         "push r14",
         "push r15",
-        "push 0"
+        "sub rsp, 8"
         )
     }
 }
@@ -187,7 +186,7 @@ pub fn saveRegisters() {
 pub fn restoreRegisters() {
     unsafe {
         asm!(
-        "pop r15",
+        "add rsp, 8",
         "pop r15",
         "pop r14",
         "pop r13",
@@ -279,6 +278,7 @@ pub fn printRegisters() {
 }
 
 impl LoadedFunction {
+    #[inline]
     pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) {
         // println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
 
