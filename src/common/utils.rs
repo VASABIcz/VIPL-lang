@@ -97,3 +97,27 @@ pub fn namespacePath(path: &str) -> Vec<String> {
     });
     strBuf
 }
+
+#[macro_export]
+macro_rules! viplDbg {
+    () => {
+        eprintln!("[{}:{}]", file!(), line!())
+    };
+    ($val:expr $(,)?) => {
+        if DEBUG {
+               match $val {
+            tmp => {
+                eprintln!("[{}:{}] {} = {:#?}",
+                    file!(), line!(), stringify!($val), &tmp);
+                tmp
+            }
+        }
+        }
+        else {
+            ""
+        }
+    };
+    ($($val:expr),+ $(,)?) => {
+        ($($crate::dbg!($val)),+,)
+    };
+}

@@ -4,11 +4,12 @@ use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
 use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
 use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
+use crate::viplDbg;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 /*
 rax - FFI return value
@@ -85,11 +86,11 @@ fn debugPrint<T: AsmGen>(this: &mut T, text: &str) {
 fn genCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, s: &mut Vec<Register>, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
     this.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
 
-    aquireRegister(this, regs, Rdi);
-    aquireRegister(this, regs, Rsi);
-    aquireRegister(this, regs, Rdx);
-    aquireRegister(this, regs, Rcx);
-    aquireRegister(this, regs, Rax);
+    acquireRegister(this, regs, Rdi);
+    acquireRegister(this, regs, Rsi);
+    acquireRegister(this, regs, Rdx);
+    acquireRegister(this, regs, Rcx);
+    acquireRegister(this, regs, Rax);
 
     this.beginIgnore();
 
@@ -119,7 +120,7 @@ fn genCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, s: &mut Vec<Regi
 
     if returns {
         printDigit(this, Rax.into());
-        let r = aquireAny(this, regs);
+        let r = acquireAny(this, regs);
         this.mov(r.into(), Rax.into());
         s.push(r);
     }
@@ -204,26 +205,32 @@ fn popStack<T: AsmGen>(this: &mut T) {
     this.push(Rax.into());
 }
 
-fn aquireRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
+fn acquireRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
     if regs.aquireSpecific(reg) {
         this.push(reg.into())
     }
-    println!("aquring {:?}", reg);
+    if DEBUG {
+        println!("acquiring {:?}", reg);
+    }
 }
 
-fn aquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
+fn acquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
     let aq = regs.aquireAny();
 
     if aq.1 {
         this.push(aq.0.into());
     }
 
-    println!("aquring {:?}", aq.0);
+    if DEBUG {
+        println!("acquiring {:?}", aq.0);
+    }
     aq.0
 }
 
 fn releaseRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
-    println!("releasing {:?}", reg);
+    if DEBUG {
+        println!("releasing {:?}", reg);
+    }
     if regs.release(reg) {
         this.pop(reg)
     }
@@ -249,7 +256,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
 
     let mut makeLabelsGreatAgain = HashMap::new();
     let mut jmpLookup = HashMap::new();
-    let mut prevRet = false;
+    let mut lastRet = -1isize;
 
     for (i, op) in opCodes.iter().enumerate() {
         if let OpCode::Jmp { offset, jmpType } = op {
@@ -271,7 +278,10 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
     }
 
     for (i, op) in opCodes.iter().enumerate() {
-        println!("genning {:?}", op);
+        viplDbg!("UwU!");
+        if DEBUG {
+            println!("genning {:?}", op);
+        }
         debugPrint(gen, &format!("executing {:?}\n", op));
         gen.comment(&format!("start opcode {:?}", op));
 
@@ -280,7 +290,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
         }
 
         let mut aqireReg = || {
-            let r = aquireAny(gen, &mut regs);
+            let r = acquireAny(gen, &mut regs);
             emulatedStack.push(r);
             r
         };
@@ -344,16 +354,18 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
                 }
             }
             OpCode::Return => {
-                println!("UwU");
-                if prevRet {
-                    return;
+                if i-1 == lastRet as usize {
+                    lastRet = i as isize;
+                    continue
                 }
-                prevRet = true;
-                // FIXME
+                lastRet = i as isize;
                 if returns {
-                    let r = emulatedStack.pop().unwrap();
-                    gen.mov(Rax.into(), r.into());
-                    // releaseRegister(gen, &mut regs, r)
+                    match emulatedStack.pop() {
+                        None => {}
+                        Some(r) => {
+                            gen.mov(Rax.into(), r.into());
+                        }
+                    }
                 }
                 printDigit(gen, Rsp.into());
                 gen.ret()
@@ -397,7 +409,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
                     let r2 = emulatedStack.pop().unwrap();
                     let r1 = emulatedStack.pop().unwrap();
 
-                    aquireRegister(gen, &mut regs, Rax);
+                    acquireRegister(gen, &mut regs, Rax);
 
                     gen.xor(Rax.into(), Rax.into());
                     gen.compare(r1.into(), r2.into());
@@ -415,7 +427,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
                     let r2 = emulatedStack.pop().unwrap();
                     let r1 = emulatedStack.pop().unwrap();
 
-                    aquireRegister(gen, &mut regs, Rax);
+                    acquireRegister(gen, &mut regs, Rax);
 
                     gen.xor(Rax.into(), Rax.into());
                     gen.compare(r1.into(), r2.into());
@@ -478,7 +490,7 @@ pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &Virtu
                 let r2 = emulatedStack.pop().unwrap();
                 let r1 = emulatedStack.pop().unwrap();
 
-                aquireRegister(gen, &mut regs, Rax);
+                acquireRegister(gen, &mut regs, Rax);
 
                 gen.xor(Rax.into(), Rax.into());
                 gen.compare(r1.into(), r2.into());

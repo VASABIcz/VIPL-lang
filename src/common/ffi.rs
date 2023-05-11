@@ -17,7 +17,7 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 
 #[no_mangle]
