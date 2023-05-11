@@ -460,10 +460,10 @@ impl VirtualMachine {
 
         println!("gona call");
 
-        let ptr = Box::into_raw(locals.into_boxed_slice()).as_mut_ptr();
+        let ptr = Box::into_raw(locals.into_boxed_slice());
 
         let fs = StackFrame{
-            localVariables: ptr,
+            localVariables: ptr.as_mut_ptr(),
             programCounter: 0,
             namespaceId: namespaceId,
             functionId,

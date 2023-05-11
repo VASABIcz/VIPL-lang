@@ -35,11 +35,11 @@ fn main() {
     let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     let now = Instant::now();
 
-    let ptr = Box::into_raw(xd.into_boxed_slice()).as_mut_ptr();
+    let ptr = Box::into_raw(xd.into_boxed_slice());
 
     unsafe {
         f.as_ref().unwrap().call(&mut *c, StackFrame {
-            localVariables: ptr,
+            localVariables: ptr.as_mut_ptr(),
             programCounter: 0,
             namespaceId: nn.id,
             functionId: nn.functions.actual.len()-1,
