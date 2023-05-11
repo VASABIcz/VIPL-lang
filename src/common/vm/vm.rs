@@ -404,19 +404,19 @@ impl VirtualMachine {
     #[inline]
     pub fn getLocal(&self, index: usize) -> &Value {
         let f = self.getFrame();
-        unsafe { f.localVariables.get_unchecked(index) }
+        f.getRef(index)
     }
 
     #[inline]
     pub fn getMutLocal(&self, usize: usize) -> &mut Value {
         let i = self.frames.len() - 1;
-        unsafe { (&mut *(&self.frames as *const Vec<StackFrame> as *mut Vec<StackFrame>)).get_unchecked_mut(i).localVariables.get_unchecked_mut(usize) }
+        unsafe { (&mut *(&self.frames as *const Vec<StackFrame> as *mut Vec<StackFrame>)).get_unchecked_mut(i).getRefMut(usize) }
     }
 
     #[inline]
     pub fn setLocal(&mut self, index: usize, value: Value) {
         let i = self.frames.len() - 1;
-        unsafe { self.frames.get_unchecked_mut(i).localVariables[index] = value }
+        unsafe { *self.frames.get_unchecked_mut(i).getRefMut(index) = value }
     }
 
     #[inline]
@@ -460,8 +460,10 @@ impl VirtualMachine {
 
         println!("gona call");
 
+        let ptr = Box::into_raw(locals.into_boxed_slice()).as_mut_ptr();
+
         let fs = StackFrame{
-            localVariables: locals.into_boxed_slice(),
+            localVariables: ptr,
             programCounter: 0,
             namespaceId: namespaceId,
             functionId,
@@ -470,6 +472,7 @@ impl VirtualMachine {
         let x = f.as_ref().unwrap();
 
         unsafe { x.call(&mut *(self as *const VirtualMachine as *mut VirtualMachine), fs, fMeta.returns()) }
+        unsafe { Box::from_raw(ptr) };
     }
 
     #[inline]

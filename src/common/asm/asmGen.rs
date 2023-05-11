@@ -127,7 +127,7 @@ fn safeCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, f: AsmLocation,
     let offset = this.getStackOffset();
 
     // FIXME
-    let needsAlignment = (offset + 1) % 2 == 0;
+    let needsAlignment = (offset) % 2 == 0;
 
     if needsAlignment {
         this.offsetStack(-1);

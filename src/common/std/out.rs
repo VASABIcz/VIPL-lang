@@ -16,7 +16,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     namespace.makeNative(
         "print",
         &[Int],
-        |_a, b| println!("{}", b.localVariables[0].getNumRef()),
+        |_a, b| println!("{}", b.get(0).getNumRef()),
         DataType::Void,
         false
     );
@@ -24,7 +24,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     namespace.makeNative(
         "print",
         &[Bool],
-        |_a, b| println!("{}", b.localVariables[0].getBool()),
+        |_a, b| println!("{}", b.get(0).getBool()),
         DataType::Void,
         false
     );
@@ -32,7 +32,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     namespace.makeNative(
         "print",
         &[Float],
-        |_a, b| println!("{}", b.localVariables[0].getFlo()),
+        |_a, b| println!("{}", b.get(0).getFlo()),
         DataType::Void,
         false
     );
@@ -40,7 +40,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     namespace.makeNative(
         "print",
         &[Char],
-        |_a, b| println!("{}", b.localVariables[0].getChar()),
+        |_a, b| println!("{}", b.get(0).getChar()),
         DataType::Void,
         false
     );
@@ -49,7 +49,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         "print",
         &[DataType::str()],
         |_a, b| {
-            let c = b.localVariables.get(0).unwrap();
+            let c = b.get(0);
             let str = &c.asRef::<Str>().data;
             println!("{}", str.string);
         },
@@ -61,7 +61,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         "print",
         &[DataType::arr(Generic::Any)],
         |_a, b| {
-            let c = b.localVariables.get(0).unwrap();
+            let c = b.get(0);
             let ar = &c.asRef::<Array>();
 
             for (i, item) in ar.data.internal.iter().enumerate() {

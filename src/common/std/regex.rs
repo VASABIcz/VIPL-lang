@@ -31,7 +31,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
     let mut n = Namespace::new("re");
 
     n.makeNative("compile", &[DataType::str()], |vm, s| {
-        let str = s.localVariables.get(0).unwrap().getString();
+        let str = s.getRef(0).getString();
 
         let res = Regix::parse(str);
 
@@ -55,8 +55,8 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
     }, DataType::obj("Regex"), false);
 
     n.makeNative("doesMatch", &[DataType::obj("Regex"), DataType::str()], |vm, s| {
-        let reg = s.localVariables.get(0).unwrap().getReference::<RegixData>();
-        let str = s.localVariables.get(1).unwrap().getString();
+        let reg = s.getRef(0).getReference::<RegixData>();
+        let str = s.getRef(1).getString();
 
         let mut buf = vec![];
 
@@ -72,8 +72,8 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
     }, DataType::Bool, false);
 
     n.makeNative("match", &[DataType::obj("Regex"), DataType::str()], |vm, s| {
-        let reg = s.localVariables.get(0).unwrap().getReference::<RegixData>();
-        let str = s.localVariables.get(1).unwrap().getString();
+        let reg = s.getRef(0).getReference::<RegixData>();
+        let str = s.getRef(1).getString();
 
         let mut buf = vec![];
 

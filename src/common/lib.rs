@@ -16,6 +16,7 @@
 #![feature(unchecked_math)]
 #![feature(abi_c_cmse_nonsecure_call)]
 #![feature(get_many_mut)]
+#![feature(slice_ptr_get)]
 #![no_mangle]
 
 // FIXME this is just quick workaround

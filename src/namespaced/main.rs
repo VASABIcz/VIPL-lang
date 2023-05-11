@@ -1,3 +1,5 @@
+#![feature(slice_ptr_get)]
+
 use std::{env, fs};
 use std::mem::ManuallyDrop;
 use std::time::Instant;
@@ -32,15 +34,19 @@ fn main() {
     let (fMeta, f) = nn.functions.actual.last().unwrap();
     let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     let now = Instant::now();
+
+    let ptr = Box::into_raw(xd.into_boxed_slice()).as_mut_ptr();
+
     unsafe {
         f.as_ref().unwrap().call(&mut *c, StackFrame {
-            localVariables: xd.into_boxed_slice(),
+            localVariables: ptr,
             programCounter: 0,
             namespaceId: nn.id,
             functionId: nn.functions.actual.len()-1,
         }, false)
     }
     let elapsed = now.elapsed();
+    unsafe { Box::from_raw(ptr) };
     println!("Elapsed: {:.2?}", elapsed);
     println!("vm: {}", vm.stack.len());
 }

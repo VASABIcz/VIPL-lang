@@ -81,7 +81,7 @@ pub extern fn getLocalsValue(vm: &mut StackFrame, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] getLocalsInt");
     }
-    vm.localVariables.get(index).unwrap().getNumRef()
+    unsafe { vm.localVariables.add(index).read().getNumRef() }
 }
 
 #[no_mangle]
@@ -158,23 +158,14 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
 
     let returns = f.0.returns();
 
-    let mut args = vec![Value::null(); f.0.localsMeta.len()];
-
-    unsafe {
-        for i in 0..f.0.argsCount {
-            let v = rsp.add(i).read();
-            args[i] = v;
-        }
-    }
-
     if DEBUG {
-        println!("[ffi] before call {:?}", args);
+        println!("[ffi] before call {:?}", rsp);
     }
 
     let callable = f.1.as_ref().unwrap();
 
     let frame = StackFrame{
-        localVariables: args.into_boxed_slice(),
+        localVariables: rsp,
         programCounter: 0,
         namespaceId: namespaceID,
         functionId: functionID,
