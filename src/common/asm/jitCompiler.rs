@@ -4,7 +4,7 @@ use std::mem::transmute;
 use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::asm::asmExec::allocateBinFunction;
-use crate::asm::asmGen::generateAssembly;
+use crate::asm::asmGen::Jitter;
 use crate::asm::nasmGen::NasmGen;
 use crate::asm::optimizedGen::OptimizingGen;
 use crate::vm::namespace::Namespace;
@@ -50,17 +50,19 @@ impl JITCompiler {
         let mut gen = OptimizingGen::new();
         let mut nasmGen = NasmGen::new();
 
-        if true {
-            generateAssembly(&mut gen, ops, vm, namespace, returns);
+        let mut j = Jitter::new(gen);
 
-            println!("{:?}", gen.data);
-            let optimzed = gen.optimize();
+        if true {
+            j.generateAssembly( ops, vm, namespace, returns);
+
+            println!("{:?}", j.gen.data);
+            let optimzed = j.gen.optimize();
             println!("{:?}", optimzed.data);
 
             optimzed.compile(&mut nasmGen);
         }
         else {
-            generateAssembly(&mut nasmGen, ops, vm, namespace, returns)
+            j.generateAssembly(ops, vm, namespace, returns)
         }
 
         let genAsm = nasmGen.generate();

@@ -42,527 +42,537 @@ r15 - VIPL vm ptr
 
 static ARG_REGS: [Register; 6] = [Rdi, Rsi, Rdx, Rcx, Register::R8, Register::R8];
 
-struct Jitter<T: AsmGen> {
+pub struct Jitter<T: AsmGen> {
     pub gen: T,
     pub regs: RegisterManager,
     pub stack: Vec<Register>
 }
 
-fn debugPrint<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, text: &str) {
-    if !DEBUG {
-        return;
-    }
-    return;
-    this.beginIgnore();
-
-    let t = text.replace("\"", "");
-    this.comment(&format!("debugPrint {}", text));
-
-    acquireRegister(this, regs, Rax);
-    acquireRegister(this, regs, Rdi);
-    acquireRegister(this, regs, Rsi);
-    acquireRegister(this, regs, Rdx);
-
-    this.mov(Rax.into(), 1.into());
-    this.mov(Rdi.into(), 1.into());
-    let lejbl = this.makeString(&t);
-    this.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
-    this.mov(Rdx.into(), (t.len()).into());
-    this.sysCall();
-
-    releaseRegister(this, regs, Rdx);
-    releaseRegister(this, regs, Rsi);
-    releaseRegister(this, regs, Rdi);
-    releaseRegister(this, regs, Rax);
-
-    this.endIgnore();
-}
-
-fn saveAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, except: &[Register]) {
-    this.comment("saveAquiredRegisters");
-    let rs = regs.usedRegisters();
-
-    for r in rs {
-        if except.contains(&r) || r == Register::R12 || r == Register::R13 {
-            continue;
+impl<T: AsmGen> Jitter<T> {
+    pub fn new(gen: T) -> Self {
+        Self {
+            gen: gen,
+            regs: RegisterManager::new(),
+            stack: vec![],
         }
-        this.push(r.into());
     }
 }
 
-fn restoreAquiredRegisters<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, except: &[Register]) {
-    this.comment("restoreAquiredRegisters");
-    let mut rs = regs.usedRegisters();
-
-    rs.reverse();
-
-    for r in rs {
-        if except.contains(&r) || r == Register::R12 || r == Register::R13 {
-            continue;
+impl<T: AsmGen> Jitter<T> {
+    fn debugPrint(&mut self, text: &str) {
+        if !DEBUG {
+            return;
         }
-        this.pop(r.into());
-    }
-}
-
-fn safeCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, f: AsmLocation, args: &[AsmValue]) {
-    let argsCount = args.len();
-
-    if argsCount > 6 {
-        panic!("more than 6 args is not supported yet")
-    }
-
-    this.comment("occupie args registers");
-    for (i, arg) in args.iter().enumerate() {
-        let r = ARG_REGS[i];
-
-        acquireRegister(this, regs, r);
-
-        this.mov(r.into(), arg.clone());
-    }
-
-    saveAquiredRegisters(this, regs, &ARG_REGS[..argsCount]);
-    saveCoreRegisters(this);
-
-
-    let offset = this.getStackOffset();
-
-    // FIXME
-    let needsAlignment = (offset) % 2 == 0;
-
-    if needsAlignment {
-        this.offsetStack(-1);
-    }
-
-    this.comment("perform call");
-    this.call(f);
-
-    if needsAlignment {
-        this.offsetStack(1);
-    }
-
-    restoreCoreRegisters(this);
-    restoreAquiredRegisters(this, regs, &ARG_REGS[..argsCount]);
-
-    this.comment("restore args registers");
-    for i in 0..argsCount {
-        releaseRegister(this, regs, ARG_REGS[(argsCount-1)-i])
-    }
-}
-
-fn saveCoreRegisters<T: AsmGen>(this: &mut T) {
-    return;
-    this.comment("saveCoreRegisters");
-    this.push(Rbx.into());
-    this.push(R15.into());
-    this.push(R14.into());
-}
-
-fn restoreCoreRegisters<T: AsmGen>(this: &mut T) {
-    return;
-    this.comment("restoreCoreRegisters");
-    this.pop(R14.into());
-    this.pop(R15.into());
-    this.pop(Rbx.into());
-}
-
-fn genCall<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, s: &mut Vec<Register>, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
-    this.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
-
-    this.beginIgnore();
-
-    this.comment("push args to stack");
-    for _ in 0..argsCount {
-        let r = s.pop().unwrap();
-        this.push(r.into());
-        regs.release(r);
-    }
-
-    this.comment("save pointer to stack args");
-    let r = acquireAny(this, regs);
-    this.mov(r.into(), Rsp.into());
-
-    safeCall(this, regs, AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize),
-             &[
-                 R15.into(),
-                 functionID.into(),
-                 namespaceID.into(),
-                 r.into()
-             ]);
-
-    releaseRegister(this, regs, r);
-
-    this.offsetStack(argsCount as isize); // consume args
-    this.endIgnore();
-
-    if returns {
-        // printDigit(this, regs, Rax.into());
-        let r = acquireAny(this, regs);
-        this.mov(r.into(), Rax.into());
-        s.push(r);
-    }
-}
-
-fn debugCrash<T: AsmGen>(this: &mut T, asmValue: AsmValue) {
-    if !DEBUG {
         return;
+        self.gen.beginIgnore();
+
+        let t = text.replace("\"", "");
+        self.gen.comment(&format!("debugPrint {}", text));
+
+        self.acquireRegister(Rax);
+        self.acquireRegister(Rdi);
+        self.acquireRegister(Rsi);
+        self.acquireRegister(Rdx);
+
+        self.gen.mov(Rax.into(), 1.into());
+        self.gen.mov(Rdi.into(), 1.into());
+        let lejbl = self.gen.makeString(&t);
+        self.gen.lea(Rsi.into(), Concrete::Lejbl(lejbl).into());
+        self.gen.mov(Rdx.into(), (t.len()).into());
+        self.gen.sysCall();
+
+        self.releaseRegister(Rdx);
+        self.releaseRegister(Rsi);
+        self.releaseRegister(Rdi);
+        self.releaseRegister(Rax);
+
+        self.gen.endIgnore();
     }
 
-    this.comment(&format!("debugCrash {}", asmValue.clone().toString()));
-    this.mov(Rax.into(), 60.into());
-    this.mov(Rdi.into(), asmValue.into());
-    this.sysCall();
-}
+    fn saveAquiredRegisters(&mut self, except: &[Register]) {
+        self.gen.comment("saveAquiredRegisters");
+        let rs = self.regs.usedRegisters();
 
-fn printDigit<T: AsmGen>(this: &mut T, regs: &mut  RegisterManager, asmValue: AsmValue) {
-    if !DEBUG {
-        return;
-    }
-    this.beginIgnore();
-
-    this.comment(&format!("printDigit {}", asmValue.clone().toString()));
-
-    println!("offset {}", offset_of!(NativeWrapper::printDigit).as_u32() as isize);
-
-    safeCall(this, regs, AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize), &[
-        asmValue
-    ]);
-
-    this.endIgnore();
-}
-
-fn pushStr<T: AsmGen>(this: &mut T, s: &str) {
-    this.comment(&format!("pushStr {}", s));
-    let label = this.makeString(s);
-    this.mov(Rdi.into(), R15.into());
-    this.mov(Rsi.into(), R14.into());
-    this.lea(Rdx.into(), label.into());
-    this.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::stringNew).as_u32() as isize));
-    this.call(R10.into());
-    this.push(Rax.into());
-}
-
-fn acquireRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
-    if regs.aquireSpecific(reg) {
-        this.push(reg.into())
-    }
-    if DEBUG {
-        println!("acquiring {:?}", reg);
-    }
-}
-
-fn acquireAny<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) -> Register {
-    let aq = regs.aquireAny();
-
-    if aq.1 {
-        this.push(aq.0.into());
-    }
-
-    if DEBUG {
-        println!("acquiring {:?}", aq.0);
-    }
-    aq.0
-}
-
-fn releaseRegister<T: AsmGen>(this: &mut T, regs: &mut RegisterManager, reg: Register) {
-    if DEBUG {
-        println!("releasing {:?}", reg);
-    }
-    if regs.release(reg) {
-        this.pop(reg)
-    }
-}
-
-fn initCode<T: AsmGen>(this: &mut T, regs: &mut RegisterManager) {
-    this.comment("init code");
-    this.mov(R15.into(), Rdi.into()); // vm ptr
-    this.mov(R14.into(), Rsi.into()); // frame ptr
-    this.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
-
-    // printDigit(this, regs, Rsp.into());
-
-    this.newLine();
-}
-
-pub fn generateAssembly<T: AsmGen>(gen: &mut T, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
-    let mut jmpCounter = 0usize;
-    let mut regs = RegisterManager::new();
-    let mut emulatedStack = vec![];
-
-    let mut makeLabelsGreatAgain = HashMap::new();
-    let mut jmpLookup = HashMap::new();
-    let mut lastRet = -1isize;
-
-    initCode(gen, &mut regs);
-
-    for (i, op) in opCodes.iter().enumerate() {
-        if let OpCode::Jmp { offset, jmpType } = op {
-            let o = *offset + 1;
-            let xd = (i as isize+o) as usize;
-            let label = match makeLabelsGreatAgain.get(&xd) {
-                None => {
-                    let a = format!("JMP{}", jmpCounter);
-                    makeLabelsGreatAgain.insert(xd, a.clone());
-                    jmpCounter += 1;
-                    a
-                }
-                Some(v) => {
-                    v.clone()
-                }
-            };
-            jmpLookup.insert(i, label);
+        for r in rs {
+            if except.contains(&r) || r == Register::R12 || r == Register::R13 {
+                continue;
+            }
+            self.gen.push(r.into());
         }
     }
 
-    for (i, op) in opCodes.iter().enumerate() {
-        viplDbg!("UwU!");
+    fn restoreAquiredRegisters(&mut self, except: &[Register]) {
+        self.gen.comment("restoreAquiredRegisters");
+        let mut rs = self.regs.usedRegisters();
+
+        rs.reverse();
+
+        for r in rs {
+            if except.contains(&r) || r == Register::R12 || r == Register::R13 {
+                continue;
+            }
+            self.gen.pop(r.into());
+        }
+    }
+
+    fn safeCall(&mut self, f: AsmLocation, args: &[AsmValue]) {
+        let argsCount = args.len();
+
+        if argsCount > 6 {
+            panic!("more than 6 args is not supported yet")
+        }
+
+        self.gen.comment("occupie args registers");
+        for (i, arg) in args.iter().enumerate() {
+            let r = ARG_REGS[i];
+
+            self.acquireRegister(r);
+
+            self.gen.mov(r.into(), arg.clone());
+        }
+
+        self.saveAquiredRegisters(&ARG_REGS[..argsCount]);
+        self.saveCoreRegisters();
+
+
+        let offset = self.gen.getStackOffset();
+
+        // FIXME
+        let needsAlignment = (offset) % 2 == 0;
+
+        if needsAlignment {
+            self.gen.offsetStack(-1);
+        }
+
+        self.gen.comment("perform call");
+        self.gen.call(f);
+
+        if needsAlignment {
+            self.gen.offsetStack(1);
+        }
+
+        self.restoreCoreRegisters();
+        self.restoreAquiredRegisters(&ARG_REGS[..argsCount]);
+
+        self.gen.comment("restore args registers");
+        for i in 0..argsCount {
+            self.releaseRegister(ARG_REGS[(argsCount-1)-i])
+        }
+    }
+
+    fn saveCoreRegisters(&mut self) {
+        return;
+        self.gen.comment("saveCoreRegisters");
+        self.gen.push(Rbx.into());
+        self.gen.push(R15.into());
+        self.gen.push(R14.into());
+    }
+
+    fn restoreCoreRegisters(&mut self) {
+        return;
+        self.gen.comment("restoreCoreRegisters");
+        self.gen.pop(R14.into());
+        self.gen.pop(R15.into());
+        self.gen.pop(Rbx.into());
+    }
+
+    fn genCall(&mut self, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
+        self.gen.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
+
+        self.gen.beginIgnore();
+
+        self.gen.comment("push args to stack");
+        for _ in 0..argsCount {
+            let r = self.stack.pop().unwrap();
+            self.gen.push(r.into());
+            self.regs.release(r);
+        }
+
+        self.gen.comment("save pointer to stack args");
+        let r = self.acquireAny();
+        self.gen.mov(r.into(), Rsp.into());
+
+        self.safeCall(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize),
+                 &[
+                     R15.into(),
+                     functionID.into(),
+                     namespaceID.into(),
+                     r.into()
+                 ]);
+
+        self.releaseRegister(r);
+
+        self.gen.offsetStack(argsCount as isize); // consume args
+        self.gen.endIgnore();
+
+        if returns {
+            // printDigit(Rax.into());
+            let r = self.acquireAny();
+            self.gen.mov(r.into(), Rax.into());
+            self.stack.push(r);
+        }
+    }
+
+    fn debugCrash(&mut self, asmValue: AsmValue) {
+        if !DEBUG {
+            return;
+        }
+
+        self.gen.comment(&format!("debugCrash {}", asmValue.clone().toString()));
+        self.gen.mov(Rax.into(), 60.into());
+        self.gen.mov(Rdi.into(), asmValue.into());
+        self.gen.sysCall();
+    }
+
+    fn printDigit(&mut self, asmValue: AsmValue) {
+        if !DEBUG {
+            return;
+        }
+        self.gen.beginIgnore();
+
+        self.gen.comment(&format!("printDigit {}", asmValue.clone().toString()));
+
+        println!("offset {}", offset_of!(NativeWrapper::printDigit).as_u32() as isize);
+
+        self.safeCall(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize), &[
+            asmValue
+        ]);
+
+        self.gen.endIgnore();
+    }
+
+    fn pushStr(&mut self, s: &str) {
+        self.gen.comment(&format!("pushStr {}", s));
+        let label = self.gen.makeString(s);
+        self.gen.mov(Rdi.into(), R15.into());
+        self.gen.mov(Rsi.into(), R14.into());
+        self.gen.lea(Rdx.into(), label.into());
+        self.gen.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::stringNew).as_u32() as isize));
+        self.gen.call(R10.into());
+        self.gen.push(Rax.into());
+    }
+
+    fn acquireRegister(&mut self, reg: Register) {
+        if self.regs.aquireSpecific(reg) {
+            self.gen.push(reg.into())
+        }
         if DEBUG {
-            println!("genning {:?}", op);
+            println!("acquiring {:?}", reg);
         }
-        debugPrint(gen, &mut regs, &format!("executing {:?}\n", op));
-        gen.comment(&format!("start opcode {:?}", op));
+    }
 
-        if let Some(v) = makeLabelsGreatAgain.get(&i) {
-            gen.makeLabel(v)
+    fn acquireAny(&mut self) -> Register {
+        let aq = self.regs.aquireAny();
+
+        if aq.1 {
+            self.gen.push(aq.0.into());
         }
 
-        let mut aqireReg = || {
-            let r = acquireAny(gen, &mut regs);
-            emulatedStack.push(r);
-            r
-        };
+        if DEBUG {
+            println!("acquiring {:?}", aq.0);
+        }
+        aq.0
+    }
 
-        match op {
-            OpCode::PushInt(v) => {
-                let r = aqireReg();
-                gen.mov(r.into(), (*v).into());
-            },
-            OpCode::PushIntOne => {
-                let r = aqireReg();
-                gen.mov(r.into(), 1.into());
-            },
-            OpCode::PushIntZero => {
-                let r = aqireReg();
-                gen.mov(r.into(), 0.into());
-            },
-            OpCode::PushFloat(_) => todo!(),
-            OpCode::PushBool(b) => {
-                let r = aqireReg();
-                gen.mov(r.into(), ((*b) as usize).into());
-            },
-            OpCode::PushChar(c) => {
-                let r = aqireReg();
-                gen.mov(r.into(), ((*c) as usize).into());
-            },
-            OpCode::Pop => {
-                let r = emulatedStack.pop().unwrap();
-                releaseRegister(gen, &mut regs, r)
-            },
-            OpCode::Dup => {
-                todo!();
-                let r = emulatedStack.pop().unwrap();
+    fn releaseRegister(&mut self, reg: Register) {
+        if DEBUG {
+            println!("releasing {:?}", reg);
+        }
+        if self.regs.release(reg) {
+            self.gen.pop(reg)
+        }
+    }
+
+    fn initCode(&mut self) {
+        self.gen.comment("init code");
+        self.gen.mov(R15.into(), Rdi.into()); // vm ptr
+        self.gen.mov(R14.into(), Rsi.into()); // frame ptr
+        self.gen.mov(Rbx.into(), AsmValue::Indexing(R14.into(), 0)); // locals ptr
+
+        // printDigit(Rsp.into());
+
+        self.gen.newLine();
+    }
+
+    pub fn generateAssembly(&mut self, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
+        let mut jmpCounter = 0usize;
+
+        let mut makeLabelsGreatAgain = HashMap::new();
+        let mut jmpLookup = HashMap::new();
+        let mut lastRet = -1isize;
+
+        self.initCode();
+
+        for (i, op) in opCodes.iter().enumerate() {
+            if let OpCode::Jmp { offset, jmpType } = op {
+                let o = *offset + 1;
+                let xd = (i as isize+o) as usize;
+                let label = match makeLabelsGreatAgain.get(&xd) {
+                    None => {
+                        let a = format!("JMP{}", jmpCounter);
+                        makeLabelsGreatAgain.insert(xd, a.clone());
+                        jmpCounter += 1;
+                        a
+                    }
+                    Some(v) => {
+                        v.clone()
+                    }
+                };
+                jmpLookup.insert(i, label);
             }
-            OpCode::GetLocal { index } => {
-                let r = aqireReg();
-                gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
-            },
-            OpCode::SetLocal { index } => {
-                let r = emulatedStack.pop().unwrap();
-                gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
-                releaseRegister(gen, &mut regs, r)
-            },
-            OpCode::Jmp { offset, jmpType } => {
-                let l = jmpLookup.get(&i).unwrap().clone();
-                match jmpType {
-                    JmpType::One | JmpType::True => {
-                        let r = emulatedStack.pop().unwrap();
-                        releaseRegister(gen, &mut regs, r);
-                        gen.compare(r.into(), 1.into());
-                        gen.jmpIfOne(l.into())
-                    },
-                    JmpType::Zero | JmpType::False => {
-                        let r = emulatedStack.pop().unwrap();
-                        releaseRegister(gen, &mut regs, r);
-                        gen.compare(r.into(), 0.into());
-                        gen.jmpIfZero(l.into())
-                    },
-                    JmpType::Jmp => gen.jmp(l.into()),
-                    _ => todo!()
-                }
+        }
+
+        for (i, op) in opCodes.iter().enumerate() {
+            viplDbg!("UwU!");
+            if DEBUG {
+                println!("self.genning {:?}", op);
             }
-            OpCode::Return => {
-                if i-1 == lastRet as usize {
-                    lastRet = i as isize;
-                    continue
+            self.debugPrint(&format!("executing {:?}\n", op));
+            self.gen.comment(&format!("start opcode {:?}", op));
+
+            if let Some(v) = makeLabelsGreatAgain.get(&i) {
+                self.gen.makeLabel(v)
+            }
+
+            let mut aqireReg = || {
+                let r = self.acquireAny();
+                self.stack.push(r);
+                r
+            };
+
+            match op {
+                OpCode::PushInt(v) => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), (*v).into());
+                },
+                OpCode::PushIntOne => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), 1.into());
+                },
+                OpCode::PushIntZero => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), 0.into());
+                },
+                OpCode::PushFloat(_) => todo!(),
+                OpCode::PushBool(b) => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), ((*b) as usize).into());
+                },
+                OpCode::PushChar(c) => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), ((*c) as usize).into());
+                },
+                OpCode::Pop => {
+                    let r = self.stack.pop().unwrap();
+                    self.releaseRegister(r)
+                },
+                OpCode::Dup => {
+                    todo!();
+                    let r = self.stack.pop().unwrap();
                 }
-                lastRet = i as isize;
-                if returns {
-                    match emulatedStack.pop() {
-                        None => {}
-                        Some(r) => {
-                            gen.mov(Rax.into(), r.into());
-                        }
+                OpCode::GetLocal { index } => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
+                },
+                OpCode::SetLocal { index } => {
+                    let r = self.stack.pop().unwrap();
+                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+                    self.releaseRegister(r)
+                },
+                OpCode::Jmp { offset, jmpType } => {
+                    let l = jmpLookup.get(&i).unwrap().clone();
+                    match jmpType {
+                        JmpType::One | JmpType::True => {
+                            let r = self.stack.pop().unwrap();
+                            self.releaseRegister(r);
+                            self.gen.compare(r.into(), 1.into());
+                            self.gen.jmpIfOne(l.into())
+                        },
+                        JmpType::Zero | JmpType::False => {
+                            let r = self.stack.pop().unwrap();
+                            self.releaseRegister(r);
+                            self.gen.compare(r.into(), 0.into());
+                            self.gen.jmpIfZero(l.into())
+                        },
+                        JmpType::Jmp => self.gen.jmp(l.into()),
+                        _ => todo!()
                     }
                 }
-                printDigit(gen, &mut regs, Rax.into());
-                gen.ret()
-            },
-            OpCode::Add(t) => match t {
-                DataType::Int => {
-                    let r2 = emulatedStack.pop().unwrap();
-                    let r1 = emulatedStack.pop().unwrap();
-                    gen.add(r1.into(), r2.into());
-                    releaseRegister(gen, &mut regs, r2);
-                    emulatedStack.push(r1)
+                OpCode::Return => {
+                    if i-1 == lastRet as usize {
+                        lastRet = i as isize;
+                        continue
+                    }
+                    lastRet = i as isize;
+                    if returns {
+                        match self.stack.pop() {
+                            None => {}
+                            Some(r) => {
+                                self.gen.mov(Rax.into(), r.into());
+                            }
+                        }
+                    }
+                    self.printDigit(Rax.into());
+                    self.gen.ret()
+                },
+                OpCode::Add(t) => match t {
+                    DataType::Int => {
+                        let r2 = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
+                        self.gen.add(r1.into(), r2.into());
+                        self.releaseRegister(r2);
+                        self.stack.push(r1)
+                    }
+                    _ => todo!()
                 }
-                _ => todo!()
-            }
-            OpCode::Sub(t) => match t {
-                DataType::Int => {
-                    let r2 = emulatedStack.pop().unwrap();
-                    let r1 = emulatedStack.pop().unwrap();
-                    gen.sub(r1.into(), r2.into());
-                    releaseRegister(gen, &mut regs, r2);
-                    emulatedStack.push(r1)
+                OpCode::Sub(t) => match t {
+                    DataType::Int => {
+                        let r2 = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
+                        self.gen.sub(r1.into(), r2.into());
+                        self.releaseRegister(r2);
+                        self.stack.push(r1)
+                    }
+                    _ => todo!()
                 }
-                _ => todo!()
-            }
-            OpCode::Div(_) => todo!(),
-            OpCode::Mul(t) => match t {
-                DataType::Int => {
-                    let r2 = emulatedStack.pop().unwrap();
-                    let r1 = emulatedStack.pop().unwrap();
-                    gen.imul(r1.into(), r2.into());
-                    releaseRegister(gen, &mut regs, r2);
-                    emulatedStack.push(r1)
+                OpCode::Div(_) => todo!(),
+                OpCode::Mul(t) => match t {
+                    DataType::Int => {
+                        let r2 = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
+                        self.gen.imul(r1.into(), r2.into());
+                        self.releaseRegister(r2);
+                        self.stack.push(r1)
+                    }
+                    _ => todo!()
                 }
-                _ => todo!()
-            }
-            OpCode::Equals(t) => {
-                todo!()
-            }
-            OpCode::Greater(t) => match t {
-                DataType::Int | DataType::Bool | DataType::Char => {
-                    let r2 = emulatedStack.pop().unwrap();
-                    let r1 = emulatedStack.pop().unwrap();
-
-                    acquireRegister(gen, &mut regs, Rax);
-
-                    gen.xor(Rax.into(), Rax.into());
-                    gen.compare(r1.into(), r2.into());
-                    gen.setl(r1.into());
-
-                    releaseRegister(gen,  &mut regs, Rax);
-
-                    releaseRegister(gen, &mut regs, r2);
-                    emulatedStack.push(r1);
+                OpCode::Equals(t) => {
+                    todo!()
                 }
-                _ => todo!()
-            }
-            OpCode::Less(t) => match t {
-                DataType::Int | DataType::Bool | DataType::Char => {
-                    let r2 = emulatedStack.pop().unwrap();
-                    let r1 = emulatedStack.pop().unwrap();
+                OpCode::Greater(t) => match t {
+                    DataType::Int | DataType::Bool | DataType::Char => {
+                        let r2 = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
 
-                    acquireRegister(gen, &mut regs, Rax);
+                        self.acquireRegister(Rax);
 
-                    gen.xor(Rax.into(), Rax.into());
-                    gen.compare(r1.into(), r2.into());
-                    gen.setl(r1.into());
+                        self.gen.xor(Rax.into(), Rax.into());
+                        self.gen.compare(r1.into(), r2.into());
+                        self.gen.setl(r1.into());
 
-                    releaseRegister(gen,  &mut regs, Rax);
+                        self.releaseRegister(Rax);
 
-                    releaseRegister(gen, &mut regs, r2);
-                    emulatedStack.push(r1);
+                        self.releaseRegister(r2);
+                        self.stack.push(r1);
+                    }
+                    _ => todo!()
                 }
-                _ => todo!()
-            }
-            OpCode::Or => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-                gen.or(r1.into(), r2.into());
-                releaseRegister(gen, &mut regs, r2);
-                emulatedStack.push(r1)
-            }
-            OpCode::And => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-                gen.and(r1.into(), r2.into());
-                releaseRegister(gen, &mut regs, r2);
-                emulatedStack.push(r1)
-            }
-            OpCode::Not => {
-                let r1 = emulatedStack.pop().unwrap();
-                gen.not(r1.into());
-                emulatedStack.push(r1)
-            }
-            OpCode::StrNew(v) => {
-                todo!();
-                // pushStr(gen, v.as_str())
-            },
-            OpCode::SCall { id } => {
-                let f = namespace.getFunctionMeta(*id).unwrap();
-                let argsCount = f.argsCount;
-                let returns = f.returns();
+                OpCode::Less(t) => match t {
+                    DataType::Int | DataType::Bool | DataType::Char => {
+                        let r2 = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
 
-                genCall(gen, &mut regs, &mut emulatedStack, namespace.id, *id, returns, argsCount)
-            },
-            OpCode::LCall { namespace, id } => {
-                let f = &vm.getNamespace(*namespace).getFunction(*id).0;
-                let returns = f.returns();
-                let argsCount = f.argsCount;
+                        self.acquireRegister(Rax);
 
-                genCall(gen, &mut regs, &mut emulatedStack, *namespace, *id, returns, argsCount)
+                        self.gen.xor(Rax.into(), Rax.into());
+                        self.gen.compare(r1.into(), r2.into());
+                        self.gen.setl(r1.into());
+
+                        self.releaseRegister(Rax);
+
+                        self.releaseRegister(r2);
+                        self.stack.push(r1);
+                    }
+                    _ => todo!()
+                }
+                OpCode::Or => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+                    self.gen.or(r1.into(), r2.into());
+                    self.releaseRegister(r2);
+                    self.stack.push(r1)
+                }
+                OpCode::And => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+                    self.gen.and(r1.into(), r2.into());
+                    self.releaseRegister(r2);
+                    self.stack.push(r1)
+                }
+                OpCode::Not => {
+                    let r1 = self.stack.pop().unwrap();
+                    self.gen.not(r1.into());
+                    self.stack.push(r1)
+                }
+                OpCode::StrNew(v) => {
+                    todo!();
+                    // pushStr(self.gen, v.as_str())
+                },
+                OpCode::SCall { id } => {
+                    let f = namespace.getFunctionMeta(*id).unwrap();
+                    let argsCount = f.argsCount;
+                    let returns = f.returns();
+
+                    self.genCall(namespace.id, *id, returns, argsCount)
+                },
+                OpCode::LCall { namespace, id } => {
+                    let f = &vm.getNamespace(*namespace).getFunction(*id).0;
+                    let returns = f.returns();
+                    let argsCount = f.argsCount;
+
+                    self.genCall( *namespace, *id, returns, argsCount)
+                }
+                OpCode::GetLocalZero => {
+                    let r = aqireReg();
+                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
+                }
+                OpCode::SetLocalZero => {
+                    let r = self.stack.pop().unwrap();
+                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
+                    self.releaseRegister(r)
+                }
+                OpCode::LessInt => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+
+                    self.acquireRegister(Rax);
+
+                    self.gen.xor(Rax.into(), Rax.into());
+                    self.gen.compare(r1.into(), r2.into());
+                    self.gen.setg(r1.into());
+
+                    self.releaseRegister(Rax);
+
+                    self.releaseRegister(r2);
+                    self.stack.push(r1);
+                }
+                OpCode::SubInt => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+
+                    self.gen.sub(r1.into(), r2.into());
+
+                    self.releaseRegister(r2);
+
+                    self.stack.push(r1)
+                }
+                OpCode::MulInt => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+                    self.gen.imul(r1.into(), r2.into());
+                    self.releaseRegister(r2);
+                    self.stack.push(r1)
+                }
+                OpCode::AddInt => {
+                    let r2 = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+                    self.gen.add(r1.into(), r2.into());
+                    self.releaseRegister(r2);
+                    self.stack.push(r1)
+                }
+                e => todo!("{:?}", e)
             }
-            OpCode::GetLocalZero => {
-                let r = aqireReg();
-                gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
-            }
-            OpCode::SetLocalZero => {
-                let r = emulatedStack.pop().unwrap();
-                gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
-                releaseRegister(gen, &mut regs, r)
-            }
-            OpCode::LessInt => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-
-                acquireRegister(gen, &mut regs, Rax);
-
-                gen.xor(Rax.into(), Rax.into());
-                gen.compare(r1.into(), r2.into());
-                gen.setg(r1.into());
-
-                releaseRegister(gen,  &mut regs, Rax);
-
-                releaseRegister(gen, &mut regs, r2);
-                emulatedStack.push(r1);
-            }
-            OpCode::SubInt => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-
-                gen.sub(r1.into(), r2.into());
-
-                releaseRegister(gen, &mut regs, r2);
-
-                emulatedStack.push(r1)
-            }
-            OpCode::MulInt => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-                gen.imul(r1.into(), r2.into());
-                releaseRegister(gen, &mut regs, r2);
-                emulatedStack.push(r1)
-            }
-            OpCode::AddInt => {
-                let r2 = emulatedStack.pop().unwrap();
-                let r1 = emulatedStack.pop().unwrap();
-                gen.add(r1.into(), r2.into());
-                releaseRegister(gen, &mut regs, r2);
-                emulatedStack.push(r1)
-            }
-            e => todo!("{:?}", e)
+            self.gen.comment(&format!("end opcode {:?}\n", op));
         }
-        gen.comment(&format!("end opcode {:?}\n", op));
     }
 }
