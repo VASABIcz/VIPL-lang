@@ -235,6 +235,8 @@ pub struct NativeWrapper {
     pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
     pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
+    // pub arrNew: extern fn(&mut VirtualMachine) -> *mut ViplObject<Array>,
+
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,
     pub lCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,

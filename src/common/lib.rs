@@ -17,7 +17,7 @@
 #![feature(abi_c_cmse_nonsecure_call)]
 #![feature(get_many_mut)]
 #![feature(slice_ptr_get)]
-#![no_mangle]
+#![allow(non_snake_case)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

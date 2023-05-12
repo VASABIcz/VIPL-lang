@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use libc::THOUSEP;
 use offset::offset_of;
 use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
-use crate::asm::asmLib::Register::{Bl, R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
 use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
 use crate::viplDbg;
@@ -137,8 +137,8 @@ impl<T: AsmGen> Jitter<T> {
 
         let offset = self.gen.getStackOffset();
 
-        // FIXME
-        let needsAlignment = (offset) % 2 == 0;
+        // FIXME not sure if its even reliable it looks like rust doesnt align stack for ffi calls
+        let needsAlignment = (offset - 1) % 2 == 0;
 
         if needsAlignment {
             self.gen.offsetStack(-1);
@@ -176,19 +176,33 @@ impl<T: AsmGen> Jitter<T> {
         self.gen.pop(Rbx.into());
     }
 
-    fn genCall(&mut self, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize) {
+    fn genCall(&mut self, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize, localsCount: usize) {
         self.gen.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
 
         self.gen.beginIgnore();
 
         self.gen.comment("push args to stack");
+
+        let mut locals = vec![];
+
         for _ in 0..argsCount {
             let r = self.stack.pop().unwrap();
+            locals.push(r);
+        }
+
+        locals.reverse();
+
+        for r in locals {
             self.gen.push(r.into());
-            self.regs.release(r);
+            self.releaseRegister(r);
+        }
+
+        if argsCount < localsCount {
+            self.gen.offsetStack(argsCount as isize - localsCount as isize)
         }
 
         self.gen.comment("save pointer to stack args");
+        // FIXME will cause bugs when there is no free registers and needs to reuse one by saving its content onto a stack
         let r = self.acquireAny();
         self.gen.mov(r.into(), Rsp.into());
 
@@ -202,7 +216,7 @@ impl<T: AsmGen> Jitter<T> {
 
         self.releaseRegister(r);
 
-        self.gen.offsetStack(argsCount as isize); // consume args
+        self.gen.offsetStack(localsCount as isize); // consume args
         self.gen.endIgnore();
 
         if returns {
@@ -513,14 +527,14 @@ impl<T: AsmGen> Jitter<T> {
                     let argsCount = f.argsCount;
                     let returns = f.returns();
 
-                    self.genCall(namespace.id, *id, returns, argsCount)
+                    self.genCall(namespace.id, *id, returns, argsCount, f.localsMeta.len())
                 },
                 OpCode::LCall { namespace, id } => {
                     let f = &vm.getNamespace(*namespace).getFunction(*id).0;
                     let returns = f.returns();
                     let argsCount = f.argsCount;
 
-                    self.genCall( *namespace, *id, returns, argsCount)
+                    self.genCall( *namespace, *id, returns, argsCount, f.localsMeta.len())
                 }
                 OpCode::GetLocalZero => {
                     let r = aqireReg();
@@ -569,6 +583,9 @@ impl<T: AsmGen> Jitter<T> {
                     self.gen.add(r1.into(), r2.into());
                     self.releaseRegister(r2);
                     self.stack.push(r1)
+                }
+                OpCode::ArrayNew(t) => {
+                    todo!()
                 }
                 e => todo!("{:?}", e)
             }

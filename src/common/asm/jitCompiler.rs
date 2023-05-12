@@ -47,7 +47,7 @@ pub struct JITCompiler {}
 
 impl JITCompiler {
     pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
-        let mut gen = OptimizingGen::new();
+        let gen = OptimizingGen::new();
         let mut nasmGen = NasmGen::new();
 
         let mut j = Jitter::new(gen);

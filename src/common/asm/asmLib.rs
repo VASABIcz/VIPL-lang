@@ -29,8 +29,6 @@ pub enum Register {
     R13,
     R14,
     R15,
-
-    Bl
 }
 
 impl Into<AsmLocation> for Register {
@@ -65,7 +63,6 @@ impl Register {
             Register::R13 => "r13",
             Register::R14 => "r14",
             Register::R15 => "r15",
-            Register::Bl => "bl"
         }
     }
 }

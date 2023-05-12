@@ -13,7 +13,7 @@ use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::tokenizeSource;
 use crate::parser::{Operation, parseTokens};
-use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes};
+use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
@@ -163,123 +163,6 @@ pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value,
     res
 }
 
-#[inline(always)]
-pub fn saveRegisters() {
-    unsafe {
-        asm!(
-        "push rbx",
-        "push rsi",
-        "push rdi",
-        // "push rbp",
-        // "push rsp",
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        "sub rsp, 8"
-        )
-    }
-}
-
-#[inline(always)]
-pub fn restoreRegisters() {
-    unsafe {
-        asm!(
-        "add rsp, 8",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
-        // "pop rsp",
-        // "pop rbp",
-        "pop rdi",
-        "pop rsi",
-        "pop rbx",
-        )
-    }
-}
-
-#[inline(always)]
-pub fn printRegisters() {
-    let mut rax = 0usize;
-    let mut rbx = 0usize;
-    let mut rcx = 0usize;
-    let mut rdx = 0usize;
-    let mut rsi = 0usize;
-    let mut rdi = 0usize;
-    let mut rbp = 0usize;
-    let mut rsp = 0usize;
-    let mut r8 = 0usize;
-    let mut r9 = 0usize;
-    let mut r10 = 0usize;
-    let mut r11 = 0usize;
-    let mut r12 = 0usize;
-    let mut r13 = 0usize;
-    let mut r14 = 0usize;
-    let mut r15 = 0usize;
-
-    unsafe {
-        asm!(
-        "mov {rax}, rax",
-        "mov {rbx}, rbx",
-        "mov {rcx}, rcx",
-        "mov {rdx}, rdx",
-        "mov {rsi}, rsi",
-        "mov {rdi}, rdi",
-        "mov {rbp}, rbp",
-        "mov {rsp}, rsp",
-        "mov {r8}, r8",
-        "mov {r9}, r9",
-        "mov {r10}, r10",
-        "mov {r11}, r11",
-        "mov {r12}, r12",
-        "mov {r13}, r13",
-        "mov {r14}, r14",
-        "mov {r15}, r15",
-        rax = out(reg) rax,
-        rbx = out(reg) rbx,
-        rcx = out(reg) rcx,
-        rdx = out(reg) rdx,
-        rsi = out(reg) rsi,
-        rdi = out(reg) rdi,
-        rbp = out(reg) rbp,
-        rsp = out(reg) rsp,
-        r8 = out(reg) r8,
-        r9 = out(reg) r9,
-        r10 = out(reg) r10,
-        r11 = out(reg) r11,
-        r12 = out(reg) r12,
-        r13 = out(reg) r13,
-        r14 = out(reg) r14,
-        r15 = out(reg) r15,
-        )
-    }
-    println!("rax: {}", rax);
-    println!("rbx: {}", rbx);
-    println!("rcx: {}", rcx);
-    println!("rdx: {}", rdx);
-    println!("rsi: {}", rsi);
-    println!("rdi: {}", rdi);
-    println!("rbp: {}", rbp);
-    println!("rsp: {}", rsp);
-    println!("r8: {}", r8);
-    println!("r9: {}", r9);
-    println!("r10: {}", r10);
-    println!("r11: {}", r11);
-    println!("r12: {}", r12);
-    println!("r13: {}", r13);
-    println!("r14: {}", r14);
-    println!("r15: {}", r15);
-}
-
 impl LoadedFunction {
     #[inline]
     pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) {
@@ -324,6 +207,8 @@ pub struct Namespace {
     pub structs: FastAcess<String, StructMeta>,
 
     pub strings: FastAcess<String, *mut Str>,
+
+    pub types: FastAcess<DataType, DataType>
 }
 
 impl Allocation for Namespace {
@@ -423,11 +308,8 @@ impl Namespace {
             globals: Default::default(),
             structs: Default::default(),
             strings: Default::default(),
+            types: Default::default(),
         }
-    }
-
-    pub fn lookupNamespace(vm: &mut VirtualMachine, name: Vec<String>) {
-        todo!()
     }
 
     pub fn constructNamespace(src: Vec<Operation>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {

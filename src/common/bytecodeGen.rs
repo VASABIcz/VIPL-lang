@@ -537,7 +537,14 @@ pub fn genFunctionDef(
                 handle: handleStatementExpression,
             })?;
         }
-        ops.push(Return);
+        match ops.last() {
+            None => ops.push(Return),
+            Some(op) => {
+                if op != &Return {
+                    ops.push(Return);
+                }
+            }
+        }
 
         Ok(locals)
     }
