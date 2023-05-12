@@ -369,6 +369,8 @@ pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operat
         }
     };
 
+    println!("tokens {:?}", tokens);
+
     if tokens.is_empty() {
         return Ok(vec![])
     }

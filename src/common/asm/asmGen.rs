@@ -337,7 +337,6 @@ impl<T: AsmGen> Jitter<T> {
         }
 
         for (i, op) in opCodes.iter().enumerate() {
-            viplDbg!("UwU!");
             if DEBUG {
                 println!("self.genning {:?}", op);
             }

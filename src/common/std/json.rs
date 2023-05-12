@@ -194,7 +194,7 @@ pub fn jsonTokenizingUnits() -> Vec<Box<dyn LexingUnit<JsonToken>>> {
 
 impl JSON {
     pub fn parse(s: &str) -> Errorable<JSON> {
-        let res = tokenize(&mut jsonTokenizingUnits(), SourceProvider{ data: s, index: 0 })?;
+        let res = tokenize(&mut jsonTokenizingUnits(), SourceProvider{ data: s, index: 0, row: 0, col: 0 })?;
         let units = jsonParsingUnits();
 
         let mut provider = TokenProvider::new(res);

@@ -7,6 +7,7 @@ use std::ops::Deref;
 use libc::open;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, BinaryOp, Statement, StructDef, ArithmeticOp};
+use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::{InvalidTypeException, NoValue, TypeNotFound, SymbolNotFound};
 use crate::lexer::*;
 use crate::optimizer::{evalE};
@@ -20,6 +21,76 @@ use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
+
+#[derive(Debug, Clone)]
+enum SymbolicOpcode {
+    Op(OpCode),
+    Continue,
+    Break,
+    Jmp(usize, JmpType),
+    // zero sized
+    LoopBegin,
+    LoopEnd,
+    LoopLabel(usize),
+}
+
+fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
+    let mut buf = vec![];
+    let mut loopBegins = vec![];
+    let mut labelLookup = HashMap::new();
+
+
+    let mut counter = 0usize;
+    for sym in &syms {
+        match sym {
+            SymbolicOpcode::Op(_) | SymbolicOpcode::Continue | SymbolicOpcode::Break | SymbolicOpcode::Jmp(_, _) => counter += 1,
+            SymbolicOpcode::LoopLabel(id) => { labelLookup.insert(id, counter); },
+            _ => {}
+        }
+    }
+
+    for (i, sym) in syms.iter().enumerate() {
+        match sym {
+            SymbolicOpcode::Op(op) => buf.push(op.clone()),
+            SymbolicOpcode::Continue => {
+                let i = *loopBegins.last().unwrap();
+                buf.push(OpCode::Jmp { offset: i as isize-buf.len() as isize, jmpType: JmpType::Jmp })
+            }
+            SymbolicOpcode::Break => {
+                let mut depth = 0usize;
+                let mut retId = None;
+
+                for (i, op) in syms[i..].iter().enumerate() {
+                    match op {
+                        SymbolicOpcode::LoopBegin => {
+                            depth += 1
+                        }
+                        SymbolicOpcode::LoopEnd => {
+                            if depth == 0 {
+                                retId = Some(i);
+                            }
+                            else {
+                                depth -= 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                buf.push(OpCode::Jmp { offset: retId.unwrap() as isize, jmpType: JmpType::Jmp })
+            }
+            SymbolicOpcode::Jmp(id, t) => {
+                let i = *labelLookup.get(&id).unwrap();
+                buf.push(OpCode::Jmp { offset: i as isize-buf.len() as isize, jmpType: *t })
+            }
+            SymbolicOpcode::LoopBegin => loopBegins.push(buf.len()),
+            SymbolicOpcode::LoopEnd => { loopBegins.pop().unwrap(); }
+            SymbolicOpcode::LoopLabel(_) => {}
+        }
+    }
+
+    buf
+}
 
 
 #[derive(Debug)]

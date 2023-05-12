@@ -42,6 +42,8 @@ pub fn tokenizeSource(src: &str) -> Result<Vec<Token<TokenType>>, Box<dyn Error>
     let mut source: SourceProvider = SourceProvider {
         data: src,
         index: 0,
+        row: 0,
+        col: 0,
     };
 
     return tokenize(lexingUnits.as_mut_slice(), source)
@@ -51,6 +53,8 @@ pub fn tokenizeSource(src: &str) -> Result<Vec<Token<TokenType>>, Box<dyn Error>
 pub struct SourceProvider<'a> {
     pub data: &'a str,
     pub index: usize,
+    pub row: usize,
+    pub col: usize
 }
 
 impl SourceProvider<'_> {
@@ -72,10 +76,18 @@ impl SourceProvider<'_> {
     }
 
     pub fn consumeMany(&mut self, amount: usize) {
-        self.index += amount
+        for _ in 0..amount {
+            // FIXME
+            self.consumeOne();
+        }
     }
 
     pub fn consumeOne(&mut self) {
+        self.col += 1;
+        if self.isPeek("\n") {
+            self.col = 0;
+            self.row += 1;
+        }
         self.index += 1
     }
 
@@ -117,14 +129,25 @@ impl SourceProvider<'_> {
         })
     }
 
+    pub fn getLocation(&self) -> Location {
+        Location {
+            row: self.row,
+            col: self.col,
+            index: self.index,
+        }
+    }
+
     pub fn assertAmount<T: Debug + PartialEq + Clone>(&mut self, amount: usize, typ: T) -> Result<Token<T>, Box<dyn Error>> {
         let s = self.peekStr(amount).ok_or(format!("insuficient amount required {}", amount))?.to_string();
+
+        let loc = self.getLocation();
 
         self.consumeMany(amount);
 
         Ok(Token {
             typ,
             str: s,
+            location: loc,
         })
     }
 
@@ -136,12 +159,15 @@ impl SourceProvider<'_> {
 
     pub fn consumeWhileMatches<T: Debug + PartialEq + Clone>(&mut self, f: fn (char) -> bool, typ: Option<T>) -> Result<Option<Token<T>>, Box<dyn Error>> {
         let start = self.index;
+
+        let loc = self.getLocation();
+
         while self.isPeekChar(f) {
             self.consumeOne();
         }
 
         Ok(typ.map(|it| {
-            Token { typ: it, str: self.data[start..self.index].to_string() }
+            Token { typ: it, str: self.data[start..self.index].to_string(), location: loc }
         }))
     }
 }
@@ -215,10 +241,18 @@ pub enum TokenType {
     Dec
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Location {
+    pub row: usize,
+    pub col: usize,
+    pub index: usize
+}
+
 #[derive(Clone, Debug)]
 pub struct Token<T: PartialEq + Clone> {
     pub typ: T,
     pub str: String,
+    pub location: Location
 }
 
 pub trait LexingUnit<T: Debug + PartialEq + Clone>: Send + Sync + Debug {
@@ -287,9 +321,10 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for RangeL
                 None => break 'lop,
             }
         }
+        let loc = lexer.getLocation();
         lexer.consumeMany(self.end.len());
 
-        Ok(self.tokenType.map(|v| Token { typ: v, str: buf }))
+        Ok(self.tokenType.map(|v| Token { typ: v, str: buf, location: loc }))
     }
 }
 
@@ -339,6 +374,8 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
         let mut typ = TokenType::IntLiteral;
         let encounteredDot = false;
 
+        let loc = lexer.getLocation();
+
         while lexer.isPeekChar(|c| { c == '.' || c == '_' || c.is_numeric() })
         {
             let c = lexer.assertChar()?;
@@ -368,7 +405,7 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
             lexer.consumeOne()
         }
 
-        Ok(Some(Token { typ, str: buf }))
+        Ok(Some(Token { typ, str: buf, location: loc }))
     }
 }
 

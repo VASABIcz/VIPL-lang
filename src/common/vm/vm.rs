@@ -33,7 +33,7 @@ use crate::vm::vm::OpCode::*;
 const DEBUG: bool = true;
 const TRACE: bool = false;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
     One,
     Zero,
