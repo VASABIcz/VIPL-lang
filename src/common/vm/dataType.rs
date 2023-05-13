@@ -21,6 +21,26 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn assertType(&self, t: DataType) -> Result<DataType, CodeGenError> {
+        if self == &t {
+            Ok(t)
+        } else {
+            Err(CodeGenError::TypeError(TypeError {
+                expected: t,
+                actual: self.clone(),
+                exp: None,
+            }))
+        }
+    }
+
+    pub fn assertNotVoid(self) -> Result<DataType, CodeGenError> {
+        if self != Void {
+            Ok(self)
+        } else {
+            Err(CodeGenError::UnexpectedVoid)
+        }
+    }
+
     pub fn isString(&self) -> bool {
         match self {
             Object(o) => {

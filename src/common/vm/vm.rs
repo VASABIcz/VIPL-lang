@@ -9,7 +9,7 @@ use std::mem::size_of;
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{ExpressionCtx, genFunctionDef, StatementCtx};
+use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
@@ -31,7 +31,7 @@ use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
 const DEBUG: bool = true;
-const TRACE: bool = false;
+const TRACE: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -448,17 +448,11 @@ impl VirtualMachine {
         let namespace = self.namespaces.get(namespaceId).unwrap();
         let (fMeta, f) = namespace.getFunction(functionId);
 
-        println!("gona call");
-
         let mut locals = vec![Value::from(0);fMeta.argsCount];
-
-        println!("gona call");
 
         for i in (0..fMeta.argsCount).rev() {
             locals[i] = self.pop();
         }
-
-        println!("gona call");
 
         let ptr = Box::into_raw(locals.into_boxed_slice());
 
@@ -784,8 +778,9 @@ impl VirtualMachine {
                         typeHint: None,
                         currentNamespace: &mut *nn,
                         vm: &*v,
+                        labelCounter: &mut 0,
                     };
-                    g.0.typ = ctx.toDataType()?.unwrap();
+                    g.0.typ = ctx.toDataType()?;
                 }
             }
 
@@ -793,19 +788,20 @@ impl VirtualMachine {
                 unsafe {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
                         let mut ops = vec![];
-                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression)? };
+                        let mut labelCounter = 0;
+                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression, &mut labelCounter)? };
                         f.localsMeta = res.into_boxed_slice();
 
-                        let opt = optimizeOps(ops);
+                        let opt = emitOpcodes(optimizeOps(ops));
 
                         if DEBUG {
                             println!("link opcodes {} {:?}", f.name, opt);
                         }
 
-                        let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                        *a = Some(Native(nf))
+                        // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
+                        // *a = Some(Native(nf))
 
-                        // *a = Some(LoadedFunction::Virtual(opt));
+                        *a = Some(LoadedFunction::Virtual(opt));
                     }
                 }
             }
@@ -831,30 +827,37 @@ impl VirtualMachine {
     }
 }
 
-fn optimizeOps(i: Vec<OpCode>) -> Vec<OpCode> {
+fn optimizeOps(i: Vec<SymbolicOpcode>) -> Vec<SymbolicOpcode> {
     let mut res = vec![];
 
     for op in i.into_iter() {
-        if op == OpCode::Add(Int) {
-            res.push(OpCode::AddInt)
-        }
-        else if op == OpCode::Sub(Int) {
-            res.push(OpCode::SubInt)
-        }
-        else if op == OpCode::Mul(Int) {
-            res.push(OpCode::MulInt)
-        }
-        else if op == OpCode::Less(Int) {
-            res.push(OpCode::LessInt)
-        }
-        else if (op == OpCode::GetLocal{index: 0}) {
-            res.push(OpCode::GetLocalZero)
-        }
-        else if (op == OpCode::SetLocal{index: 0}) {
-            res.push(OpCode::SetLocalZero)
-        }
-        else {
-            res.push(op)
+        match op {
+            SymbolicOpcode::Op(op) => {
+                if op == OpCode::Add(Int) {
+                    res.push(OpCode::AddInt.into())
+                }
+                else if op == OpCode::Sub(Int) {
+                    res.push(OpCode::SubInt.into())
+                }
+                else if op == OpCode::Mul(Int) {
+                    res.push(OpCode::MulInt.into())
+                }
+                else if op == OpCode::Less(Int) {
+                    res.push(OpCode::LessInt.into())
+                }
+                else if (op == OpCode::GetLocal{index: 0}) {
+                    res.push(OpCode::GetLocalZero.into())
+                }
+                else if (op == OpCode::SetLocal{index: 0}) {
+                    res.push(OpCode::SetLocalZero.into())
+                }
+                else {
+                    res.push(op.into())
+                }
+            }
+            _ => {
+                res.push(op)
+            }
         }
     }
 

@@ -24,7 +24,7 @@ use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
 
 #[derive(Debug, Clone)]
-enum SymbolicOpcode {
+pub enum SymbolicOpcode {
     Op(OpCode),
     Continue,
     Break,
@@ -35,7 +35,22 @@ enum SymbolicOpcode {
     LoopLabel(usize),
 }
 
-fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
+impl Into<SymbolicOpcode> for OpCode {
+    fn into(self) -> SymbolicOpcode {
+        Op(self)
+    }
+}
+
+impl SymbolicOpcode {
+    pub fn isOp(&self, op: OpCode) -> bool {
+        match self {
+            Op(v) => v == &op,
+            _ => false
+        }
+    }
+}
+
+pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
     let mut buf = vec![];
     let mut loopBegins = vec![];
     let mut labelLookup = HashMap::new();
@@ -55,7 +70,7 @@ fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
             SymbolicOpcode::Op(op) => buf.push(op.clone()),
             SymbolicOpcode::Continue => {
                 let i = *loopBegins.last().unwrap();
-                buf.push(OpCode::Jmp { offset: i as isize-buf.len() as isize, jmpType: JmpType::Jmp })
+                buf.push(OpCode::Jmp { offset: i as isize-(buf.len()+1) as isize, jmpType: JmpType::Jmp })
             }
             SymbolicOpcode::Break => {
                 let mut depth = 0usize;
@@ -78,11 +93,11 @@ fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
                     }
                 }
 
-                buf.push(OpCode::Jmp { offset: retId.unwrap() as isize, jmpType: JmpType::Jmp })
+                buf.push(OpCode::Jmp { offset: retId.unwrap() as isize-1, jmpType: JmpType::Jmp })
             }
             SymbolicOpcode::Jmp(id, t) => {
                 let i = *labelLookup.get(&id).unwrap();
-                buf.push(OpCode::Jmp { offset: i as isize-buf.len() as isize, jmpType: *t })
+                buf.push(OpCode::Jmp { offset: i as isize-(buf.len()+1) as isize, jmpType: *t })
             }
             SymbolicOpcode::LoopBegin => loopBegins.push(buf.len()),
             SymbolicOpcode::LoopEnd => { loopBegins.pop().unwrap(); }
@@ -97,12 +112,13 @@ fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
 #[derive(Debug)]
 pub struct ExpressionCtx<'a> {
     pub exp: &'a Expression,
-    pub ops: &'a mut Vec<OpCode>,
+    pub ops: &'a mut Vec<SymbolicOpcode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
     pub vm: &'a VirtualMachine,
+    pub labelCounter: &'a mut usize
 }
 
 impl ExpressionCtx<'_> {
@@ -151,10 +167,11 @@ impl ExpressionCtx<'_> {
             typeHint: None,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            labelCounter: self.labelCounter,
         }
     }
 
-    pub fn toDataType(&mut self) -> Result<Option<DataType>, CodeGenError> {
+    pub fn toDataType(&mut self) -> Result<DataType, CodeGenError> {
         match self.exp {
             Expression::BinaryOperation {
                 left,
@@ -162,41 +179,41 @@ impl ExpressionCtx<'_> {
                 op: o,
             } => {
                 match o {
-                    BinaryOp::Gt => return Ok(Some(Bool)),
-                    BinaryOp::Less => return Ok(Some(Bool)),
-                    BinaryOp::Eq => return Ok(Some(Bool)),
-                    BinaryOp::And => return Ok(Some(Bool)),
-                    BinaryOp::Or => return Ok(Some(Bool)),
+                    BinaryOp::Gt => return Ok(Bool),
+                    BinaryOp::Less => return Ok(Bool),
+                    BinaryOp::Eq => return Ok(Bool),
+                    BinaryOp::And => return Ok(Bool),
+                    BinaryOp::Or => return Ok(Bool),
                     _ => {}
                 }
                 let _leftType = self.transfer(left).toDataType().unwrap();
 
                 Ok(_leftType)
             }
-            Expression::IntLiteral(_) => Ok(Some(DataType::Int)),
+            Expression::IntLiteral(_) => Ok(DataType::Int),
             Expression::LongLiteral(_) => {
                 // FIXME
-                Ok(Some(DataType::Int))
+                Ok(DataType::Int)
             }
-            Expression::FloatLiteral(_) => Ok(Some(DataType::Float)),
+            Expression::FloatLiteral(_) => Ok(DataType::Float),
             Expression::DoubleLiteral(_) => {
                 // FIXME
-                Ok(Some(DataType::Float))
+                Ok(DataType::Float)
             }
-            Expression::StringLiteral(_) => Ok(Some(DataType::str())),
+            Expression::StringLiteral(_) => Ok(DataType::str()),
             Expression::Variable(name) => {
                 match self.vTable.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
                     None => {
                         println!("JEBE");
                         let funcName = self.lookupFunctionByBaseName(name)?;
                         let f = self.currentNamespace.findFunction(&funcName).unwrap();
-                        return Ok(Some(f.0.toFunctionType()));
+                        return Ok(f.0.toFunctionType());
                     },
-                    Some(v) => Ok(Some(v.0.clone())),
+                    Some(v) => Ok(v.0.clone()),
                 }
             }
-            Expression::BoolLiteral(_) => Ok(Some(DataType::Bool)),
-            Expression::CharLiteral(_) => Ok(Some(Char)),
+            Expression::BoolLiteral(_) => Ok(DataType::Bool),
+            Expression::CharLiteral(_) => Ok(Char),
             Expression::ArrayLiteral(e) => {
                 if e.is_empty() {
                     let l = &self.typeHint;
@@ -209,7 +226,7 @@ impl ExpressionCtx<'_> {
                                     .generics
                                     .first()
                                     .ok_or(CodeGenError::ArrayWithoutGenericParameter)?;
-                                Ok(Some(DataType::arr(e.clone())))
+                                Ok(DataType::arr(e.clone()))
                             } else {
                                 Err(CodeGenError::TypeError(TypeError {
                                     expected: DataType::Object(ObjectMeta {
@@ -230,62 +247,69 @@ impl ExpressionCtx<'_> {
                 } else {
                     let t = self.transfer(e
                         .get(0)
-                        .ok_or(CodeGenError::UntypedEmptyArray)?).toDataType()?.ok_or(CodeGenError::UnexpectedVoid)?;
+                        .ok_or(CodeGenError::UntypedEmptyArray)?).toDataType()?;
 
-                    Ok(Some(DataType::arr(Generic::Type(t))))
+
+                    if t.isVoid() {
+                        return Err(UnexpectedVoid)
+                    }
+
+                    Ok(DataType::arr(Generic::Type(t)))
                 }
             }
             Expression::ArrayIndexing(i) => {
-                let e = self.transfer(&i.expr).toDataType()?.ok_or(CodeGenError::UnexpectedVoid)?;
+                let e = self.transfer(&i.expr).toDataType()?;
+
+                if e.isVoid() {
+                    return Err(UnexpectedVoid)
+                }
+
                 match e {
                     Object(o) => {
                         if o.name.as_str() == "String" {
-                            return Ok(Some(Char));
+                            return Ok(Char);
                         }
-                        Ok(Some(
+                        Ok(
                             o.generics
                                 .first()
                                 .ok_or(CodeGenError::UntypedEmptyArray)?
                                 .clone()
                                 .ok_or(CodeGenError::UntypedEmptyArray)?,
-                        ))
+                        )
                     }
                     _ => panic!(),
                 }
             }
             Expression::NotExpression(i, _) => {
-                let d = self.transfer(i).toDataType()?.ok_or(UnexpectedVoid)?;
+                self.transfer(i).toDataType()?.assertType(Bool)?;
 
-                match d {
-                    DataType::Bool => Ok(Some(DataType::Bool)),
-                    _ => {
-                        panic!()
-                    }
-                }
+
+                Ok(Bool)
             }
             Expression::NamespaceAccess(n) => {
                 let (namespace, namespaceId) = self.vm.findNamespaceParts(&n[..n.len()-1])?;
 
                 let global = namespace.findGlobal(n.last().unwrap())?;
 
-                Ok(Some(global.0.typ.clone()))
+                Ok(global.0.typ.clone())
             },
             Expression::Lambda(l, body) => {
-                Ok(self.typeHint.clone())
+                todo!()
+                //Ok(self.typeHint.clone())
             },
             Expression::Callable(prev, args) => {
                 unsafe {
                     if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                         if !self.vTable.contains_key(&MyStr::Static(&v)) {
-                            let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                            let genName = genFunName(&v, &args.iter().map(|it| { self.transfer(it).toDataType().unwrap() }).collect::<Vec<_>>());
                             let funcId = self.currentNamespace.findFunction(&genName)?;
-                            return Ok(Some(funcId.0.returnType.clone()))
+                            return Ok(funcId.0.returnType.clone())
                         }
                         else {
                             let var = self.vTable.get(&MyStr::Static(&v)).unwrap();
                             match &var.0 {
                                 DataType::Function { args, ret } => {
-                                    return Ok(Some(*ret.clone()))
+                                    return Ok(*ret.clone())
                                 }
                                 _ => panic!()
                             }
@@ -298,26 +322,26 @@ impl ExpressionCtx<'_> {
 
                         println!("namespaceName {}", namespace.name);
 
-                        let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                        let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap() }).collect::<Vec<_>>());
 
                         println!("lookup {}", &genName);
 
                         let funcId = namespace.findFunction(&genName)?;
-                        return Ok(Some(funcId.0.returnType.clone()))
+                        return Ok(funcId.0.returnType.clone())
                     }
                 }
                 todo!("{:?} {:?}", prev, args)
             }
             Expression::StructInit(name, _) => {
-                Ok(Some(DataType::Object(ObjectMeta{ name: name.clone().into(), generics: Box::new([]) })))
+                Ok(DataType::Object(ObjectMeta{ name: name.clone().into(), generics: Box::new([]) }))
             }
             Expression::FieldAccess(prev, fieldName) => {
-                let e = self.transfer(prev).toDataType()?.ok_or(UnexpectedVoid)?;
+                let e = self.transfer(prev).toDataType()?;
                 match e {
                     Object(o) => {
                         match o.name.as_str() {
                             "Array" | "String" => {
-                                return Ok(Some(DataType::Int))
+                                return Ok(DataType::Int)
                             }
                             _ => {}
                         }
@@ -325,12 +349,12 @@ impl ExpressionCtx<'_> {
                         let (structMeta, structID) = self.currentNamespace.findStruct(o.name.as_str())?;
                         let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
                         let t = structMeta.fields.get(*fieldID).unwrap();
-                        Ok(Some(t.typ.clone()))
+                        Ok(t.typ.clone())
                     }
                     _ => panic!(),
                 }
             }
-            Expression::Null => Ok(self.typeHint.clone())
+            Expression::Null => Ok(self.typeHint.clone().unwrap_or(Void))
         }
     }
 }
@@ -347,18 +371,47 @@ impl OpCodeManager<'_> {
 }
 
 pub struct PartialExprCtx<'a> {
-    pub ops: &'a mut Vec<OpCode>,
+    pub ops: &'a mut Vec<SymbolicOpcode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a HashMap<MyStr, (DataType, usize)>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a Namespace,
     pub vm: &'a VirtualMachine,
+    pub labelCounter: &'a mut usize
 }
 
 impl PartialExprCtx<'_> {
     #[inline(always)]
     pub fn push(&mut self, op: OpCode) {
-        self.ops.push(op)
+        self.ops.push(SymbolicOpcode::Op(op))
+    }
+
+    pub fn beginLoop(&mut self) {
+        self.ops.push(SymbolicOpcode::LoopBegin)
+    }
+
+    pub fn endLoop(&mut self) {
+        self.ops.push(SymbolicOpcode::LoopEnd)
+    }
+
+    pub fn opContinue(&mut self) {
+        self.ops.push(SymbolicOpcode::Continue)
+    }
+
+    pub fn opBreak(&mut self) {
+        self.ops.push(SymbolicOpcode::Break)
+    }
+
+    pub fn opLabel(&mut self) -> usize {
+        let id = *self.labelCounter;
+        *self.labelCounter += 1;
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
+
+        id
+    }
+
+    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
+        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 
     pub fn genPushInt(&mut self, value: isize) {
@@ -384,6 +437,7 @@ impl PartialExprCtx<'_> {
             typeHint: None,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            labelCounter: self.labelCounter,
         }
     }
 }
@@ -397,6 +451,7 @@ impl ExpressionCtx<'_> {
             typeHint: self.typeHint.clone(),
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            labelCounter: self.labelCounter,
         };
         let e = self.exp;
 
@@ -407,13 +462,14 @@ impl ExpressionCtx<'_> {
 #[derive(Debug)]
 pub struct StatementCtx<'a> {
     pub statement: &'a Statement,
-    pub ops: &'a mut Vec<OpCode>,
+    pub ops: &'a mut Vec<SymbolicOpcode>,
     pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
     pub vTable: &'a mut HashMap<MyStr, (DataType, usize)>,
     pub loopContext: Option<usize>,
     pub currentNamespace: &'a Namespace,
     pub vm: &'a VirtualMachine,
-    pub handle: fn(&mut StatementCtx, DataType) -> ()
+    pub handle: fn(&mut StatementCtx, DataType) -> (),
+    pub labelCounter: &'a mut usize
 }
 
 impl StatementCtx<'_> {
@@ -427,7 +483,36 @@ impl StatementCtx<'_> {
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
+            labelCounter: self.labelCounter,
         }
+    }
+
+    pub fn beginLoop(&mut self) {
+        self.ops.push(SymbolicOpcode::LoopBegin)
+    }
+
+    pub fn endLoop(&mut self) {
+        self.ops.push(SymbolicOpcode::LoopEnd)
+    }
+
+    pub fn opContinue(&mut self) {
+        self.ops.push(SymbolicOpcode::Continue)
+    }
+
+    pub fn opBreak(&mut self) {
+        self.ops.push(SymbolicOpcode::Break)
+    }
+
+    pub fn opLabel(&mut self) -> usize {
+        let id = *self.labelCounter;
+        *self.labelCounter += 1;
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
+
+        id
+    }
+
+    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
+        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 }
 
@@ -441,6 +526,7 @@ impl ExpressionCtx<'_> {
             typeHint: None,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            labelCounter: self.labelCounter,
         }
     }
 }
@@ -448,14 +534,14 @@ impl ExpressionCtx<'_> {
 impl ExpressionCtx<'_> {
     #[inline]
     pub fn push(&mut self, op: OpCode) {
-        self.ops.push(op)
+        self.ops.push(SymbolicOpcode::Op(op))
     }
 }
 
 impl StatementCtx<'_> {
     #[inline]
     pub fn push(&mut self, op: OpCode) {
-        self.ops.push(op)
+        self.ops.push(SymbolicOpcode::Op(op))
     }
 
     pub fn makeExpressionCtx<'a>(
@@ -471,6 +557,7 @@ impl StatementCtx<'_> {
             typeHint,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
+            labelCounter: self.labelCounter,
         }
     }
 
@@ -484,6 +571,7 @@ impl StatementCtx<'_> {
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
+            labelCounter: self.labelCounter,
         }
     }
 }
@@ -510,11 +598,6 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
                 buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
         }
-        Statement::Return(_) => {}
-        Statement::Continue => {}
-        Statement::Break => {}
-        Statement::NamespaceFunction(_, _) => {}
-        Statement::StatementExpression(_) => {}
         Statement::Assignable(prev, init, t) => {
             if *t != None {
                 return Ok(())
@@ -522,7 +605,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
             match prev {
                 Expression::Variable(c) => {
                     if !ctx.vTable.contains_key(&c.clone().into()) {
-                        let t = ctx.makeExpressionCtx(init, None).toDataType()?.unwrap_or(Void);
+                        let t = ctx.makeExpressionCtx(init, None).toDataType()?;
                         if t.isVoid() {
 
                         }
@@ -540,7 +623,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
             }
         },
         Statement::ForLoop(var, exp, body) => {
-            let t = ctx.makeExpressionCtx(exp, None).toDataType()?.unwrap();
+            let t = ctx.makeExpressionCtx(exp, None).toDataType()?;
             let arr = t.asArray()?;
             let typ = arr.generics.first().unwrap().clone().ok_or(UntypedEmptyArray)?;
 
@@ -559,6 +642,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
                 buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
         }
+        _ => {}
     }
 
     Ok(())
@@ -566,11 +650,12 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
 
 pub fn genFunctionDef(
     fun: &FunctionMeta,
-    ops: &mut Vec<OpCode>,
+    ops: &mut Vec<SymbolicOpcode>,
     functionReturns: &HashMap<MyStr, Option<DataType>>,
     vm: &VirtualMachine,
     currentNamespace: &Namespace,
-    handleStatementExpression: fn(&mut StatementCtx, DataType)
+    handleStatementExpression: fn(&mut StatementCtx, DataType),
+    labelCounter: &mut usize
 ) -> Result<Vec<VariableMetadata>, CodeGenError> {
     let mut vTable = HashMap::new();
     let mut locals = vec![];
@@ -584,13 +669,14 @@ pub fn genFunctionDef(
         for s in body {
             let mut ctx = StatementCtx{
                 statement: &Statement::Continue,
-                ops: ops,
+                ops,
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
                 currentNamespace,
                 vm,
                 handle: handleStatementExpression,
+                labelCounter,
             };
             buildLocalsTable(&mut ctx.transfer(s), &mut locals)?;
         }
@@ -598,20 +684,21 @@ pub fn genFunctionDef(
         for statement in body {
             genStatement(StatementCtx{
                 statement,
-                ops: ops,
+                ops,
                 functionReturns,
                 vTable: &mut vTable,
                 loopContext: None,
                 currentNamespace,
                 vm,
                 handle: handleStatementExpression,
+                labelCounter,
             })?;
         }
         match ops.last() {
-            None => ops.push(Return),
+            None => ops.push(SymbolicOpcode::Op(Return)),
             Some(op) => {
-                if op != &Return {
-                    ops.push(Return);
+                if !op.isOp(Return) {
+                    ops.push(SymbolicOpcode::Op(Return));
                 }
             }
         }
@@ -626,44 +713,27 @@ pub fn genFunctionDef(
 pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
     match ctx.statement {
         Statement::While(w) => {
-            let ret = ctx.makeExpressionCtx(&w.exp, None).toDataType()?;
-            match ret {
-                None => {
-                    return Err(CodeGenError::TypeError(TypeError{
-                        expected: DataType::Bool,
-                        actual: DataType::Void,
-                        exp: Some(w.exp.clone()),
-                    }));
-                }
-                Some(ve) => {
-                    if ve != Bool {
-                        return Err(CodeGenError::TypeError(TypeError{
-                            expected: DataType::Bool,
-                            actual: ve,
-                            exp: Some(w.exp.clone()),
-                        }));
-                    }
-                    let size = ctx.ops.len();
-                    genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
-                    let mut bodyBuf = vec![];
-                    for s in &w.body {
-                        let mut ctx2 = ctx.copy(s);
-                        ctx2.ops = &mut bodyBuf;
-                        ctx2.loopContext = Some(size);
-                        genStatement(ctx2)?;
-                    }
-                    let len = bodyBuf.len();
-                    ctx.push(OpCode::Jmp {
-                        offset: len as isize + 1,
-                        jmpType: JmpType::False,
-                    });
-                    ctx.ops.extend(bodyBuf);
-                    ctx.push(OpCode::Jmp {
-                        offset: -(ctx.ops.len() as isize - size as isize + 1),
-                        jmpType: JmpType::Jmp,
-                    })
-                }
+            ctx.makeExpressionCtx(&w.exp, None).toDataType()?.assertType(Bool)?;
+
+            let size = ctx.ops.len();
+            genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
+            let mut bodyBuf = vec![];
+            for s in &w.body {
+                let mut ctx2 = ctx.copy(s);
+                ctx2.ops = &mut bodyBuf;
+                ctx2.loopContext = Some(size);
+                genStatement(ctx2)?;
             }
+            let len = bodyBuf.len();
+            ctx.push(OpCode::Jmp {
+                offset: len as isize + 1,
+                jmpType: JmpType::False,
+            });
+            ctx.ops.extend(bodyBuf);
+            ctx.push(OpCode::Jmp {
+                offset: -(ctx.ops.len() as isize - size as isize + 1),
+                jmpType: JmpType::Jmp,
+            })
         }
         Statement::If(flow) => {
             let mut buf = vec![];
@@ -706,36 +776,22 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             genExpression(ctx.makeExpressionCtx(&ret.exp, None))?;
             ctx.push(OpCode::Return)
         }
-        Statement::Continue => {
-            let index = ctx
-                .loopContext
-                .ok_or(CodeGenError::ContinueOutsideLoop)?;
-            ctx.push(Jmp {
-                offset: (index - ctx.ops.len() + 2) as isize,
-                jmpType: JmpType::Jmp,
-            })
-        }
-        Statement::Break => panic!(),
+        Statement::Continue => ctx.opContinue(),
+        Statement::Break => ctx.opBreak(),
         Statement::Loop(body) => {
-            let mut buf = vec![];
             let context = ctx.ops.len();
+            ctx.beginLoop();
             for s in body {
                 let mut cop = ctx.copy(s);
-                cop.ops = &mut buf;
                 cop.loopContext = Some(context);
                 genStatement(cop)?;
             }
-            let bufLen = buf.len() as isize;
-            ctx.ops.extend(buf);
-            ctx.push(Jmp {
-                offset: -(bufLen + 1),
-                jmpType: JmpType::Jmp,
-            });
+            ctx.opContinue();
+            ctx.endLoop();
         }
         Statement::NamespaceFunction(path, f) => {
-            println!("XDDDD {:?}", ctx.functionReturns);
             let t = f.arguments.iter().map(|it| {
-                ctx.makeExpressionCtx(it, None).toDataType().unwrap().unwrap()
+                ctx.makeExpressionCtx(it, None).toDataType().unwrap()
             }).collect::<Vec<_>>();
 
             let r = path.join("::");
@@ -754,7 +810,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         Statement::StatementExpression(v) => {
             let mut eCtx = ctx.makeExpressionCtx(v, None);
 
-            let ret = eCtx.toDataType()?.unwrap_or(Void);
+            let ret = eCtx.toDataType()?;
 
             genExpression(eCtx)?;
 
@@ -763,7 +819,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::Assignable(dest, value, t) => {
-            if ctx.makeExpressionCtx(value, None).toDataType()?.unwrap().isVoid() {
+            if ctx.makeExpressionCtx(value, None).toDataType()?.isVoid() {
                 return Err(CodeGenError::UnexpectedVoid)
             }
 
@@ -791,10 +847,10 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                     c1.genExpression()?;
                     ctx.makeExpressionCtx(value, None).genExpression()?;
                     let o = match v {
-                        ArithmeticOp::Add => OpCode::Add(t.unwrap()),
-                        ArithmeticOp::Sub => OpCode::Sub(t.unwrap()),
-                        ArithmeticOp::Mul => OpCode::Mul(t.unwrap()),
-                        ArithmeticOp::Div => OpCode::Div(t.unwrap())
+                        ArithmeticOp::Add => OpCode::Add(t),
+                        ArithmeticOp::Sub => OpCode::Sub(t),
+                        ArithmeticOp::Mul => OpCode::Mul(t),
+                        ArithmeticOp::Div => OpCode::Div(t)
                     };
                     ctx.push(o);
                 }
@@ -819,7 +875,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 },
                 Expression::FieldAccess(obj, field) => {
                     let mut cd = ctx.makeExpressionCtx(obj, None);
-                    let class = match cd.toDataType()?.unwrap() {
+                    let class = match cd.toDataType()? {
                         Object(v) => v,
                         _ => panic!()
                     };
@@ -838,7 +894,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::ForLoop(var, arr, body) => {
-            let mut bodyOps = vec![];
+            let mut bodyOps: Vec<SymbolicOpcode> = vec![];
             let varID = ctx.vTable.get(&var.clone().into()).unwrap().1;
 
             // BEGIN
@@ -847,29 +903,29 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             let beginIndex = ctx.ops.len();
 
             // BODY
-            bodyOps.push(Dup);
+            bodyOps.push(Dup.into());
 
             let mut arrCtx = ctx.makeExpressionCtx(arr, None);
             arrCtx.ops = &mut bodyOps;
             genExpression(arrCtx)?;
 
             // dec array length bcs less-eq is not implemented
-            bodyOps.push(ArrayLength);
-            bodyOps.push(PushIntOne);
-            bodyOps.push(Sub(Int));
+            bodyOps.push(ArrayLength.into());
+            bodyOps.push(PushIntOne.into());
+            bodyOps.push(Sub(Int).into());
 
-            bodyOps.push(Less(Int));
+            bodyOps.push(Less(Int).into());
 
-            let mut buf = vec![];
+            let mut buf: Vec<SymbolicOpcode> = vec![];
 
-            buf.push(Dup);
+            buf.push(Dup.into());
             let mut arrCtx = ctx.makeExpressionCtx(arr, None);
             arrCtx.ops = &mut buf;
             genExpression(arrCtx)?;
-            buf.push(Swap);
+            buf.push(Swap.into());
 
-            buf.push(ArrayLoad);
-            buf.push(SetLocal { index: varID });
+            buf.push(ArrayLoad.into());
+            buf.push(SetLocal { index: varID }.into());
 
             for s in body {
                 let mut sCtx = ctx.transfer(s);
@@ -879,14 +935,14 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
 
             // jmp to end if done
-            bodyOps.push(Jmp { offset: (buf.len()+3) as isize, jmpType: JmpType::True });
+            bodyOps.push(Jmp { offset: (buf.len()+3) as isize, jmpType: JmpType::True }.into());
 
             bodyOps.extend(buf);
 
-            bodyOps.push(PushIntOne);
-            bodyOps.push(Add(DataType::Int));
+            bodyOps.push(PushIntOne.into());
+            bodyOps.push(Add(DataType::Int).into());
             // jmp to begining
-            bodyOps.push(Jmp { offset: (bodyOps.len() as isize+1)*-1, jmpType: JmpType::Jmp });
+            bodyOps.push(Jmp { offset: (bodyOps.len() as isize+1)*-1, jmpType: JmpType::Jmp }.into());
 
             ctx.ops.extend(bodyOps);
 
@@ -907,36 +963,28 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
     match e {
         Expression::BinaryOperation { left, right, op } => {
-            let dataType = r.constructCtx(left).toDataType()?;
-            match dataType {
-                None => {
-                    return Err(CodeGenError::UnexpectedVoid);
-                }
-                Some(dat) => {
-                    genExpression(r.constructCtx(left))?;
-                    genExpression(r.constructCtx(right))?;
-                    let t = match op {
-                        BinaryOp::Add => OpCode::Add(dat),
-                        BinaryOp::Sub => OpCode::Sub(dat),
-                        BinaryOp::Mul => OpCode::Mul(dat),
-                        BinaryOp::Div => OpCode::Div(dat),
-                        BinaryOp::Gt => OpCode::Greater(dat),
-                        BinaryOp::Less => OpCode::Less(dat),
-                        BinaryOp::Eq => OpCode::Equals(dat),
-                        BinaryOp::And => OpCode::And,
-                        BinaryOp::Or => OpCode::Or,
-                    };
-                    r.push(t);
-                }
-            }
+            let dat = r.constructCtx(left).toDataType()?.assertNotVoid()?;
+            genExpression(r.constructCtx(left))?;
+            genExpression(r.constructCtx(right))?;
+            let t = match op {
+                BinaryOp::Add => OpCode::Add(dat),
+                BinaryOp::Sub => OpCode::Sub(dat),
+                BinaryOp::Mul => OpCode::Mul(dat),
+                BinaryOp::Div => OpCode::Div(dat),
+                BinaryOp::Gt => OpCode::Greater(dat),
+                BinaryOp::Less => OpCode::Less(dat),
+                BinaryOp::Eq => OpCode::Equals(dat),
+                BinaryOp::And => OpCode::And,
+                BinaryOp::Or => OpCode::Or,
+            };
+            r.push(t);
         }
         Expression::IntLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
         Expression::LongLiteral(i) => r.genPushInt(i.parse::<isize>().unwrap()),
         Expression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
         Expression::DoubleLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
         Expression::StringLiteral(i) => {
-            r.ops
-                .push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
+            r.push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
         }
         Expression::BoolLiteral(i) => r.push(OpCode::PushBool(*i)),
         Expression::Variable(v) => unsafe {
@@ -959,7 +1007,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
         Expression::ArrayLiteral(i) => {
             let d = match r.typeHint {
                 None => Some(
-                    r.constructCtx(i.first().ok_or(UntypedEmptyArray)?).toDataType()?.ok_or(UnexpectedVoid)?
+                    r.constructCtx(i.first().ok_or(UntypedEmptyArray)?).toDataType()?.assertNotVoid()?
                 ),
                 Some(ref v) => match v {
                     DataType::Object(v) => match v.generics.first() {
@@ -985,7 +1033,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
         }
         Expression::ArrayIndexing(i) => {
             // println!("{:?}", i.expr);
-            let d = r.constructCtx(&i.expr).toDataType()?.ok_or(UnexpectedVoid)?;
+            let d = r.constructCtx(&i.expr).toDataType()?.assertNotVoid()?;
             match d {
                 DataType::Object(o) => {
                     // println!("{:?}", o);
@@ -1030,20 +1078,15 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             let mut argTypes = vec![];
 
             for arg in args {
-                let t = r.constructCtx(arg).toDataType()?;
-                match t {
-                    None => { return Err(UnexpectedVoid); }
-                    Some(v) => {
-                        argTypes.push(v);
-                        genExpression(r.constructCtx(arg))?;
-                    }
-                }
+                let t = r.constructCtx(arg).toDataType()?.assertNotVoid()?;
+                argTypes.push(t);
+                genExpression(r.constructCtx(arg))?;
             }
 
             unsafe {
                 if let Expression::Variable(v) = &**(prev as *const Box<Expression>) {
                     if !r.vTable.contains_key(&MyStr::Static(&v)) {
-                        let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                        let genName = genFunName(&v, &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap() }).collect::<Vec<_>>());
                         let funcId = r.currentNamespace.findFunction(&genName)?.1;
 
                         r.push(SCall { id: funcId });
@@ -1054,7 +1097,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     }
                 }
                 else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
-                    let genName = genFunName(v.last().unwrap(), &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap().unwrap() }).collect::<Vec<_>>());
+                    let genName = genFunName(v.last().unwrap(), &args.iter().map(|it| { r.constructCtx(it).toDataType().unwrap() }).collect::<Vec<_>>());
 
                     let (namespace, namespaceId) = r.vm.findNamespaceParts(&v[0..v.len()-1]).unwrap();
 
@@ -1091,7 +1134,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             let ctx = r.constructCtx(prev);
             genExpression(ctx)?;
 
-            let e = r.constructCtx(prev).toDataType()?.ok_or(UnexpectedVoid)?;
+            let e = r.constructCtx(prev).toDataType()?.assertNotVoid()?;
             match e {
                 Object(ref o) => {
                     if fieldName == "size" || fieldName == "length" {
@@ -1110,8 +1153,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
                     r.push(GetField {
                         namespaceID: r.currentNamespace.id,
-                        structID: structID,
-                        fieldID: fieldID,
+                        structID,
+                        fieldID,
                     });
                 }
                 _ => panic!(),

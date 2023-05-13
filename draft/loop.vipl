@@ -1,0 +1,5 @@
+loop {
+    continue
+    out::print(1)
+}
+out::print(2)
