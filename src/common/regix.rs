@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use libc::isdigit;
-use crate::errors::Errorable;
+use crate::errors::{Errorable, LexerError};
 use crate::lexer::SourceProvider;
 use crate::regix::Regix::{Char, Not};
 
@@ -29,7 +29,7 @@ pub enum Regix {
 }
 
 impl Regix {
-    fn parseSimpleRaw(l: &mut SourceProvider, regixes: &mut Vec<Regix>, captures: &mut usize) -> Errorable<()> {
+    fn parseSimpleRaw(l: &mut SourceProvider, regixes: &mut Vec<Regix>, captures: &mut usize) -> Result<(), LexerError> {
         let mut buf = vec![];
 
         while l.isPeekChar(|c| {

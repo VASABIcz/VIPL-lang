@@ -1,4 +1,6 @@
 use std::error::Error;
+use crate::ast::Expression;
+use crate::errors::{CodeGenError, TypeError};
 use crate::vm::dataType::DataType::*;
 use crate::vm::myStr::MyStr;
 use crate::vm::value::Value;
@@ -37,17 +39,32 @@ impl DataType {
         }
     }
 
-    pub fn asArray(&self) -> Result<&ObjectMeta,Box<dyn Error>>  {
+    pub fn isVoid(&self) -> bool {
+        match self {
+            Void => true,
+            _ => false
+        }
+    }
+
+    pub fn asArray(&self) -> Result<&ObjectMeta, CodeGenError>  {
         match self {
             Object(o) => {
                 if o.name.as_str() == "Array" {
                     Ok(o)
                 }
                 else {
-                    Err(format!("expected Array got: {:?}", o.name).into())
+                    Err(CodeGenError::TypeError(TypeError{
+                        expected: DataType::arr(Generic::Any),
+                        actual: self.clone(),
+                        exp: None,
+                    }))
                 }
             }
-            v => Err(format!("expected Array got: {:?}", v).into())
+            v => Err(CodeGenError::TypeError(TypeError{
+                expected: DataType::arr(Generic::Any),
+                actual: self.clone(),
+                exp: None,
+            }))
         }
     }
 

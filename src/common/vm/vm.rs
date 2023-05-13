@@ -10,7 +10,7 @@ use std::mem::size_of;
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
 use crate::bytecodeGen::{ExpressionCtx, genFunctionDef, StatementCtx};
-use crate::errors::Errorable;
+use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
 use crate::ffi::NativeWrapper;
 use crate::utils::FastVec;
 use crate::vm::dataType::DataType;
@@ -249,17 +249,17 @@ impl VirtualMachine {
     }
 
     #[inline]
-    pub fn findNamespace(&self, name: &str) -> Errorable<(&Namespace, usize)> {
+    pub fn findNamespace(&self, name: &str) -> Result<(&Namespace, usize), CodeGenError> {
         let namespaceId = self.namespaceLookup.get(name)
-            .ok_or(format!("failed to find namespace {}", name))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Namespace }))?;
         let namespace = self.namespaces.get(*namespaceId)
-            .ok_or(format!("failed to find namespace with id {}", *namespaceId))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Namespace }))?;
 
         Ok((namespace, *namespaceId))
     }
 
     #[inline]
-    pub fn findNamespaceParts(&self, parts: &[String]) -> Errorable<(&Namespace, usize)> {
+    pub fn findNamespaceParts(&self, parts: &[String]) -> Result<(&Namespace, usize), CodeGenError> {
         let namespaceName = parts.join("::");
 
         self.findNamespace(&namespaceName)
@@ -763,7 +763,7 @@ impl VirtualMachine {
 }
 
 impl VirtualMachine {
-    pub fn link(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn link(&mut self) -> Result<(), CodeGenError> {
         let functionReturns = self.buildFunctionReturn();
 
         let v = self as *mut VirtualMachine as *const VirtualMachine;

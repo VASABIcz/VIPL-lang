@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::errors::Errorable;
+use crate::errors::{Errorable, LoadFileError, ParserError};
 use crate::lexer::{AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit, RangeLexingUnit, SourceProvider, tokenize, WhitespaceLexingUnit};
 
 use crate::parser::{parseOne, ParsingUnit, ParsingUnitSearchType, TokenProvider};
@@ -60,7 +60,7 @@ impl ParsingUnit<JSON, JsonToken> for JObjectParsingUnit {
         tokenProvider.isPeekType(ObjectBegin)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
         let mut pairs = HashMap::new();
 
         tokenProvider.getAssert(ObjectBegin)?;
@@ -101,7 +101,7 @@ impl ParsingUnit<JSON, JsonToken> for JArrayParsingUnit {
         tokenProvider.isPeekType(ArrayBegin)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
         tokenProvider.getAssert(ArrayBegin);
 
         let res = tokenProvider.parseManyWithSeparatorUntil(|it| {
@@ -132,7 +132,7 @@ impl ParsingUnit<JSON, JsonToken> for JKeywordParsingUnit {
         tokenProvider.isPeekType(True) || tokenProvider.isPeekType(False) || tokenProvider.isPeekType(True) || tokenProvider.isPeekType(Null) || tokenProvider.isPeekType(Identifier)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, Box<dyn Error>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
         if tokenProvider.isPeekType(True) {
             tokenProvider.getAssert(True)?;
 
@@ -193,7 +193,7 @@ pub fn jsonTokenizingUnits() -> Vec<Box<dyn LexingUnit<JsonToken>>> {
 }
 
 impl JSON {
-    pub fn parse(s: &str) -> Errorable<JSON> {
+    pub fn parse(s: &str) -> Result<JSON, LoadFileError<JsonToken>> {
         let res = tokenize(&mut jsonTokenizingUnits(), SourceProvider{ data: s, index: 0, row: 0, col: 0 })?;
         let units = jsonParsingUnits();
 

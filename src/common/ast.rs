@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Index;
 
 use crate::errors::{InvalidTypeException, TypeNotFound};
+use crate::lexer::Location;
 use crate::utils::genFunName;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
@@ -50,7 +51,7 @@ pub enum Expression {
     CharLiteral(char),
     ArrayLiteral(Vec<Expression>),
     ArrayIndexing(Box<ArrayAccess>),
-    NotExpression(Box<Expression>),
+    NotExpression(Box<Expression>, Location),
     NamespaceAccess(Vec<String>),
     Lambda(Vec<(String, Option<DataType>)>, Vec<Statement>),
     Callable(Box<Expression>, Vec<Expression>),

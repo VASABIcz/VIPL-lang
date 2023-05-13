@@ -8,7 +8,8 @@ use libc::open;
 
 use crate::ast::{Expression, FunctionDef, ModType, Node, BinaryOp, Statement, StructDef, ArithmeticOp};
 use crate::bytecodeGen::SymbolicOpcode::Op;
-use crate::errors::{InvalidTypeException, NoValue, TypeNotFound, SymbolNotFound};
+use crate::errors::{InvalidTypeException, NoValue, TypeNotFound, SymbolNotFound, CodeGenError, SymbolType, TypeError};
+use crate::errors::CodeGenError::{UnexpectedVoid, UntypedEmptyArray};
 use crate::lexer::*;
 use crate::optimizer::{evalE};
 use crate::parser::*;
@@ -105,7 +106,7 @@ pub struct ExpressionCtx<'a> {
 }
 
 impl ExpressionCtx<'_> {
-    pub fn genExpression(mut self) -> Result<(), Box<dyn Error>> {
+    pub fn genExpression(mut self) -> Result<(), CodeGenError> {
         genExpression(self)
     }
 }
@@ -127,7 +128,7 @@ impl PartialExprCtx<'_> {
 }
 
 impl ExpressionCtx<'_> {
-    pub fn lookupFunctionByBaseName(&self, name: &str) -> Option<String> {
+    pub fn lookupFunctionByBaseName(&self, name: &str) -> Result<String, CodeGenError> {
         println!("funcs {:?}", self.functionReturns.keys());
         let idk = format!("{}::{}(", self.currentNamespace.name, name);
         println!("finding {}", idk);
@@ -135,10 +136,10 @@ impl ExpressionCtx<'_> {
         for (k, v) in self.functionReturns {
             if k.as_str().starts_with(&idk) {
                 println!("found {}", k);
-                return Some(k.to_string());
+                return Ok(k.to_string());
             }
         }
-        return None;
+        return Err(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Function }));
     }
 
     pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
@@ -153,7 +154,7 @@ impl ExpressionCtx<'_> {
         }
     }
 
-    pub fn toDataType(&mut self) -> Result<Option<DataType>, Box<dyn Error>> {
+    pub fn toDataType(&mut self) -> Result<Option<DataType>, CodeGenError> {
         match self.exp {
             Expression::BinaryOperation {
                 left,
@@ -187,16 +188,9 @@ impl ExpressionCtx<'_> {
                 match self.vTable.get(&MyStr::Runtime(name.clone().into_boxed_str())) {
                     None => {
                         println!("JEBE");
-                        let funcName = self.lookupFunctionByBaseName(name).ok_or(Box::new(TypeNotFound {
-                            typ: format!("variable {name} not found"),
-                        }))?;
+                        let funcName = self.lookupFunctionByBaseName(name)?;
                         let f = self.currentNamespace.findFunction(&funcName).unwrap();
                         return Ok(Some(f.0.toFunctionType()));
-
-                        println!("hint {:?}", self.typeHint);
-                        Err(Box::new(TypeNotFound {
-                            typ: format!("variable {name} not found"),
-                        }))
                     },
                     Some(v) => Ok(Some(v.0.clone())),
                 }
@@ -206,7 +200,7 @@ impl ExpressionCtx<'_> {
             Expression::ArrayLiteral(e) => {
                 if e.is_empty() {
                     let l = &self.typeHint;
-                    let c = l.clone().ok_or("cannot infer type of empty array consider adding type hint")?;
+                    let c = l.clone().ok_or(CodeGenError::UntypedEmptyArray)?;
                     match c
                     {
                         Object(o) => {
@@ -214,33 +208,35 @@ impl ExpressionCtx<'_> {
                                 let e = o
                                     .generics
                                     .first()
-                                    .ok_or("array type must have genneric type")?;
+                                    .ok_or(CodeGenError::ArrayWithoutGenericParameter)?;
                                 Ok(Some(DataType::arr(e.clone())))
                             } else {
-                                Err(Box::new(InvalidTypeException {
+                                Err(CodeGenError::TypeError(TypeError {
                                     expected: DataType::Object(ObjectMeta {
                                         name: MyStr::from("Array"),
                                         generics: Box::new([Any]),
                                     }),
-                                    actual: Some(Object(o.clone())),
+                                    actual: Object(o.clone()),
+                                    exp: Some(e.first().unwrap().clone()),
                                 }))
                             }
                         }
-                        v => Err(Box::new(InvalidTypeException {
+                        v => Err(CodeGenError::TypeError(TypeError {
                             expected: DataType::arr(Any),
-                            actual: Some(v.clone()),
+                            actual: v.clone(),
+                            exp: Some(e.first().unwrap().clone())
                         })),
                     }
                 } else {
                     let t = self.transfer(e
                         .get(0)
-                        .ok_or("array must have least one value")?).toDataType()?.ok_or("array item must have tyoe")?;
+                        .ok_or(CodeGenError::UntypedEmptyArray)?).toDataType()?.ok_or(CodeGenError::UnexpectedVoid)?;
 
                     Ok(Some(DataType::arr(Generic::Type(t))))
                 }
             }
             Expression::ArrayIndexing(i) => {
-                let e = self.transfer(&i.expr).toDataType()?.ok_or("cannot array index none")?;
+                let e = self.transfer(&i.expr).toDataType()?.ok_or(CodeGenError::UnexpectedVoid)?;
                 match e {
                     Object(o) => {
                         if o.name.as_str() == "String" {
@@ -249,16 +245,16 @@ impl ExpressionCtx<'_> {
                         Ok(Some(
                             o.generics
                                 .first()
-                                .ok_or("array must have one generic parameter")?
+                                .ok_or(CodeGenError::UntypedEmptyArray)?
                                 .clone()
-                                .ok_or("")?,
+                                .ok_or(CodeGenError::UntypedEmptyArray)?,
                         ))
                     }
                     _ => panic!(),
                 }
             }
-            Expression::NotExpression(i) => {
-                let d = self.transfer(i).toDataType()?.ok_or("expected return type")?;
+            Expression::NotExpression(i, _) => {
+                let d = self.transfer(i).toDataType()?.ok_or(UnexpectedVoid)?;
 
                 match d {
                     DataType::Bool => Ok(Some(DataType::Bool)),
@@ -316,7 +312,7 @@ impl ExpressionCtx<'_> {
                 Ok(Some(DataType::Object(ObjectMeta{ name: name.clone().into(), generics: Box::new([]) })))
             }
             Expression::FieldAccess(prev, fieldName) => {
-                let e = self.transfer(prev).toDataType()?.ok_or("cannot array index none")?;
+                let e = self.transfer(prev).toDataType()?.ok_or(UnexpectedVoid)?;
                 match e {
                     Object(o) => {
                         match o.name.as_str() {
@@ -492,7 +488,7 @@ impl StatementCtx<'_> {
     }
 }
 
-pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>) -> Result<(), Box<dyn Error>> {
+pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>) -> Result<(), CodeGenError> {
     match ctx.statement {
         Statement::While(w) => {
             for s in &w.body {
@@ -527,6 +523,9 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
                 Expression::Variable(c) => {
                     if !ctx.vTable.contains_key(&c.clone().into()) {
                         let t = ctx.makeExpressionCtx(init, None).toDataType()?.unwrap_or(Void);
+                        if t.isVoid() {
+
+                        }
                         ctx.vTable.insert(
                             c.clone().into(),
                             (t.clone(), locals.len()),
@@ -543,7 +542,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
         Statement::ForLoop(var, exp, body) => {
             let t = ctx.makeExpressionCtx(exp, None).toDataType()?.unwrap();
             let arr = t.asArray()?;
-            let typ = arr.generics.first().unwrap().clone().ok_or("what?")?;
+            let typ = arr.generics.first().unwrap().clone().ok_or(UntypedEmptyArray)?;
 
             if !ctx.vTable.contains_key(&var.clone().into()) {
                 ctx.vTable.insert(
@@ -572,7 +571,7 @@ pub fn genFunctionDef(
     vm: &VirtualMachine,
     currentNamespace: &Namespace,
     handleStatementExpression: fn(&mut StatementCtx, DataType)
-) -> Result<Vec<VariableMetadata>, Box<dyn Error>> {
+) -> Result<Vec<VariableMetadata>, CodeGenError> {
     let mut vTable = HashMap::new();
     let mut locals = vec![];
 
@@ -624,20 +623,24 @@ pub fn genFunctionDef(
     }
 }
 
-pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
+pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
     match ctx.statement {
         Statement::While(w) => {
             let ret = ctx.makeExpressionCtx(&w.exp, None).toDataType()?;
             match ret {
                 None => {
-                    return Err(Box::new(NoValue {
-                        msg: format!("expression {:?} must return bool", w.exp),
+                    return Err(CodeGenError::TypeError(TypeError{
+                        expected: DataType::Bool,
+                        actual: DataType::Void,
+                        exp: Some(w.exp.clone()),
                     }));
                 }
                 Some(ve) => {
                     if ve != Bool {
-                        return Err(Box::new(NoValue {
-                            msg: format!("expected bool got {:?} {:?}", ve, w.exp),
+                        return Err(CodeGenError::TypeError(TypeError{
+                            expected: DataType::Bool,
+                            actual: ve,
+                            exp: Some(w.exp.clone()),
                         }));
                     }
                     let size = ctx.ops.len();
@@ -706,7 +709,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
         Statement::Continue => {
             let index = ctx
                 .loopContext
-                .ok_or("continue can be only used in loops")?;
+                .ok_or(CodeGenError::ContinueOutsideLoop)?;
             ctx.push(Jmp {
                 offset: (index - ctx.ops.len() + 2) as isize,
                 jmpType: JmpType::Jmp,
@@ -760,6 +763,10 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
             }
         }
         Statement::Assignable(dest, value, t) => {
+            if ctx.makeExpressionCtx(value, None).toDataType()?.unwrap().isVoid() {
+                return Err(CodeGenError::UnexpectedVoid)
+            }
+
             match dest {
                 Expression::Variable(_) => {}
                 Expression::ArrayIndexing(v) => {
@@ -890,7 +897,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
+fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
     let (e, mut r) = ctx.reduce();
     let mut d = evalE(e);
     let e = match &mut d {
@@ -903,9 +910,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let dataType = r.constructCtx(left).toDataType()?;
             match dataType {
                 None => {
-                    return Err(Box::new(NoValue {
-                        msg: "expression must have return value".to_string(),
-                    }));
+                    return Err(CodeGenError::UnexpectedVoid);
                 }
                 Some(dat) => {
                     genExpression(r.constructCtx(left))?;
@@ -940,7 +945,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     index: r
                         .vTable
                         .get(&MyStr::Runtime(v.clone().into_boxed_str()))
-                        .ok_or(Box::new(SymbolNotFound { name: v.clone() }))?
+                        .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: v.clone(), typ: SymbolType::Variable }))?
                         .1,
                 });
             }
@@ -954,7 +959,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         Expression::ArrayLiteral(i) => {
             let d = match r.typeHint {
                 None => Some(
-                    r.constructCtx(i.first().ok_or("array must have at least one element")?).toDataType()?.ok_or("array elements must have type")?
+                    r.constructCtx(i.first().ok_or(UntypedEmptyArray)?).toDataType()?.ok_or(UnexpectedVoid)?
                 ),
                 Some(ref v) => match v {
                     DataType::Object(v) => match v.generics.first() {
@@ -967,7 +972,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                     _ => None,
                 },
             };
-            let e = d.ok_or("")?;
+            let e = d.ok_or(UnexpectedVoid)?;
             // let d = i.get(0).ok_or("array must have at least one element")?.toDataType(vTable, functionReturns, None)?.ok_or("array elements must have type")?;
             r.genPushInt(i.len() as isize);
             r.push(ArrayNew(e.clone()));
@@ -980,7 +985,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
         }
         Expression::ArrayIndexing(i) => {
             // println!("{:?}", i.expr);
-            let d = r.constructCtx(&i.expr).toDataType()?.ok_or("")?;
+            let d = r.constructCtx(&i.expr).toDataType()?.ok_or(UnexpectedVoid)?;
             match d {
                 DataType::Object(o) => {
                     // println!("{:?}", o);
@@ -1004,7 +1009,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
                 v => panic!("{v:?}"),
             }
         }
-        Expression::NotExpression(e) => {
+        Expression::NotExpression(e, _) => {
             genExpression(r.constructCtx(e))?;
             r.push(Not)
         }
@@ -1027,7 +1032,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             for arg in args {
                 let t = r.constructCtx(arg).toDataType()?;
                 match t {
-                    None => { return Err(Box::new(NoValue { msg: String::from("aahhh"), })); }
+                    None => { return Err(UnexpectedVoid); }
                     Some(v) => {
                         argTypes.push(v);
                         genExpression(r.constructCtx(arg))?;
@@ -1086,7 +1091,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), Box<dyn Error>> {
             let ctx = r.constructCtx(prev);
             genExpression(ctx)?;
 
-            let e = r.constructCtx(prev).toDataType()?.ok_or("cannot array index none")?;
+            let e = r.constructCtx(prev).toDataType()?.ok_or(UnexpectedVoid)?;
             match e {
                 Object(ref o) => {
                     if fieldName == "size" || fieldName == "length" {

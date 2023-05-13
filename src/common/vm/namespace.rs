@@ -8,10 +8,10 @@ use libc::printf;
 
 use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
 use crate::bytecodeGen::{ExpressionCtx, genFunctionDef};
-use crate::errors::Errorable;
+use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, SymbolType};
 use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
-use crate::lexer::tokenizeSource;
+use crate::lexer::{tokenizeSource, TokenType};
 use crate::parser::{Operation, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters};
 use crate::vm::variableMetadata::VariableMetadata;
@@ -70,12 +70,12 @@ pub struct StructMeta {
 }
 
 impl StructMeta {
-    pub fn findField(&self, name: &str) -> Errorable<(&VariableMetadata, usize)> {
+    pub fn findField(&self, name: &str) -> Result<(&VariableMetadata, usize), CodeGenError> {
         let fieldId = self.fieldsLookup.get(name)
-            .ok_or(format!("failed to find field {} on struct {}", name, self.name))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
 
         let field = self.fields.get(*fieldId)
-            .ok_or(format!("failed to find field with id {} on struct {}", fieldId, self.name))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
 
         Ok((field, *fieldId))
     }
@@ -228,27 +228,27 @@ impl Namespace {
         self as *const Namespace as *mut Namespace
     }
 
-    pub fn findFunction(&self, name: &str) -> Errorable<(&FunctionMeta, usize)> {
-        let id = self.functions.getSlowStr(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(format!("could not find function with name {} in namespace {}", name, self.name))?;
+    pub fn findFunction(&self, name: &str) -> Result<(&FunctionMeta, usize), CodeGenError> {
+        let id = self.functions.getSlowStr(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Namespace }))?;
 
         Ok((&id.0.0, id.1))
     }
 
-    pub fn findGlobal(&self, name: &str) -> Errorable<(&GlobalMeta, usize)> {
+    pub fn findGlobal(&self, name: &str) -> Result<(&GlobalMeta, usize), CodeGenError> {
         let gId = self.globals.getSlowStr(name)
-            .ok_or(format!("failed to find global varibale with name {}, in namespace {}", name, self.name))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Global }))?;
 
         Ok((&gId.0.0, gId.1))
     }
 
-    pub fn findStruct(&self, name: &str) -> Errorable<(&StructMeta, usize)> {
+    pub fn findStruct(&self, name: &str) -> Result<(&StructMeta, usize), CodeGenError> {
         let strc = self.structs.getSlowStr(name)
-            .ok_or(format!("failed to find struct with name {}, in namespace {}", name, self.name))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
 
         Ok(strc)
     }
 
-    pub fn findStructField(&self, structName: &str, fieldName: &str) -> Errorable<(&StructMeta, usize, &VariableMetadata, usize)> {
+    pub fn findStructField(&self, structName: &str, fieldName: &str) -> Result<(&StructMeta, usize, &VariableMetadata, usize), CodeGenError> {
         let (struc, structId) = self.findStruct(structName)?;
 
         let (field, fieldId) = struc.findField(fieldName)?;
@@ -360,12 +360,11 @@ impl Namespace {
     }
 }
 
-pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operation>, Box<dyn Error>> {
+pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operation>, LoadFileError<TokenType>> {
     let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("tokenizer");
-            todo!("{}", e)
+            return Err(e.into())
         }
     };
 
@@ -375,5 +374,5 @@ pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operat
         return Ok(vec![])
     }
 
-    parseTokens(tokens)
+    Ok(parseTokens(tokens)?)
 }

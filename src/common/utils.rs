@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::{env, fs};
 use std::arch::asm;
-use crate::lexer::tokenizeSource;
+use crate::errors::LoadFileError;
+use crate::lexer::{tokenizeSource, TokenType};
 use crate::parser::{parseDataType, TokenProvider};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
@@ -68,9 +69,9 @@ pub fn argsToString(args: &[DataType]) -> String {
 }
 
 #[inline]
-pub fn parseDataTypeFromStr(s: &str) -> Result<DataType, Box<dyn Error>> {
+pub fn parseDataTypeFromStr(s: &str) -> Result<DataType, LoadFileError<TokenType>> {
     let p = tokenizeSource(s)?;
-    parseDataType(&mut TokenProvider::new(p))
+    Ok(parseDataType(&mut TokenProvider::new(p))?)
 }
 
 pub fn namespacePath(path: &str) -> Vec<String> {

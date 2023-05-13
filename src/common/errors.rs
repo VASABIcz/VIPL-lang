@@ -1,13 +1,49 @@
+use std::convert::Infallible;
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::FromResidual;
+use crate::ast::Expression;
+use crate::lexer::{Location, Stringable, Token, TokenType};
+use crate::parser::{Operation, ParsingUnitSearchType};
 use crate::vm::dataType::DataType;
 
 pub type Errorable<T> = Result<T, Box<dyn Error>>;
+
 
 #[derive(Debug)]
 pub struct NoValue {
     pub(crate) msg: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct InvalidToken<T: Clone + PartialEq + Debug> {
+    pub expected: T,
+    pub actual: Option<Token<T>>
+}
+
+impl<T: Clone + PartialEq + Debug> Display for InvalidToken<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.actual {
+            None => write!(f, "expected token type {:?}, but got none", self.expected),
+            Some(v) => write!(f, "expected token type {:?}, but got {:?}", self.expected, v),
+        }
+    }
+}
+
+impl<T: PartialEq + Clone + Debug> Error for InvalidToken<T> {}
+
+#[derive(Debug, Clone)]
+pub struct InvalidCharLiteral<T: Clone + PartialEq> {
+    pub token: Token<T>
+}
+
+impl<T: Clone + PartialEq> Display for InvalidCharLiteral<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl<T: PartialEq + Clone + Debug> Error for InvalidCharLiteral<T> {}
 
 impl Display for NoValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -16,19 +52,6 @@ impl Display for NoValue {
 }
 
 impl Error for NoValue {}
-
-#[derive(Debug)]
-pub struct SymbolNotFound {
-    pub name: String,
-}
-
-impl Display for SymbolNotFound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "symbol {} not found", self.name)
-    }
-}
-
-impl Error for SymbolNotFound {}
 
 #[derive(Debug)]
 pub(crate) struct TypeNotFound {
@@ -43,9 +66,10 @@ impl Display for TypeNotFound {
 
 impl Error for TypeNotFound {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnknownToken {
-    pub(crate) source: String,
+    pub source: String,
+    pub location: Location
 }
 
 impl Display for UnknownToken {
@@ -121,3 +145,218 @@ impl Display for OutOfBoundsException {
 }
 
 impl Error for OutOfBoundsException {}
+
+#[derive(Debug)]
+pub enum LexerError {
+    UnknownToken(UnknownToken),
+    NotEnoughCharacters(usize, Location),
+    ReachedEOF(Location),
+    Unknown(Box<dyn Error>, Option<Location>)
+}
+
+impl From<&str> for LexerError {
+    fn from(value: &str) -> Self {
+        Self::Unknown(value.into(), None)
+    }
+}
+
+impl Display for LexerError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexerError::UnknownToken(v) => write!(f, "{}", v),
+            LexerError::NotEnoughCharacters(s, v) => todo!(),
+            LexerError::ReachedEOF(v) => todo!(),
+            LexerError::Unknown(v, _) => write!(f, "{}", v)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParserError<T: PartialEq + Clone + Debug> {
+    InvalidToken(InvalidToken<T>),
+    NoSuchParsingUnit(NoSuchParsingUnit<T>),
+    InvalidCharLiteral(InvalidCharLiteral<T>),
+    Unknown(Box<dyn Error>)
+}
+
+impl<T: PartialEq + Clone + Debug> Display for ParserError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParserError::InvalidToken(v) => write!(f, "{}", v),
+            ParserError::NoSuchParsingUnit(v) => write!(f, "{}", v),
+            ParserError::InvalidCharLiteral(v) => write!(f, "{}", v),
+            ParserError::Unknown(v) => write!(f, "{}", v)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LoadFileError<T: PartialEq + Clone + Debug> {
+    ParserError(ParserError<T>),
+    LexerError(LexerError)
+}
+
+impl<T: PartialEq + Clone + Debug> Display for LoadFileError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoadFileError::ParserError(v) => write!(f, "{}", v),
+            LoadFileError::LexerError(v) => write!(f, "{}", v)
+        }
+    }
+}
+
+impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
+    pub fn getDomain(&self) -> &'static str {
+        match self {
+            LoadFileError::ParserError(_) => "Parser",
+            LoadFileError::LexerError(_) => "Lexer"
+        }
+    }
+
+    pub fn getType(&self) -> &'static str {
+        match self {
+            LoadFileError::ParserError(v) => match v {
+                ParserError::InvalidToken(_) => "InvalidToken",
+                ParserError::NoSuchParsingUnit(_) => "NoSuchParsingUnit",
+                ParserError::InvalidCharLiteral(_) => "InvalidCharLiteral",
+                ParserError::Unknown(_) => "Unknown"
+            }
+            LoadFileError::LexerError(v) => match v {
+                LexerError::UnknownToken(_) => "UnknownToken",
+                LexerError::NotEnoughCharacters(_, _) => "NotEnoughCharacters",
+                LexerError::ReachedEOF(_) => "ReachedEOF",
+                LexerError::Unknown(_, _) => "Unknown"
+            }
+        }
+    }
+
+    pub fn getLocation(&self) -> Option<Location> {
+        match self {
+            LoadFileError::ParserError(v) => match v {
+                ParserError::InvalidToken(t) => t.actual.as_ref().map(|it| it.location),
+                ParserError::NoSuchParsingUnit(t) => t.token.as_ref().map(|it| it.location),
+                ParserError::InvalidCharLiteral(t) => Some(t.token.location),
+                ParserError::Unknown(e) => None
+            }
+            LoadFileError::LexerError(v) => match v {
+                LexerError::UnknownToken(t) => Some(t.location),
+                LexerError::NotEnoughCharacters(_, l) => Some(*l),
+                LexerError::ReachedEOF(e) => Some(*e),
+                LexerError::Unknown(e, l) => *l
+            }
+        }
+    }
+}
+
+impl LoadFileError<TokenType> {
+    pub fn betterMessage(&self) -> Option<String> {
+        match self {
+            LoadFileError::ParserError(v) => {
+                match v {
+                    ParserError::InvalidToken(e) => {
+                        match &e.actual {
+                            None => {
+                                Some(format!("expected {:?} `{}`, got None", e.expected, e.expected.toStr()))
+                            }
+                            Some(v) => {
+                                Some(format!("expected {:?} `{}`, got {:?} `{}`", e.expected, e.expected.toStr(), v.typ, v.typ.toStr()))
+                            }
+                        }
+                    }
+                    _ => None
+                }
+            }
+            _ => None
+        }
+    }
+
+    pub fn printUWU(&self, filePath: &str) {
+        let domain = self.getDomain();
+        let typ = self.getType();
+        let location = self.getLocation();
+
+        let message = match self.betterMessage() {
+            Some(v) => v,
+            None => format!("{}", self),
+        };
+
+        eprintln!();
+        eprintln!("\x1b[31merror\x1b[0m[\x1b[35m{}\x1b[0m:\x1b[36m{}\x1b[0m]\x1b[0m: {}", domain, typ, message);
+        if let Some(l) = location {
+            eprintln!("  -> {}:{}:{}", filePath, l.row+1, l.col+1)
+        }
+        else {
+            eprintln!("  -> {}", filePath)
+        }
+    }
+}
+
+impl<T: PartialEq + Clone + Debug> From<ParserError<T>> for LoadFileError<T> {
+    fn from(value: ParserError<T>) -> Self {
+        LoadFileError::ParserError(value)
+    }
+}
+
+impl<T: PartialEq + Clone + Debug> From<LexerError> for LoadFileError<T> {
+    fn from(value: LexerError) -> Self {
+        LoadFileError::LexerError(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeError {
+    pub expected: DataType,
+    pub actual: DataType,
+    pub exp: Option<Expression>
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SymbolType {
+    Function,
+    Variable,
+    Struct,
+    DataType,
+    Namespace,
+    Global
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolNotFound {
+    pub name: String,
+    pub typ: SymbolType
+}
+
+#[derive(Debug, Clone)]
+pub enum CodeGenError {
+    CannotAssignVoid,
+    TypeError(TypeError),
+    SymbolNotFound(SymbolNotFound),
+    UntypedEmptyArray,
+    ArrayWithoutGenericParameter,
+    UnexpectedVoid,
+    ContinueOutsideLoop,
+    BreakOutsideLoop
+}
+
+#[derive(Debug, Clone)]
+pub struct NoSuchParsingUnit<T: Debug + PartialEq + Clone> {
+    pub typ: ParsingUnitSearchType,
+    pub token: Option<Token<T>>,
+}
+
+impl<T: Debug + PartialEq + Clone> Display for NoSuchParsingUnit<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f, "no such {:?} parsing unit to parse token {:?}", self.typ, self.token
+        )
+    }
+}
+
+impl<T: Debug + Send + Sync + PartialEq + Clone> Error for NoSuchParsingUnit<T> {}
+
+
+#[derive(Debug)]
+enum  CompilerError<T: Debug + Clone + PartialEq> {
+    LoadFileError(LoadFileError<T>),
+    CodeGenError(CodeGenError)
+}

@@ -2,9 +2,13 @@
 
 use std::{env, fs};
 use std::mem::ManuallyDrop;
+use std::process::exit;
 use std::time::Instant;
 
 use libc::link;
+use vipl::errors::LoadFileError;
+use vipl::lexer::TokenType;
+use vipl::parser::Operation;
 
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
@@ -20,7 +24,13 @@ fn main() {
     let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
 
-    let res = loadSourceFile(fs::read_to_string(sourceFile).unwrap(), &mut vm).unwrap();
+    let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm) {
+        Ok(v) => v,
+        Err(e) => {
+            e.printUWU(&sourceFile);
+            exit(0);
+        }
+    };
 
     let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
     let id = vm.registerNamespace(n);
