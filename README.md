@@ -1,4 +1,4 @@
-## small interpreted stack based programing language
+## small interpreted/JIT compiled stack based programing language
 
 - build size around 500kb
 - performance better than python
