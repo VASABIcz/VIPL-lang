@@ -1,0 +1,12 @@
+
+
+out::print("begin")
+
+if true {
+    out::print(true)
+}
+else {
+    out::print(false)
+}
+
+out::print("end")

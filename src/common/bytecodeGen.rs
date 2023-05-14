@@ -21,6 +21,7 @@ use crate::vm::dataType::Generic::Any;
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
+use crate::vm::vm::JmpType::False;
 use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
 
 #[derive(Debug, Clone)]
@@ -402,6 +403,17 @@ impl PartialExprCtx<'_> {
         self.ops.push(SymbolicOpcode::Break)
     }
 
+    pub fn nextLabel(&mut self) -> usize {
+        let id = *self.labelCounter;
+        *self.labelCounter += 1;
+
+        id
+    }
+
+    pub fn makeLabel(&mut self, id: usize) {
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
+    }
+
     pub fn opLabel(&mut self) -> usize {
         let id = *self.labelCounter;
         *self.labelCounter += 1;
@@ -509,6 +521,17 @@ impl StatementCtx<'_> {
         self.ops.push(SymbolicOpcode::LoopLabel(id));
 
         id
+    }
+
+    pub fn nextLabel(&mut self) -> usize {
+        let id = *self.labelCounter;
+        *self.labelCounter += 1;
+
+        id
+    }
+
+    pub fn makeLabel(&mut self, id: usize) {
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
     }
 
     pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
@@ -715,66 +738,85 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         Statement::While(w) => {
             ctx.makeExpressionCtx(&w.exp, None).toDataType()?.assertType(Bool)?;
 
-            let size = ctx.ops.len();
+            let loopEnd = ctx.nextLabel();
+
+            ctx.beginLoop();
+
             genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
-            let mut bodyBuf = vec![];
+
+            ctx.opJmp(loopEnd, False);
+
             for s in &w.body {
-                let mut ctx2 = ctx.copy(s);
-                ctx2.ops = &mut bodyBuf;
-                ctx2.loopContext = Some(size);
+                let ctx2 = ctx.copy(s);
                 genStatement(ctx2)?;
             }
-            let len = bodyBuf.len();
-            ctx.push(OpCode::Jmp {
-                offset: len as isize + 1,
-                jmpType: JmpType::False,
-            });
-            ctx.ops.extend(bodyBuf);
-            ctx.push(OpCode::Jmp {
-                offset: -(ctx.ops.len() as isize - size as isize + 1),
-                jmpType: JmpType::Jmp,
-            })
+            ctx.opContinue();
+
+            ctx.makeLabel(loopEnd);
+            ctx.endLoop();
+
         }
         Statement::If(flow) => {
-            let mut buf = vec![];
-            for s in &flow.body {
-                let mut cop = ctx.copy(s);
-                cop.ops = &mut buf;
-                genStatement(cop)?;
+            ctx.makeExpressionCtx(&flow.condition, None).toDataType()?.assertType(Bool)?;
+
+            let endLabel = ctx.nextLabel();
+
+            let mut ifLabels = vec![];
+
+            for _ in 0..flow.elseIfs.len() {
+                ifLabels.push(ctx.nextLabel());
+            }
+
+            if flow.elseBody.is_some() {
+                ifLabels.push(ctx.nextLabel());
             }
 
             genExpression(ctx.makeExpressionCtx(&flow.condition, None))?;
-            let mut jumpDist = buf.len() as isize;
-            if flow.elseBody.is_some() {
-                jumpDist += 1;
+            if let Some(v) = ifLabels.first() {
+                ctx.opJmp(*v, False);
             }
-            ctx.push(Jmp {
-                offset: jumpDist,
-                jmpType: JmpType::False,
-            });
-            ctx.ops.extend(buf);
+            else {
+                ctx.opJmp(endLabel, False)
+            }
 
-            match &flow.elseBody {
-                None => {}
-                Some(els) => {
-                    buf = vec![];
-                    for s in els {
-                        let mut ctx1 = ctx.copy(s);
-                        ctx1.ops = &mut buf;
-                        genStatement(ctx1)?;
-                    }
+            for s in &flow.body {
+                let op = ctx.copy(s);
+                genStatement(op)?;
+            }
+            ctx.opJmp(endLabel, JmpType::Jmp);
 
-                    ctx.push(OpCode::Jmp {
-                        offset: buf.len() as isize,
-                        jmpType: JmpType::Jmp,
-                    });
-                    ctx.ops.extend(buf);
+            for (i, els) in flow.elseIfs.iter().enumerate() {
+                ctx.makeLabel(*ifLabels.get(i).unwrap());
+
+                ctx.makeExpressionCtx(&els.0, None).toDataType()?.assertType(Bool)?;
+                ctx.makeExpressionCtx(&els.0, None).genExpression()?;
+
+                if let Some(v) = ifLabels.get(i+1) {
+                    ctx.opJmp(*v, False);
+                }
+                else {
+                    ctx.opJmp(endLabel, False);
+                }
+
+                for s in &els.1 {
+                    let op = ctx.copy(s);
+                    genStatement(op)?;
+                }
+                ctx.opJmp(endLabel, JmpType::Jmp);
+            }
+
+            if let Some(els) = &flow.elseBody {
+                ctx.makeLabel(*ifLabels.last().unwrap());
+                for s in els {
+                    let ctx1 = ctx.copy(s);
+                    genStatement(ctx1)?;
                 }
             }
+            ctx.makeLabel(endLabel);
         }
         Statement::Return(ret) => {
             genExpression(ctx.makeExpressionCtx(&ret.exp, None))?;
-            ctx.push(OpCode::Return)
+            ctx.push(Return)
         }
         Statement::Continue => ctx.opContinue(),
         Statement::Break => ctx.opBreak(),

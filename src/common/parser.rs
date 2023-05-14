@@ -13,7 +13,7 @@ use crate::ast::BinaryOp::Add;
 use crate::ast::Statement::{Assignable, StatementExpression};
 use crate::errors::{InvalidCharLiteral, InvalidToken, NoSuchParsingUnit, ParserError};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{AddAs, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Equals, For, Global, Gt, Identifier, Import, In, LambdaBegin, Loop, Minus, MulAs, Namespace, Native, Not, Null, OCB, ORB, OSB, Return, StringLiteral, Struct, SubAs};
+use crate::lexer::TokenType::{AddAs, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, For, Global, Gt, Identifier, If, Import, In, LambdaBegin, Loop, Minus, MulAs, Namespace, Native, Not, Null, OCB, ORB, OSB, Return, StringLiteral, Struct, SubAs};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
@@ -823,28 +823,36 @@ impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
         _previous: Option<Operation>,
         parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
     ) -> Result<Operation, ParserError<TokenType>> {
-        tokenProvider.getAssert(TokenType::If)?;
+        let mut elseIfs = vec![];
+        let mut elseBody = None;
 
-        let cond = parseExpr(tokenProvider, parser)?;
+        tokenProvider.getAssert(If)?;
 
-        let statements = parseBody(tokenProvider, parser)?;
 
-        if !tokenProvider.isPeekType(TokenType::Else) {
-            return Ok(Operation::Statement(ast::Statement::If(ast::If {
-                condition: cond,
-                body: statements,
-                elseBody: None,
-            })));
+        let condition = parseExpr(tokenProvider, parser)?;
+
+        let body = parseBody(tokenProvider, parser)?;
+
+        while tokenProvider.isPeekType(Else) && tokenProvider.isPeekIndexType(If, 1) {
+            tokenProvider.getAssert(Else)?;
+            tokenProvider.getAssert(If)?;
+
+            let cond = parseExpr(tokenProvider, parser)?;
+            let statements = parseBody(tokenProvider, parser)?;
+
+            elseIfs.push((cond, statements))
         }
 
-        tokenProvider.getAssert(TokenType::Else)?;
+        if tokenProvider.isPeekType(Else) {
+            tokenProvider.getAssert(Else)?;
+            elseBody = Some(parseBody(tokenProvider, parser)?);
+        }
 
-        let elseBody = parseBody(tokenProvider, parser)?;
-
-        Ok(Operation::Statement(ast::Statement::If(ast::If {
-            condition: cond,
-            body: statements,
-            elseBody: Some(elseBody),
+        Ok(Operation::Statement(Statement::If(ast::If {
+            condition,
+            body,
+            elseBody,
+            elseIfs,
         })))
     }
 

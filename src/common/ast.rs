@@ -131,6 +131,7 @@ pub struct If {
     pub condition: Expression,
     pub body: Vec<Statement>,
     pub elseBody: Option<Vec<Statement>>,
+    pub elseIfs: Vec<(Expression, Vec<Statement>)>,
 }
 
 #[derive(Debug, Clone)]
