@@ -298,6 +298,7 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn pop(&self) -> Value {
+        println!("gona poop {:?}", self);
         if DEBUG || TRACE {
             unsafe {
                 (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
@@ -306,17 +307,19 @@ impl VirtualMachine {
                     .unwrap()
             }
         } else {
-            let mut res =
-                unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
+            unsafe {
+                let mut res = &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>);
 
-            unsafe { res.size = res.size.unchecked_sub(1) };
+                res.size -= 1;
 
-            unsafe { read_via_copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value) }
+                read_via_copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value)
+            }
         }
     }
 
     #[inline(always)]
     pub fn popAmount(&self, amount: usize) {
+        println!("gona poop more");
         if DEBUG || TRACE {
             for _ in 0..amount {
                 unsafe {
@@ -380,6 +383,7 @@ impl VirtualMachine {
 impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
+        println!("goting frejm");
         if DEBUG || TRACE {
             self.frames.get(self.frames.len() - 1).unwrap()
         } else {
@@ -487,7 +491,7 @@ impl VirtualMachine {
             vm.push(Value::null());
         }
 
-        if DEBUG {
+        if TRACE {
             println!("[call] args count {}", fMeta.argsCount);
         }
 

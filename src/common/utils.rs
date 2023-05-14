@@ -16,8 +16,8 @@ use std::{env, fs};
 
 // same as Vec but can be unsafely modified and accessed
 pub struct FastVec<T> {
-    pub cap: usize,
     pub ptr: *mut T,
+    pub cap: usize,
     pub size: usize,
 }
 
