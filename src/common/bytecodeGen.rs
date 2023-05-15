@@ -317,15 +317,9 @@ impl ExpressionCtx<'_> {
                         }
                     }
                     else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
-                        println!("{:?}", self.functionReturns);
-
                         let (namespace, namespaceID) = self.vm.findNamespaceParts(&v[..v.len()-1])?;
 
-                        println!("namespaceName {}", namespace.name);
-
                         let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap() }).collect::<Vec<_>>());
-
-                        println!("lookup {}", &genName);
 
                         let funcId = namespace.findFunction(&genName)?;
                         return Ok(funcId.0.returnType.clone())

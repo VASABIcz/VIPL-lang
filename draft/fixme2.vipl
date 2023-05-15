@@ -1,0 +1,12 @@
+
+fn powerx(a: int): int {
+    if a < 2 {
+        return 1
+    }
+
+    return powerx(a-1) * a
+}
+
+n = powerx(6)
+
+out::print(n)

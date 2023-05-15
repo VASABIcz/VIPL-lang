@@ -30,12 +30,12 @@ pub extern fn createVm() -> *mut VirtualMachine {
 
 #[no_mangle]
 pub extern fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
-    vm.stack.push(*value);
+    vm.push(*value);
 }
 
 #[no_mangle]
-pub extern fn popStack(vm: &mut VirtualMachine) -> Option<Value> {
-    vm.stack.pop()
+pub extern fn popStack(vm: &mut VirtualMachine) -> Value {
+    vm.pop()
 }
 
 #[no_mangle]
@@ -65,7 +65,7 @@ pub extern fn pushValue(vm: &mut VirtualMachine, v: isize) {
     if DEBUG {
         println!("[ffi] pushInt {}", v);
     }
-    vm.stack.push(Value::from(v))
+    vm.push(Value::from(v))
 }
 
 #[no_mangle]
@@ -171,47 +171,15 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
         functionId: functionID,
     };
 
-    // println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
-
-    d.pushFrame(frame);
-
     let vm2 = unsafe { &mut *vm.rawPtr() };
 
-    let a = vm.getMutFrame();
-
-    match callable {
-        LoadedFunction::BuiltIn(b) => {
-            b(vm2, a);
-        }
-        LoadedFunction::Native(n) => {
-            // FIXME in release problem with return value
-            let v = callNative(n, vm2, a);
-
-            if returns {
-                d.push(v.into())
-            }
-        }
-        LoadedFunction::Virtual(v) => {
-            d.execute(v);
-        }
-    }
-    d.popFrame();
+    let ret = callable.call(vm2, frame, returns);
 
     if DEBUG {
-        println!("[ffi] after call {} {:?}", vm.frames.len(), vm.getFrame().localVariables);
+        println!("[ffi] after call {} {:?}", vm.frameCount(), vm.getFrame().localVariables);
     }
 
-    if returns {
-        let v = vm.pop();
-        if DEBUG {
-            println!("[ffi] function {} returned {:?} {:?}", f.0.name, v, v.asUnsigned() as *const ());
-        }
-
-        v
-    }
-    else {
-        Value::from(0)
-    }
+    return ret;
 }
 
 #[no_mangle]

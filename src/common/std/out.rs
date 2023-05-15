@@ -13,39 +13,35 @@ use crate::vm::vm::VirtualMachine;
 pub fn registerOut(vm: &mut VirtualMachine) {
     let mut namespace = Namespace::new("out");
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[Int],
         |_a, b| println!("{}", b.get(0).getNumRef()),
-        DataType::Void,
         false
     );
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[Bool],
         |_a, b| println!("{}", b.get(0).getBool()),
-        DataType::Void,
         false
     );
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[Float],
         |_a, b| println!("{}", b.get(0).getFlo()),
-        DataType::Void,
         false
     );
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[Char],
         |_a, b| println!("{}", b.get(0).getChar()),
-        DataType::Void,
         false
     );
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[DataType::str()],
         |_a, b| {
@@ -53,11 +49,10 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             let str = &c.asRef::<Str>().data;
             println!("{}", str.string);
         },
-        DataType::Void,
         false
     );
 
-    namespace.makeNative(
+    namespace.makeNativeNoRat(
         "print",
         &[DataType::arr(Generic::Any)],
         |_a, b| {
@@ -69,7 +64,6 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             }
             println!()
         },
-        DataType::Void,
         false
     );
 

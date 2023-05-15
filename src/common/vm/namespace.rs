@@ -139,7 +139,7 @@ impl FunctionMeta {
 
 #[derive(Debug)]
 pub enum LoadedFunction {
-    BuiltIn(fn (&mut VirtualMachine, &mut StackFrame)),
+    BuiltIn(fn (&mut VirtualMachine, &mut StackFrame) -> Value),
     Native(extern fn (&mut VirtualMachine, &mut StackFrame) -> Value),
     Virtual(Vec<OpCode>)
 }
@@ -165,32 +165,22 @@ pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value,
 
 impl LoadedFunction {
     #[inline]
-    pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) {
-        // println!("vm: {:?} {}", vm.rawPtr(), vm.rawPtr() as usize);
+    pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) -> Value {
+        let vm2 = unsafe { &mut *vm.rawPtr() };
 
         vm.pushFrame(frame);
 
-        let vm2 = unsafe { &mut *vm.rawPtr() };
-
         let a = vm.getMutFrame();
 
-        match self {
-            LoadedFunction::BuiltIn(b) => {
-                b(vm2, a);
-            }
-            LoadedFunction::Native(n) => {
-                // FIXME in release problem with return value
-                let v = callNative(n, vm2, a);
+        let x = match self {
+            LoadedFunction::BuiltIn(b) => b(vm2, a),
+            LoadedFunction::Native(n) => callNative(n, vm2, a),
+            LoadedFunction::Virtual(v) => vm.execute(v, returns),
+        };
 
-                if returns {
-                    vm.push(v.into())
-                }
-            }
-            LoadedFunction::Virtual(v) => {
-                vm.execute(v);
-            }
-        }
-        vm.popFrame()
+        vm.popFrame();
+
+        x
     }
 }
 
@@ -271,7 +261,7 @@ impl Namespace {
         &mut self,
         name: &str,
         args: &[DataType],
-        fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        fun: fn(&mut VirtualMachine, &mut StackFrame) -> Value,
         ret: DataType,
         pure: bool
     ) {
@@ -281,6 +271,26 @@ impl Namespace {
         let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, ret, pure);
 
         self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
+    }
+
+
+    // 🐀
+    // this is pretty hacky ngl
+    pub fn makeNativeNoRat(
+        &mut self,
+        name: &str,
+        args: &[DataType],
+        fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
+        pure: bool
+    ) {
+        let uwuFn: fn(&mut VirtualMachine, &mut StackFrame) -> Value = unsafe { transmute(fun) };
+
+        let genName = genFunNameMetaTypes(&name, &args, args.len());
+        let argsCount = args.len();
+
+        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, DataType::Void, pure);
+
+        self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(uwuFn))));
     }
 
     pub fn registerFunctionDef(&mut self, d: FunctionMeta) -> usize {

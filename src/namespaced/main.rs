@@ -36,11 +36,10 @@ fn main() {
     let id = vm.registerNamespace(n);
     vm.link().unwrap();
 
-    let c = &vm as *const VirtualMachine as *mut VirtualMachine;
-
+    let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;
 
     let nn = vm.getNamespace(id);
-    println!("{:?}", nn);
+
     let (fMeta, f) = nn.functions.actual.last().unwrap();
     let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
     let now = Instant::now();
@@ -48,15 +47,15 @@ fn main() {
     let ptr = Box::into_raw(xd.into_boxed_slice());
 
     unsafe {
-        f.as_ref().unwrap().call(&mut *c, StackFrame {
+        f.as_ref().unwrap().call(&mut *vm1, StackFrame {
             localVariables: ptr.as_mut_ptr(),
             programCounter: 0,
             namespaceId: nn.id,
-            functionId: nn.functions.actual.len()-1,
-        }, false)
+            functionId: nn.functions.actual.len() - 1,
+        }, false);
     }
     let elapsed = now.elapsed();
     unsafe { Box::from_raw(ptr) };
     println!("Elapsed: {:.2?}", elapsed);
-    println!("vm: {}", vm.stack.len());
+    println!("vm: {}", vm.stackSize());
 }

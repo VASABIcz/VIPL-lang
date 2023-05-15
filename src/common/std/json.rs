@@ -228,11 +228,11 @@ pub fn registerJson(vm: &mut VirtualMachine) {
                     },
                     data: v,
                 };
-                vm.heap.allocate(obj).into()
+                vm.allocate(obj).into()
             }
         };
 
-        vm.push(v)
+        v
 
     }, DataType::obj("Json"), false);
 

@@ -469,7 +469,7 @@ impl Value {
     pub fn makeString(str: String, vm: &mut VirtualMachine) -> Value {
         let obj = ViplObject::<Str>::str(Str::new(str));
 
-        let hObj = vm.heap.allocate(obj);
+        let hObj = vm.allocate(obj);
 
         Value{Reference: hObj.into()}
     }
@@ -480,7 +480,7 @@ impl Value {
 
     #[inline]
     pub fn makeArray(arr: Vec<Value>, typ: DataType, vm: &mut VirtualMachine) -> Value {
-        Value{Reference: vm.heap.allocate(ViplObject::<Array>::arr(Array{internal: arr, typ})).into()}
+        Value{Reference: vm.allocate(ViplObject::<Array>::arr(Array{internal: arr, typ})).into()}
     }
 
     #[inline]

@@ -48,9 +48,9 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
         }, data: RegixData{ reg: res, capturesCount: 0 }
         };
 
-        let ptr = vm.heap.allocate(a);
+        let ptr = vm.allocate(a);
 
-        vm.push(ptr.into())
+        Value::from(ptr)
 
     }, DataType::obj("Regex"), false);
 
@@ -67,7 +67,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
             Some(v) => str.len() == v
         };
 
-        vm.push(isMatch.into());
+        isMatch.into()
 
     }, DataType::Bool, false);
 
@@ -90,7 +90,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
 
         let aloc = vm.allocateArray(result, DataType::arr(Generic::Type(DataType::str())));
 
-        vm.push(aloc.into())
+        aloc.into()
 
     },  DataType::arr(Generic::Type(DataType::arr(Generic::Type(DataType::str())))), false);
 
