@@ -6,10 +6,10 @@ use std::process::exit;
 use std::time::Instant;
 
 use libc::link;
+
 use vipl::errors::LoadFileError;
 use vipl::lexer::TokenType;
 use vipl::parser::Operation;
-
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;
@@ -39,7 +39,7 @@ fn main() {
     let c = &vm as *const VirtualMachine as *mut VirtualMachine;
 
 
-    let nn = vm.namespaces.get(id).unwrap();
+    let nn = vm.getNamespace(id);
     println!("{:?}", nn);
     let (fMeta, f) = nn.functions.actual.last().unwrap();
     let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();

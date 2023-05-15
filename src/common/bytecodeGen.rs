@@ -837,8 +837,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }).collect::<Vec<_>>();
 
             let r = path.join("::");
-            let namespaceId = ctx.vm.namespaceLookup.get(&r).unwrap();
-            let namespace = ctx.vm.namespaces.get(*namespaceId).unwrap();
+            let (namespace, namespaceId) = ctx.vm.findNamespace(&r).unwrap();
             let n = genFunName(f.name.as_str(), &t);
 
             let funcId = namespace.functions.getSlow(&n).unwrap().1;
@@ -847,7 +846,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 genExpression(ctx.makeExpressionCtx(arg, None))?;
             }
 
-            ctx.push(LCall { namespace: *namespaceId, id: funcId })
+            ctx.push(LCall { namespace: namespaceId, id: funcId })
         }
         Statement::StatementExpression(v) => {
             let mut eCtx = ctx.makeExpressionCtx(v, None);

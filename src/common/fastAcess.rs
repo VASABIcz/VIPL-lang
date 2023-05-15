@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::path::Iter;
 
 #[derive(Debug)]
 pub struct FastAcess<LOOKUP: Debug, VALUE: Debug> {
@@ -56,5 +57,9 @@ impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALU
     #[inline]
     pub fn replaceValue(&mut self, key: usize, value: VALUE) {
         *self.actual.get_mut(key).unwrap() = value;
+    }
+
+    pub fn len(&self) -> usize {
+        self.actual.len()
     }
 }
