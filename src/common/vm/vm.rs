@@ -790,12 +790,6 @@ impl VirtualMachine {
 
                     let opt = optimizeOps(ops);
 
-                    let res = getSymbolicChunks(&opt);
-
-                    for c in res {
-                        println!("chunk: {:?}", c)
-                    }
-
                     let opt = emitOpcodes(opt);
 
                     if DEBUG {
