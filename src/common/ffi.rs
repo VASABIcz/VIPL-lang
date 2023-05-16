@@ -211,12 +211,6 @@ pub struct NativeWrapper {
     pub printDigit: extern fn(isize)
 }
 
-fn getNativeWrapperOffset(n: &NativeWrapper, fieldPtr: usize) -> usize {
-    let ptr = n as *const NativeWrapper as usize;
-
-    fieldPtr-ptr
-}
-
 impl NativeWrapper {
     pub fn new() -> Self {
         Self {

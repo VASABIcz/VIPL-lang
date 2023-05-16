@@ -73,7 +73,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         typ: DataType::Char,
     });
 
-    namespace.globals.getFastMut(index).unwrap().1 = Value::from('\n');
+    namespace.getGlobalMut(index).1 = Value::from('\n');
 
     namespace.state = Loaded;
     vm.registerNamespace(namespace);

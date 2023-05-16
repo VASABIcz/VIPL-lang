@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
-use std::intrinsics::unlikely;
+use std::intrinsics::{read_via_copy, unlikely};
 use std::mem::size_of;
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, StatementCtx, SymbolicOpcode};
+use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, getSymbolicChunks, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
 use crate::fastAcess::FastAcess;
 use crate::ffi::NativeWrapper;
@@ -31,6 +31,7 @@ use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
+// DEBUG is faster than default
 const DEBUG: bool = true;
 const TRACE: bool = false;
 
@@ -135,36 +136,6 @@ pub enum OpCode {
     LessInt,
     GetLocalZero,
     SetLocalZero,
-}
-
-fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
-    for op in ops {
-        match op {
-            SCall { id } => {
-                let f = namespace.getFunction(*id);
-                if !f.0.isPure {
-                    return false
-                }
-            }
-            LCall { namespace, id } => {
-                let f = vm.getNamespace(*namespace).getFunction(*id);
-                if !f.0.isPure {
-                    return false
-                }
-            }
-            DynamicCall => {
-                return false
-            }
-            SetGlobal { .. } => {
-                return false
-            }
-            GetGlobal { .. } => {
-                return false
-            }
-            _ => {}
-        }
-    }
-    true
 }
 
 #[derive(Debug, Clone)]
@@ -284,7 +255,7 @@ impl VirtualMachine {
         let mut x = HashMap::new();
 
         for n in &self.namespaces.actual {
-            for (f, _) in &n.functions.actual {
+            for (f, _) in n.getFunctions() {
                 let mut buf = String::new();
                 buf += &n.name;
                 buf += "::";
@@ -321,14 +292,11 @@ impl VirtualMachine {
             unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).stack.pop().unwrap() }
         }
         else {
-            let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
-            let mut buf: Value = Value::null();
+            let mut res = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
 
             unsafe { res.size = res.size.unchecked_sub(1) };
 
-            unsafe { ptr::copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value, &mut buf as *mut Value, 1); }
-
-            buf
+            unsafe { read_via_copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value) }
         }
     }
 
@@ -340,7 +308,7 @@ impl VirtualMachine {
             }
         }
         else {
-            let mut res: &mut FastVec<Value> = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
+            let mut res = unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
 
             unsafe { res.size = res.size.unchecked_sub(amount) };
         }
@@ -694,7 +662,7 @@ impl VirtualMachine {
                 }
                 New { namespaceID, structID } => unsafe {
                     let n = self.getNamespace(*namespaceID);
-                    let s = n.structs.getFast(*structID).unwrap();
+                    let s = n.getStruct(*structID);
 
                     let mut l = Layout::new::<()>();
 
@@ -740,14 +708,14 @@ impl VirtualMachine {
                 SetGlobal { namespaceID, globalID } => {
                     let v = self.pop();
                     let n = self.getNamespaceMut(*namespaceID);
-                    let g = n.globals.getFastMut(*globalID).unwrap();
+                    let g = n.getGlobalMut(*globalID);
 
                     g.1 = v;
                 }
                 GetGlobal { namespaceID, globalID } => {
                     let n = self.getNamespace(*namespaceID);
 
-                    self.push(n.globals.getFast(*globalID).unwrap().1)
+                    self.push(n.getGlobal(*globalID).1)
                 }
                 MulInt => {
                     let a = self.pop();
@@ -795,7 +763,7 @@ impl VirtualMachine {
                 continue
             }
 
-            for (index, g) in n.globals.actual.iter_mut().enumerate() {
+            for (index, g) in n.getGlobalsMut().iter_mut().enumerate() {
                 unsafe {
                     let mut ctx = ExpressionCtx{
                         ops: &mut vec![],
@@ -811,17 +779,27 @@ impl VirtualMachine {
                 }
             }
 
-            for (index, (f, a)) in n.functions.actual.iter_mut().enumerate() {
+            let nId = n.id;
+
+            for (index, (f, a)) in n.getFunctionsMut().iter_mut().enumerate() {
                 if let FunctionTypeMeta::Runtime(_) = f.functionType {
                     let mut ops = vec![];
                     let mut labelCounter = 0;
                     let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression, &mut labelCounter)? };
                     f.localsMeta = res.into_boxed_slice();
 
-                    let opt = emitOpcodes(optimizeOps(ops));
+                    let opt = optimizeOps(ops);
+
+                    let res = getSymbolicChunks(&opt);
+
+                    for c in res {
+                        println!("chunk: {:?}", c)
+                    }
+
+                    let opt = emitOpcodes(opt);
 
                     if DEBUG {
-                        println!("link opcodes N: {}, F: {} {} {:?}", n.id, index, f.name, opt);
+                        println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
                     }
 
                     // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());

@@ -190,15 +190,15 @@ pub struct Namespace {
     pub name: String,
     pub state: NamespaceState,
 
-    pub functions: FastAcess<String, (FunctionMeta, Option<LoadedFunction>)>,
+    functions: FastAcess<String, (FunctionMeta, Option<LoadedFunction>)>,
 
-    pub globals: FastAcess<String, (GlobalMeta, Value)>,
+    globals: FastAcess<String, (GlobalMeta, Value)>,
 
-    pub structs: FastAcess<String, StructMeta>,
+    structs: FastAcess<String, StructMeta>,
 
-    pub strings: FastAcess<String, *mut Str>,
+    strings: FastAcess<String, *mut Str>,
 
-    pub types: FastAcess<DataType, DataType>
+    types: FastAcess<DataType, DataType>
 }
 
 impl Allocation for Namespace {
@@ -229,6 +229,38 @@ impl Namespace {
             .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Global }))?;
 
         Ok((&gId.0.0, gId.1))
+    }
+
+    pub fn getGlobal(&self, id: usize) -> &(GlobalMeta, Value) {
+        self.globals.getFast(id).unwrap()
+    }
+
+    pub fn getGlobalMut(&mut self, id: usize) -> &mut (GlobalMeta, Value) {
+        self.globals.getFastMut(id).unwrap()
+    }
+
+    pub fn getStruct(&self, id: usize) -> &StructMeta {
+        self.structs.getFast(id).unwrap()
+    }
+
+    pub fn getStructMut(&mut self, id: usize) -> &mut StructMeta {
+        self.structs.getFastMut(id).unwrap()
+    }
+
+    pub fn getFunctions(&self) -> &Vec<(FunctionMeta, Option<LoadedFunction>)> {
+        &self.functions.actual
+    }
+
+    pub fn getFunctionsMut(&mut self) -> &mut Vec<(FunctionMeta, Option<LoadedFunction>)> {
+        &mut self.functions.actual
+    }
+
+    pub fn getGlobals(&self) -> &Vec<(GlobalMeta, Value)> {
+        &self.globals.actual
+    }
+
+    pub fn getGlobalsMut(&mut self) -> &mut Vec<(GlobalMeta, Value)> {
+        &mut self.globals.actual
     }
 
     pub fn findStruct(&self, name: &str) -> Result<(&StructMeta, usize), CodeGenError> {

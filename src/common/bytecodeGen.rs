@@ -42,6 +42,29 @@ impl Into<SymbolicOpcode> for OpCode {
     }
 }
 
+pub fn getSymbolicChunks(ops: &Vec<SymbolicOpcode>) -> Vec<Vec<OpCode>> {
+    let mut buf = vec![];
+
+    let mut curBuf = vec![];
+
+    for op in ops {
+        match op {
+            Op(o) => {
+                curBuf.push(o.clone())
+            }
+            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
+            _ => {
+                if !curBuf.is_empty() {
+                    buf.push(curBuf);
+                    curBuf = vec![];
+                }
+            }
+        }
+    }
+
+    buf
+}
+
 impl SymbolicOpcode {
     pub fn isOp(&self, op: OpCode) -> bool {
         match self {
@@ -317,7 +340,7 @@ impl ExpressionCtx<'_> {
                         }
                     }
                     else if let Expression::NamespaceAccess(v) = &**(prev as *const Box<Expression>) {
-                        let (namespace, namespaceID) = self.vm.findNamespaceParts(&v[..v.len()-1])?;
+                        let (namespace, _) = self.vm.findNamespaceParts(&v[..v.len()-1])?;
 
                         let genName = genFunName(&v.join("::"), &args.iter().map(|it| { self.transfer(it).toDataType().unwrap() }).collect::<Vec<_>>());
 
@@ -336,12 +359,12 @@ impl ExpressionCtx<'_> {
                     Object(o) => {
                         match o.name.as_str() {
                             "Array" | "String" => {
-                                return Ok(DataType::Int)
+                                return Ok(Int)
                             }
                             _ => {}
                         }
 
-                        let (structMeta, structID) = self.currentNamespace.findStruct(o.name.as_str())?;
+                        let (structMeta, _) = self.currentNamespace.findStruct(o.name.as_str())?;
                         let fieldID = structMeta.fieldsLookup.get(fieldName).unwrap();
                         let t = structMeta.fields.get(*fieldID).unwrap();
                         Ok(t.typ.clone())
@@ -834,7 +857,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             let (namespace, namespaceId) = ctx.vm.findNamespace(&r).unwrap();
             let n = genFunName(f.name.as_str(), &t);
 
-            let funcId = namespace.functions.getSlow(&n).unwrap().1;
+            let funcId = namespace.findFunction(&n)?.1;
 
             for arg in &f.arguments {
                 genExpression(ctx.makeExpressionCtx(arg, None))?;

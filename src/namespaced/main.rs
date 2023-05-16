@@ -40,8 +40,8 @@ fn main() {
 
     let nn = vm.getNamespace(id);
 
-    let (fMeta, f) = nn.functions.actual.last().unwrap();
-    let xd = fMeta.localsMeta.iter().map(|it| {it.typ.toDefaultValue()}).collect::<Vec<_>>();
+    let (fMeta, f) = nn.getFunctions().last().unwrap();
+    let xd = fMeta.localsMeta.iter().map(|it| { it.typ.toDefaultValue() }).collect::<Vec<_>>();
     let now = Instant::now();
 
     let ptr = Box::into_raw(xd.into_boxed_slice());
@@ -51,7 +51,7 @@ fn main() {
             localVariables: ptr.as_mut_ptr(),
             programCounter: 0,
             namespaceId: nn.id,
-            functionId: nn.functions.actual.len() - 1,
+            functionId: nn.getFunctions().len() - 1,
         }, false);
     }
     let elapsed = now.elapsed();

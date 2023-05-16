@@ -4,8 +4,12 @@ use std::arch::asm;
 use crate::errors::LoadFileError;
 use crate::lexer::{tokenizeSource, TokenType};
 use crate::parser::{parseDataType, TokenProvider};
+use crate::vm;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
+use crate::vm::namespace::Namespace;
+use crate::vm::vm::{OpCode, VirtualMachine};
+use crate::vm::vm::OpCode::{GetGlobal, LCall, SCall, SetGlobal};
 
 // same as Vec but can be unsafely modified and accessed
 pub struct FastVec<T> {
@@ -239,4 +243,32 @@ pub fn printRegisters() {
     println!("r13: {}", r13);
     println!("r14: {}", r14);
     println!("r15: {}", r15);
+}
+
+fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
+    for op in ops {
+        match op {
+            SCall { id } => {
+                let f = namespace.getFunction(*id);
+                
+                return f.0.isPure
+            }
+            LCall { namespace, id } => {
+                let f = vm.getNamespace(*namespace).getFunction(*id);
+                
+                return f.0.isPure
+            }
+            OpCode::DynamicCall => {
+                return false
+            }
+            SetGlobal { .. } => {
+                return false
+            }
+            GetGlobal { .. } => {
+                return false
+            }
+            _ => {}
+        }
+    }
+    true
 }
