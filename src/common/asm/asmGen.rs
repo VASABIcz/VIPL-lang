@@ -10,7 +10,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 /*
 rdi, rsi, rdx, rcx, r8, r9
@@ -63,7 +63,6 @@ impl<T: AsmGen> Jitter<T> {
         if !DEBUG {
             return;
         }
-        return;
         self.gen.beginIgnore();
 
         let t = text.replace("\"", "");
@@ -138,7 +137,10 @@ impl<T: AsmGen> Jitter<T> {
         let offset = self.gen.getStackOffset();
 
         // FIXME not sure if its even reliable it looks like rust doesnt align stack for ffi calls
-        let needsAlignment = (offset - 1) % 2 == 0;
+
+        println!("current offset is {}", offset);
+
+        let needsAlignment = false; // (offset) % 2 == 0;
 
         if needsAlignment {
             self.gen.offsetStack(-1);
@@ -179,8 +181,6 @@ impl<T: AsmGen> Jitter<T> {
     fn genCall(&mut self, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize, localsCount: usize) {
         self.gen.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
 
-        self.gen.beginIgnore();
-
         self.gen.comment("push args to stack");
 
         let mut locals = vec![];
@@ -217,10 +217,8 @@ impl<T: AsmGen> Jitter<T> {
         self.releaseRegister(r);
 
         self.gen.offsetStack(localsCount as isize); // consume args
-        self.gen.endIgnore();
 
         if returns {
-            // printDigit(Rax.into());
             let r = self.acquireAny();
             self.gen.mov(r.into(), Rax.into());
             self.stack.push(r);

@@ -156,6 +156,8 @@ pub fn printStack() {
     println!("rsp is {}", ptr)
 }
 
+// Oxidation-Reduction Potential
+
 pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value, vm: &mut VirtualMachine, frame: &mut StackFrame) -> Value {
     saveRegisters();
     let res = f(vm, frame);

@@ -17,7 +17,7 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 
 #[no_mangle]
@@ -151,9 +151,7 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     if DEBUG {
         println!("[ffi] LCall {:?} {} {} {:?}", vm as *mut VirtualMachine, namespaceID, functionID, rsp)
     }
-
-    let d =unsafe { &mut *  (vm as *mut VirtualMachine) };
-    let namespace = vm.getNamespace(namespaceID);//
+    let namespace = vm.getNamespace(namespaceID);
     let f = namespace.getFunction(functionID);
 
     let returns = f.0.returns();

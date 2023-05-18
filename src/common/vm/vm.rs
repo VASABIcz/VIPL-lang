@@ -782,24 +782,26 @@ impl VirtualMachine {
             let nId = n.id;
 
             for (index, (f, a)) in n.getFunctionsMut().iter_mut().enumerate() {
-                if let FunctionTypeMeta::Runtime(_) = f.functionType {
-                    let mut ops = vec![];
-                    let mut labelCounter = 0;
-                    let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression, &mut labelCounter)? };
-                    f.localsMeta = res.into_boxed_slice();
+                unsafe {
+                    if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                        let mut ops = vec![];
+                        let mut labelCounter = 0;
+                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression, &mut labelCounter)? };
+                        f.localsMeta = res.into_boxed_slice();
 
-                    let opt = optimizeOps(ops);
+                        let opt = optimizeOps(ops);
 
-                    let opt = emitOpcodes(opt);
+                        let opt = emitOpcodes(opt);
 
-                    if DEBUG {
-                        println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
+                        if DEBUG {
+                            println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
+                        }
+
+                        let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
+                        *a = Some(Native(nf))
+
+                        // *a = Some(LoadedFunction::Virtual(opt));
                     }
-
-                    // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                    // *a = Some(Native(nf))
-
-                    *a = Some(LoadedFunction::Virtual(opt));
                 }
             }
 

@@ -250,12 +250,12 @@ fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
         match op {
             SCall { id } => {
                 let f = namespace.getFunction(*id);
-                
+
                 return f.0.isPure
             }
             LCall { namespace, id } => {
                 let f = vm.getNamespace(*namespace).getFunction(*id);
-                
+
                 return f.0.isPure
             }
             OpCode::DynamicCall => {
