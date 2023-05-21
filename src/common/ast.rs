@@ -53,10 +53,11 @@ pub enum Expression {
     ArrayIndexing(Box<ArrayAccess>),
     NotExpression(Box<Expression>, Location),
     NamespaceAccess(Vec<String>),
-    Lambda(Vec<(String, Option<DataType>)>, Vec<Statement>),
+    Lambda(Vec<VariableMetadata>, Vec<Statement>, Option<DataType>),
     Callable(Box<Expression>, Vec<Expression>),
     StructInit(String, Vec<(String, Expression)>),
     FieldAccess(Box<Expression>, String),
+    TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
     Null
 }
 
@@ -96,7 +97,7 @@ pub struct FunctionCall {
 pub enum Statement {
     While(While),
     If(If),
-    Return(Return),
+    Return(Expression),
     Continue,
     Break,
     Loop(Vec<Statement>),
@@ -174,6 +175,7 @@ pub struct FunctionDef {
     pub body: Vec<Statement>,
     pub returnType: Option<DataType>,
     pub isNative: bool,
+    pub isOneLine: bool
 }
 
 impl FunctionDef {

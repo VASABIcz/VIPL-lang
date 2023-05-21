@@ -17,7 +17,7 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 
 #[no_mangle]
@@ -186,8 +186,6 @@ pub extern fn printDigit(n: isize) {
     println!("[debug] hex: \"{:#01x}\"", n);
 }
 
-
-// TODO
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushValue: extern fn(&mut VirtualMachine, isize) -> (),
@@ -201,7 +199,6 @@ pub struct NativeWrapper {
     pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
     pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
-    // pub arrNew: extern fn(&mut VirtualMachine) -> *mut ViplObject<Array>,
 
     pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,

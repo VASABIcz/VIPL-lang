@@ -21,8 +21,10 @@ use crate::vm::dataType::Generic::Any;
 use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
-use crate::vm::vm::JmpType::False;
+use crate::vm::vm::JmpType::{False, True};
 use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
+
+const DEBUG: bool = true;
 
 #[derive(Debug, Clone)]
 pub enum SymbolicOpcode {
@@ -35,6 +37,58 @@ pub enum SymbolicOpcode {
     LoopEnd,
     LoopLabel(usize),
 }
+
+pub struct Body {
+    pub body: Vec<Statement>
+}
+
+pub struct SimpleCtx<'a> {
+    pub ops: &'a mut Vec<SymbolicOpcode>,
+    pub functionReturns: &'a HashMap<MyStr, Option<DataType>>,
+    pub currentNamespace: &'a Namespace,
+    pub vm: &'a VirtualMachine,
+    pub handle: fn(&mut StatementCtx, DataType) -> (),
+    pub labelCounter: &'a mut usize
+}
+
+impl SimpleCtx<'_> {
+    pub fn inflate<'a>(&'a mut self, statement: &'a Statement, vTable: &'a mut HashMap<MyStr, (DataType, usize)>, loopContext: Option<usize>) -> StatementCtx<'a> {
+        StatementCtx {
+            statement: &statement,
+            ops: self.ops,
+            functionReturns: self.functionReturns,
+            vTable,
+            loopContext,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labelCounter: self.labelCounter,
+        }
+    }
+}
+
+impl Body {
+    pub fn new(b: Vec<Statement>) -> Self {
+        Self {
+            body: b,
+        }
+    }
+
+    pub fn buildLocalsTable(&self, mut ctx: SimpleCtx) -> Result<Vec<VariableMetadata>, CodeGenError> {
+        let mut table = vec![];
+        let mut x = &mut HashMap::new();
+
+
+        for statement in &self.body {
+            let mut x = ctx.inflate(statement, x, None);
+
+            buildLocalsTable(&mut x, &mut table)?;
+        }
+
+        return Ok(table)
+    }
+}
+
 
 impl Into<SymbolicOpcode> for OpCode {
     fn into(self) -> SymbolicOpcode {
@@ -317,8 +371,8 @@ impl ExpressionCtx<'_> {
 
                 Ok(global.0.typ.clone())
             },
-            Expression::Lambda(l, body) => {
-                todo!()
+            Expression::Lambda(l, body, ret) => {
+                Ok(DataType::Function { args: l.iter().map(|it| it.typ.clone()).collect(), ret: Box::new(ret.clone().unwrap_or(DataType::Void)) })
                 //Ok(self.typeHint.clone())
             },
             Expression::Callable(prev, args) => {
@@ -372,7 +426,17 @@ impl ExpressionCtx<'_> {
                     _ => panic!(),
                 }
             }
-            Expression::Null => Ok(self.typeHint.clone().unwrap_or(Void))
+            Expression::Null => Ok(self.typeHint.clone().unwrap_or(Void)),
+            Expression::TernaryOperator(cond, tr, fal) => {
+                let a = self.transfer(&tr).toDataType()?;
+                let b = self.transfer(&fal).toDataType()?;
+                let c = self.transfer(&cond).toDataType()?;
+
+                a.assertType(b)?;
+                c.assertType(Bool)?;
+
+                Ok(a)
+            }
         }
     }
 }
@@ -647,7 +711,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
                     if !ctx.vTable.contains_key(&c.clone().into()) {
                         let t = ctx.makeExpressionCtx(init, None).toDataType()?;
                         if t.isVoid() {
-
+                            panic!()
                         }
                         ctx.vTable.insert(
                             c.clone().into(),
@@ -688,15 +752,7 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
     Ok(())
 }
 
-pub fn genFunctionDef(
-    fun: &FunctionMeta,
-    ops: &mut Vec<SymbolicOpcode>,
-    functionReturns: &HashMap<MyStr, Option<DataType>>,
-    vm: &VirtualMachine,
-    currentNamespace: &Namespace,
-    handleStatementExpression: fn(&mut StatementCtx, DataType),
-    labelCounter: &mut usize
-) -> Result<Vec<VariableMetadata>, CodeGenError> {
+pub fn genFunctionDef(fun: &FunctionMeta, mut ctx: SimpleCtx) -> Result<Vec<VariableMetadata>, CodeGenError> {
     let mut vTable = HashMap::new();
     let mut locals = vec![];
 
@@ -707,38 +763,23 @@ pub fn genFunctionDef(
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
         for s in body {
-            let mut ctx = StatementCtx{
-                statement: &Statement::Continue,
-                ops,
-                functionReturns,
-                vTable: &mut vTable,
-                loopContext: None,
-                currentNamespace,
-                vm,
-                handle: handleStatementExpression,
-                labelCounter,
-            };
-            buildLocalsTable(&mut ctx.transfer(s), &mut locals)?;
+            let mut sCtx = ctx.inflate(&s, &mut vTable, None);
+
+            buildLocalsTable(&mut sCtx, &mut locals)?;
         }
 
         for statement in body {
-            genStatement(StatementCtx{
-                statement,
-                ops,
-                functionReturns,
-                vTable: &mut vTable,
-                loopContext: None,
-                currentNamespace,
-                vm,
-                handle: handleStatementExpression,
-                labelCounter,
-            })?;
+            if DEBUG {
+                println!("gening {:?}", statement)
+            }
+            let mut sCtx = ctx.inflate(&statement, &mut vTable, None);
+            genStatement(sCtx)?;
         }
-        match ops.last() {
-            None => ops.push(SymbolicOpcode::Op(Return)),
+        match ctx.ops.last() {
+            None => ctx.ops.push(SymbolicOpcode::Op(Return)),
             Some(op) => {
                 if !op.isOp(Return) {
-                    ops.push(SymbolicOpcode::Op(Return));
+                    ctx.ops.push(SymbolicOpcode::Op(Return));
                 }
             }
         }
@@ -832,7 +873,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.makeLabel(endLabel);
         }
         Statement::Return(ret) => {
-            genExpression(ctx.makeExpressionCtx(&ret.exp, None))?;
+            genExpression(ctx.makeExpressionCtx(&ret, None))?;
             ctx.push(Return)
         }
         Statement::Continue => ctx.opContinue(),
@@ -952,59 +993,45 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::ForLoop(var, arr, body) => {
-            let mut bodyOps: Vec<SymbolicOpcode> = vec![];
             let varID = ctx.vTable.get(&var.clone().into()).unwrap().1;
+            let endLabel = ctx.nextLabel();
 
             // BEGIN
             ctx.push(PushIntZero);
+            ctx.beginLoop();
 
-            let beginIndex = ctx.ops.len();
+            ctx.push(Dup);
 
-            // BODY
-            bodyOps.push(Dup.into());
-
-            let mut arrCtx = ctx.makeExpressionCtx(arr, None);
-            arrCtx.ops = &mut bodyOps;
-            genExpression(arrCtx)?;
+            ctx.makeExpressionCtx(arr, None).genExpression()?;
 
             // dec array length bcs less-eq is not implemented
-            bodyOps.push(ArrayLength.into());
-            bodyOps.push(PushIntOne.into());
-            bodyOps.push(Sub(Int).into());
+            ctx.push(ArrayLength);
+            ctx.push(PushIntOne);
+            ctx.push(Sub(Int));
 
-            bodyOps.push(Less(Int).into());
+            ctx.push(Less(Int));
 
-            let mut buf: Vec<SymbolicOpcode> = vec![];
+            ctx.push(Dup);
+            ctx.makeExpressionCtx(arr, None).genExpression()?;
+            ctx.push(Swap);
 
-            buf.push(Dup.into());
-            let mut arrCtx = ctx.makeExpressionCtx(arr, None);
-            arrCtx.ops = &mut buf;
-            genExpression(arrCtx)?;
-            buf.push(Swap.into());
-
-            buf.push(ArrayLoad.into());
-            buf.push(SetLocal { index: varID }.into());
+            ctx.push(ArrayLoad);
+            ctx.push(SetLocal { index: varID });
 
             for s in body {
-                let mut sCtx = ctx.transfer(s);
-                sCtx.ops = &mut buf;
+                let sCtx = ctx.transfer(s);
                 genStatement(sCtx)?;
             }
 
+            ctx.opJmp(endLabel, True);
 
-            // jmp to end if done
-            bodyOps.push(Jmp { offset: (buf.len()+3) as isize, jmpType: JmpType::True }.into());
+            ctx.push(PushIntOne);
+            ctx.push(Add(DataType::Int));
 
-            bodyOps.extend(buf);
+            ctx.opContinue();
 
-            bodyOps.push(PushIntOne.into());
-            bodyOps.push(Add(DataType::Int).into());
-            // jmp to begining
-            bodyOps.push(Jmp { offset: (bodyOps.len() as isize+1)*-1, jmpType: JmpType::Jmp }.into());
-
-            ctx.ops.extend(bodyOps);
-
-            // END
+            ctx.endLoop();
+            ctx.makeLabel(endLabel);
             ctx.push(Pop);
         }
     }
@@ -1045,7 +1072,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             r.push(StrNew(MyStr::Runtime(i.clone().into_boxed_str())));
         }
         Expression::BoolLiteral(i) => r.push(OpCode::PushBool(*i)),
-        Expression::Variable(v) => unsafe {
+        Expression::Variable(v) => {
             if r.vTable.contains_key(&v.clone().into()) {
                 r.push(OpCode::GetLocal {
                     index: r
@@ -1126,11 +1153,16 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
             r.push(OpCode::GetGlobal { namespaceID: namespace.1, globalID: global.1 })
         },
-        Expression::Lambda(args, body) => {
-            // procedure to determine return type of a fucntion
-            // better typehinting
+        Expression::Lambda(args, body,  ret) => {
+            let meta = FunctionMeta::makeRuntime(
+                "lambda".to_string(),
+                args.clone().into_boxed_slice(),
+                0,
+                ret.clone().unwrap_or(Void),
+                body.clone()
+            );
 
-            todo!()
+            // ctx.currentNamespace.registerFunctionDef()
         },
         Expression::Callable(prev, args) => {
             let mut argTypes = vec![];
@@ -1220,6 +1252,32 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
         }
         Expression::Null => {
             ctx.push(OpCode::PushIntZero)
+        }
+        Expression::TernaryOperator(cond, tr, fal) => {
+            let a = r.constructCtx(&tr).toDataType()?;
+            let b = r.constructCtx(&fal).toDataType()?;
+            let c = r.constructCtx(&cond).toDataType()?;
+
+            a.assertType(b)?;
+            c.assertType(Bool)?;
+
+            let falseLabel = r.nextLabel();
+            let endLabel = r.nextLabel();
+
+
+            println!("condition {:?}", cond);
+
+            r.constructCtx(cond).genExpression()?;
+
+            r.opJmp(falseLabel, False);
+
+            r.constructCtx(tr).genExpression()?;
+            r.opJmp(endLabel, JmpType::Jmp);
+
+            r.makeLabel(falseLabel);
+            r.constructCtx(fal).genExpression()?;
+
+            r.makeLabel(endLabel);
         }
     }
     Ok(())

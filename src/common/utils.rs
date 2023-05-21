@@ -8,6 +8,7 @@ use crate::vm;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
+use crate::vm::value::Value;
 use crate::vm::vm::{OpCode, VirtualMachine};
 use crate::vm::vm::OpCode::{GetGlobal, LCall, SCall, SetGlobal};
 
@@ -150,6 +151,47 @@ pub fn saveRegisters() {
     }
 }
 
+// TODO
+pub fn callNative(ptr: usize) -> Value {
+    unsafe {
+        asm!(
+        "push rbx",
+        "push rsi",
+        "push rdi",
+        // "push rbp",
+        // "push rsp",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "sub rsp, 8"
+        );
+
+        asm!(
+        "add rsp, 8",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        // "pop rsp",
+        // "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rbx",
+        );
+    }
+
+    todo!()
+}
+
 #[inline(always)]
 pub fn restoreRegisters() {
     unsafe {
@@ -271,4 +313,13 @@ fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
         }
     }
     true
+}
+
+pub fn readNeighbours(ptr: *const Value, amount: usize) {
+    unsafe {
+        for x in -(amount as isize)..amount as isize {
+            let v = ptr.offset(x).read();
+            println!("read {:?} at offset {}", v, x)
+        }
+    }
 }

@@ -9,11 +9,11 @@ use std::mem::size_of;
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, getSymbolicChunks, StatementCtx, SymbolicOpcode};
+use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, getSymbolicChunks, SimpleCtx, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
 use crate::fastAcess::FastAcess;
 use crate::ffi::NativeWrapper;
-use crate::utils::FastVec;
+use crate::utils::{FastVec, readNeighbours};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
@@ -433,6 +433,7 @@ impl VirtualMachine {
         self.frames.pop();
     }
 
+
     #[inline(always)]
     pub fn call(&mut self, namespaceId: usize, functionId: usize) {
         let namespace = self.getNamespace(namespaceId);
@@ -443,8 +444,10 @@ impl VirtualMachine {
             vm.push(Value::null());
         }
 
+        println!("args count {}", fMeta.argsCount);
+
         let res = if vm.stack.len() > 0 {
-            vm.stack.len()-1
+            vm.stack.len()-fMeta.localsMeta.len()
         }
         else {
             0
@@ -786,7 +789,17 @@ impl VirtualMachine {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
                         let mut ops = vec![];
                         let mut labelCounter = 0;
-                        let res = unsafe { genFunctionDef(f, &mut ops, &functionReturns, &*v, &mut *nn, self.handleStatementExpression, &mut labelCounter)? };
+
+                        let ctx = SimpleCtx{
+                            ops: &mut ops,
+                            functionReturns: &functionReturns,
+                            currentNamespace: &mut *nn,
+                            vm: &*v,
+                            handle: self.handleStatementExpression,
+                            labelCounter: &mut labelCounter,
+                        };
+
+                        let res = genFunctionDef(f, ctx)?;
                         f.localsMeta = res.into_boxed_slice();
 
                         let opt = optimizeOps(ops);
@@ -797,10 +810,10 @@ impl VirtualMachine {
                             println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
                         }
 
-                        let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                        *a = Some(Native(nf))
+                        // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
+                        // *a = Some(Native(nf))
 
-                        // *a = Some(LoadedFunction::Virtual(opt));
+                        *a = Some(LoadedFunction::Virtual(opt));
                     }
                 }
             }

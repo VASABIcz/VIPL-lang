@@ -13,11 +13,20 @@ use crate::ast::BinaryOp::Add;
 use crate::ast::Statement::{Assignable, StatementExpression};
 use crate::errors::{InvalidCharLiteral, InvalidToken, NoSuchParsingUnit, ParserError};
 use crate::lexer::{LexingUnit, Token, TokenType};
-use crate::lexer::TokenType::{AddAs, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, For, Global, Gt, Identifier, If, Import, In, LambdaBegin, Loop, Minus, MulAs, Namespace, Native, Not, Null, OCB, ORB, OSB, Return, StringLiteral, Struct, SubAs};
+use crate::lexer::TokenType::*;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::myStr::MyStr;
+
+
+const VALID_EXPRESSION_TOKENS: [TokenType; 5] = [
+    StringLiteral,
+    TokenType::IntLiteral,
+    LongLiteral,
+    Identifier,
+    CharLiteral,
+];
 
 #[derive(Debug)]
 struct InvalidOperation {
@@ -57,7 +66,40 @@ fn getParsingUnit<'a, OUT, IN: PartialEq + Clone + Debug>(
     })
 }
 
-pub fn parseOne<OUT: Clone + Debug, IN: Clone + Debug + Send + Sync + PartialEq + 'static + Copy>(
+fn parseExprOneLine(
+    tokenProvider: &mut TokenProvider<TokenType>,
+    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
+) -> Result<Expression, ParserError<TokenType>> {
+    let res = parseOneOneLine(tokenProvider, Ahead, parser, None)?;
+    res.asExpr()
+}
+
+pub fn parseOneOneLine<OUT: Clone + Debug, IN: Clone + Debug + Send + Sync + PartialEq + 'static + Copy> (
+    tokens: &mut TokenProvider<IN>,
+    typ: ParsingUnitSearchType,
+    parsingUnits: &[Box<dyn ParsingUnit<OUT, IN>>],
+    previous: Option<OUT>,
+) -> Result<OUT, ParserError<IN>> {
+    let row = tokens.peekOneRes()?.location.row;
+
+    let u = getParsingUnit(tokens, typ.clone(), parsingUnits, previous.clone()).ok_or(ParserError::NoSuchParsingUnit(NoSuchParsingUnit{ typ, token: tokens.peekOne().cloned() }))?;
+
+    println!("parsing {:?}", u);
+    let mut first = u.parse(tokens, previous, parsingUnits)?;
+    println!("parsed {:?}", first);
+
+    while let Some(v) = getParsingUnit(tokens, ParsingUnitSearchType::Back, parsingUnits, Some(first.clone())) && tokens.peekOneRes()?.location.row == row {
+        first = v.parse(tokens, Some(first), parsingUnits)?;
+    }
+
+    if let Some(v) = getParsingUnit(tokens, ParsingUnitSearchType::Around, parsingUnits, Some(first.clone())) && tokens.peekOneRes()?.location.row == row {
+        first = v.parse(tokens, Some(first), parsingUnits)?;
+    }
+
+    Ok(first.clone())
+}
+
+pub fn parseOne<OUT: Clone + Debug, IN: Clone + Debug + Send + Sync + PartialEq + 'static + Copy> (
     tokens: &mut TokenProvider<IN>,
     typ: ParsingUnitSearchType,
     parsingUnits: &[Box<dyn ParsingUnit<OUT, IN>>],
@@ -66,6 +108,7 @@ pub fn parseOne<OUT: Clone + Debug, IN: Clone + Debug + Send + Sync + PartialEq 
     let u =
         getParsingUnit(tokens, typ.clone(), parsingUnits, previous.clone()).ok_or(ParserError::NoSuchParsingUnit(NoSuchParsingUnit{ typ, token: tokens.peekOne().cloned() }))?;
 
+    println!("parsing {:?}", u);
     let mut first = u.parse(tokens, previous, parsingUnits)?;
 
     while let Some(v) = getParsingUnit(tokens, ParsingUnitSearchType::Back, parsingUnits, Some(first.clone())) {
@@ -256,6 +299,28 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         self.tokens.get(self.index)
     }
 
+    pub fn peekOneRes(&self) -> Result<&Token<T>, ParserError<T>> {
+        Ok(self.tokens.get(self.index).unwrap())
+    }
+
+    pub fn isPeekRow(&self, row: usize) -> bool {
+        match self.peekOne() {
+            None => false,
+            Some(v) => {
+                v.location.row == row
+            }
+        }
+    }
+
+    pub fn isPeekIndexRow(&self, index: usize, row: usize) -> bool {
+        match self.peekIndex(index) {
+            None => false,
+            Some(v) => {
+                v.location.row == row
+            }
+        }
+    }
+
     fn peekIndex(&self, offset: usize) -> Option<&Token<T>> {
         self.tokens.get(self.index + offset)
     }
@@ -274,7 +339,7 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         return true
     }
 
-    pub fn parseManyWithSeparatorUntil<F: Fn(&mut TokenProvider<T>) -> Result<OUT, ParserError<T>>, OUT>(&mut self, mut f: F, sep: Option<T>, end: T) -> Result<Vec<OUT>, ParserError<T>> {
+    pub fn parseManyWithSeparatorUntil<F: core::ops::Fn(&mut TokenProvider<T>) -> Result<OUT, ParserError<T>>, OUT>(&mut self, mut f: F, sep: Option<T>, end: T) -> Result<Vec<OUT>, ParserError<T>> {
         let mut buf = vec![];
 
         if self.isPeekType(end) {
@@ -331,6 +396,15 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
+    pub fn isPeekTypeOf(&self, f: fn(T) -> bool) -> bool {
+        let t = self.peekOne();
+
+        match t {
+            None => false,
+            Some(v) => f(v.typ),
+        }
+    }
+
     pub fn isPeekIndexType(&self, typ: T, offset: usize) -> bool {
         let t = self.peekIndex(offset);
 
@@ -343,6 +417,15 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
     pub fn isDone(&self) -> bool {
         self.index >= self.tokens.len()
     }
+
+    pub fn isPeekIndexOf(&self, f: fn(T) -> bool, offset: usize) -> bool {
+        let t = self.peekIndex(offset);
+
+        match t {
+            None => false,
+            Some(v) => f(v.typ),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -353,7 +436,28 @@ pub enum Operation {
 }
 
 impl Operation {
-    fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
+    pub fn isExpr(&self) -> bool {
+        match self {
+            Operation::Expr(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn isStatement(&self) -> bool {
+        match self {
+            Operation::Statement(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn isGlobal(&self) -> bool {
+        match self {
+            Operation::Global(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
         match self {
             Operation::Expr(e) => Ok(e),
             _ => Err(ParserError::Unknown(Box::new(InvalidOperation {
@@ -429,7 +533,7 @@ impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
     }
 
     fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
-        tokenProvider.isPeekType(TokenType::Fn)
+        tokenProvider.isPeekType(TokenType::Fn) && tokenProvider.isPeekIndexType(Identifier, 1)
     }
 
     fn parse(
@@ -476,16 +580,26 @@ impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
             returnType = Some(parseDataType(tokens)?);
         }
 
-        let statements = parseBody(tokens, parser)?;
+        let mut isOneLine = false;
+
+        let body = if tokens.isPeekType(Equals) {
+            tokens.getAssert(Equals)?;
+            isOneLine = true;
+            vec![ast::Statement::Return(parseExpr(tokens, parser)?)]
+        }
+        else {
+            parseBody(tokens, parser)?
+        };
 
         Ok(Operation::Global(Node::FunctionDef(
-            crate::ast::FunctionDef {
+            ast::FunctionDef {
                 name,
                 localsMeta: args,
                 argsCount: argCount,
-                body: statements,
+                body,
                 returnType,
                 isNative,
+                isOneLine,
             },
         )))
     }
@@ -732,7 +846,7 @@ impl ParsingUnit<Operation, TokenType> for ReturnParsingUnit {
     ) -> Result<Operation, ParserError<TokenType>> {
         tokenProvider.getAssert(Return)?;
         let exp = parseExpr(tokenProvider, parser)?;
-        Ok(Operation::Statement(Statement::Return(ast::Return { exp })))
+        Ok(Operation::Statement(Statement::Return(exp)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1359,12 +1473,10 @@ impl ParsingUnit<Operation, TokenType> for NamespaceParsingUnit {
 struct CallableParsingUnit;
 
 impl ParsingUnit<Operation, TokenType> for CallableParsingUnit {
-    fn getType(&self) -> ParsingUnitSearchType {
-        Back
-    }
+    fn getType(&self) -> ParsingUnitSearchType { Around }
 
     fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
-        tokenProvider.isPeekType(ORB) && previous.map(|it| it.asExprRef().map(|it| { it.isCallable() }).unwrap_or(false)).unwrap_or(false)
+        tokenProvider.isPeekType(ORB) && previous.map_or(false, |it| it.asExprRef().map_or(false, |it| { it.isCallable() }))
     }
 
     fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
@@ -1411,31 +1523,51 @@ impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
     }
 
     fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
-        tokenProvider.isPeekType(OCB)
+        tokenProvider.isPeekType(Fn) && tokenProvider.isPeekIndexType(ORB, 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
-        tokenProvider.getAssert(OCB)?;
-        let res = tokenProvider.parseManyWithSeparatorUntil(|it| {
-            let argName = it.getIdentifier()?;
-            let a = if it.isPeekType(Comma) {
-                it.getAssert(Comma)?;
-                Some(parseDataType(it)?)
+    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+        tokens.getAssert(Fn)?;
+
+        let mut args = vec![];
+        let mut argCount = 0;
+        let mut returnType = None;
+
+        tokens.getAssert(ORB)?;
+        while !tokens.isPeekType(CRB) {
+            let argName = tokens.getIdentifier()?;
+            tokens.getAssert(Colon)?;
+
+            let t = parseDataType(tokens)?;
+
+            args.push(VariableMetadata {
+                name: MyStr::Runtime(argName.into_boxed_str()),
+                typ: t,
+            });
+            argCount += 1;
+            if tokens.isPeekType(Comma) {
+                tokens.consume();
             }
-            else {
-                None
-            };
-            Ok((argName, a))
-        }, Some(Colon), LambdaBegin)?;
-
-        let mut statements = vec![];
-
-        while !tokenProvider.isPeekType(CCB) {
-            statements.push(parseOne(tokenProvider, Ahead, parser, None)?.asStatement()?);
         }
-        tokenProvider.getAssert(CCB)?;
+        tokens.getAssert(CRB)?;
 
-        Ok(Operation::Expr(Expression::Lambda(res, statements)))
+        if tokens.isPeekType(Colon) {
+            tokens.getAssert(Colon)?;
+            returnType = Some(parseDataType(tokens)?);
+        }
+
+        let mut isOneLine = false;
+
+        let body = if tokens.isPeekType(Equals) {
+            tokens.getAssert(Equals)?;
+            isOneLine = true;
+            vec![ast::Statement::Return(parseExpr(tokens, parser)?)]
+        }
+        else {
+            parseBody(tokens, parser)?
+        };
+
+        Ok(Operation::Expr(Expression::Lambda(args, body, returnType)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1707,6 +1839,105 @@ impl ParsingUnit<Operation, TokenType> for NullParsingUnit {
     }
 }
 
+#[derive(Debug)]
+struct OneArgFunctionParsintUnit;
+
+impl ParsingUnit<Operation, TokenType> for OneArgFunctionParsintUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+        let row = match tokenProvider.peekOne() {
+            None => {
+                return false
+            }
+            Some(v) => v.location.row
+        };
+
+        tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexOf(|it| VALID_EXPRESSION_TOKENS.contains(&it), 1) && tokenProvider.isPeekIndexRow(1, row)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+        let name = tokenProvider.getIdentifier()?;
+        let arg = parseExprOneLine(tokenProvider, parser)?;
+
+        return Ok(Operation::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![arg])))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+struct TwoArgFunctionParsintUnit;
+
+impl ParsingUnit<Operation, TokenType> for TwoArgFunctionParsintUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Around
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+        previous.map_or(false, |it| it.isExpr()) && tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexOf(|it| VALID_EXPRESSION_TOKENS.contains(&it), 1)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+
+        let name = tokenProvider.getIdentifier()?;
+        let arg = parseExprOneLine(tokenProvider, parser)?;
+        println!("previous {:?} {} {:?}", previous, name, arg);
+
+        return Ok(Operation::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![previous.unwrap().asExpr()?, arg])))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+struct TernaryOperatorParsingUnit;
+
+impl ParsingUnit<Operation, TokenType> for TernaryOperatorParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Around
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+        tokenProvider.isPeekType(QuestionMark) && previous.map_or(false, |it| it.isExpr())
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+        tokenProvider.getAssert(QuestionMark)?;
+
+        let a = parseExpr(tokenProvider, parser)?;
+
+        tokenProvider.getAssert(Colon)?;
+
+        let b = parseExpr(tokenProvider, parser)?;
+
+
+        Ok(Operation::Expr(Expression::TernaryOperator(Box::new(previous.unwrap().asExpr()?), Box::new(a), Box::new(b))))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
     vec![
         Box::new(AssignableParsingUnit),
@@ -1772,6 +2003,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
             priority: 8,
         }),
         Box::new(BracketsParsingUnit),
+        Box::new(OneArgFunctionParsintUnit),
         Box::new(VariableParsingUnit),
         Box::new(IfParsingUnit),
         Box::new(BoolParsingUnit),
@@ -1781,6 +2013,8 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
         Box::new(FieldAccessParsingUnit),
         Box::new(GlobalParsingUnit),
         Box::new(ForParsingUnit),
-        Box::new(LambdaParsingUnit)
+        Box::new(LambdaParsingUnit),
+        Box::new(TwoArgFunctionParsintUnit),
+        Box::new(TernaryOperatorParsingUnit)
     ]
 }

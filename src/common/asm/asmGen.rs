@@ -51,7 +51,7 @@ pub struct Jitter<T: AsmGen> {
 impl<T: AsmGen> Jitter<T> {
     pub fn new(gen: T) -> Self {
         Self {
-            gen: gen,
+            gen,
             regs: RegisterManager::new(),
             stack: vec![],
         }
@@ -187,6 +187,7 @@ impl<T: AsmGen> Jitter<T> {
 
         for _ in 0..argsCount {
             let r = self.stack.pop().unwrap();
+            self.releaseRegister(r);
             locals.push(r);
         }
 
@@ -194,7 +195,6 @@ impl<T: AsmGen> Jitter<T> {
 
         for r in locals {
             self.gen.push(r.into());
-            self.releaseRegister(r);
         }
 
         if argsCount < localsCount {
@@ -378,8 +378,10 @@ impl<T: AsmGen> Jitter<T> {
                     self.releaseRegister(r)
                 },
                 OpCode::Dup => {
-                    todo!();
                     let r = self.stack.pop().unwrap();
+                    let r1 = self.stack.pop().unwrap();
+                    self.stack.push(r);
+                    self.stack.push(r1);
                 }
                 OpCode::GetLocal { index } => {
                     let r = aqireReg();

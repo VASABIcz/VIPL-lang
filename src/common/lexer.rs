@@ -238,7 +238,9 @@ pub enum TokenType {
     Dot,
 
     Inc,
-    Dec
+    Dec,
+    NewLine,
+    QuestionMark
 }
 
 pub trait Stringable {
@@ -302,7 +304,9 @@ impl Stringable for TokenType {
             TokenType::Or => "||",
             TokenType::Dot => ".",
             TokenType::Inc => "++",
-            TokenType::Dec => "--"
+            TokenType::Dec => "--",
+            TokenType::NewLine => "\\n",
+            TokenType::QuestionMark => "?"
         }
     }
 }
@@ -568,7 +572,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
-        RangeLexingUnit::new("/*", "*\\", None),
+        RangeLexingUnit::new("/*", "*/", None),
         //
         KeywordLexingUnit::new("+=", TokenType::AddAs),
         KeywordLexingUnit::new("-=", TokenType::SubAs),
@@ -588,6 +592,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("=", TokenType::Equals),
         KeywordLexingUnit::new(":", TokenType::Colon),
         KeywordLexingUnit::new(",", TokenType::Comma),
+        KeywordLexingUnit::new("?", TokenType::QuestionMark),
         // ops
         KeywordLexingUnit::new("+", TokenType::Plus),
         KeywordLexingUnit::new("-", TokenType::Minus),

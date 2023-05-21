@@ -156,8 +156,8 @@ pub fn printStack() {
     println!("rsp is {}", ptr)
 }
 
-// Oxidation-Reduction Potential
-
+// this is stupid
+#[inline(never)]
 pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value, vm: &mut VirtualMachine, frame: &mut StackFrame) -> Value {
     saveRegisters();
     let res = f(vm, frame);
@@ -365,6 +365,7 @@ impl Namespace {
             body: vec![],
             returnType: None,
             isNative: false,
+            isOneLine: false,
         };
 
         for s in src {
