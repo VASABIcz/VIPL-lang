@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::Index;
+use crate::bytecodeGen::Body;
 
 use crate::errors::{InvalidTypeException, TypeNotFound};
 use crate::lexer::Location;
@@ -53,7 +54,7 @@ pub enum Expression {
     ArrayIndexing(Box<ArrayAccess>),
     NotExpression(Box<Expression>, Location),
     NamespaceAccess(Vec<String>),
-    Lambda(Vec<VariableMetadata>, Vec<Statement>, Option<DataType>),
+    Lambda(Vec<VariableMetadata>, Body, Option<DataType>),
     Callable(Box<Expression>, Vec<Expression>),
     StructInit(String, Vec<(String, Expression)>),
     FieldAccess(Box<Expression>, String),
@@ -130,7 +131,7 @@ pub struct Return {
 #[derive(Debug, Clone, PartialEq)]
 pub struct If {
     pub condition: Expression,
-    pub body: Vec<Statement>,
+    pub body: Body,
     pub elseBody: Option<Vec<Statement>>,
     pub elseIfs: Vec<(Expression, Vec<Statement>)>,
 }
@@ -172,7 +173,7 @@ pub struct FunctionDef {
     pub name: String,
     pub localsMeta: Vec<VariableMetadata>,
     pub argsCount: usize,
-    pub body: Vec<Statement>,
+    pub body: Body,
     pub returnType: Option<DataType>,
     pub isNative: bool,
     pub isOneLine: bool
@@ -189,7 +190,7 @@ impl FunctionDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct While {
     pub exp: Expression,
-    pub body: Vec<Statement>,
+    pub body: Body,
 }
 
 #[derive(Debug, Clone)]

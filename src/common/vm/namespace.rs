@@ -7,7 +7,7 @@ use std::mem::transmute;
 use libc::printf;
 
 use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
-use crate::bytecodeGen::{ExpressionCtx, genFunctionDef};
+use crate::bytecodeGen::{Body, ExpressionCtx, genFunctionDef};
 use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, SymbolType};
 use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
@@ -31,7 +31,7 @@ pub enum NamespaceState {
 
 #[derive(Debug, Clone)]
 pub enum FunctionTypeMeta {
-    Runtime(Vec<Statement>),
+    Runtime(Body),
     Builtin,
     Native
 }
@@ -124,7 +124,7 @@ impl FunctionMeta {
         }
     }
 
-    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, body: Vec<Statement>) -> Self {
+    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, body: Body) -> Self {
         Self {
             name,
             argsCount,
@@ -362,7 +362,7 @@ impl Namespace {
             name: String::from("__init"),
             localsMeta: mainLocals,
             argsCount: 0,
-            body: vec![],
+            body: Body::new(vec![]),
             returnType: None,
             isNative: false,
             isOneLine: false,
@@ -390,12 +390,12 @@ impl Namespace {
                     }
                 }
                 Operation::Statement(v) => {
-                    initFunction.body.push(v);
+                    initFunction.body.statements.push(v);
                 }
                 Operation::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
-                        c => initFunction.body.push(Statement::StatementExpression(c))
+                        c => initFunction.body.statements.push(Statement::StatementExpression(c))
                     }
                 }
             }

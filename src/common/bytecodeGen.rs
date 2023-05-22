@@ -38,8 +38,9 @@ pub enum SymbolicOpcode {
     LoopLabel(usize),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Body {
-    pub body: Vec<Statement>
+    statements: Vec<Statement>
 }
 
 pub struct SimpleCtx<'a> {
@@ -70,22 +71,30 @@ impl SimpleCtx<'_> {
 impl Body {
     pub fn new(b: Vec<Statement>) -> Self {
         Self {
-            body: b,
+            statements: b,
         }
     }
 
-    pub fn buildLocalsTable(&self, mut ctx: SimpleCtx) -> Result<Vec<VariableMetadata>, CodeGenError> {
-        let mut table = vec![];
-        let mut x = &mut HashMap::new();
+    pub fn buildLocalsTable(&self, mut ctx: SimpleCtx, locals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<(), CodeGenError> {
+        let mut buf = vec![];
 
 
-        for statement in &self.body {
-            let mut x = ctx.inflate(statement, x, None);
+        for statement in &self.statements {
+            let mut statementCtx = ctx.inflate(statement, locals, None);
 
-            buildLocalsTable(&mut x, &mut table)?;
+            buildLocalsTable(&mut statementCtx, &mut buf)?;
         }
 
-        return Ok(table)
+        Ok(())
+    }
+
+    pub fn generate(&self, mut ctx: SimpleCtx, locals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<(), CodeGenError> {
+        for statement in &self.statements {
+            let y = ctx.inflate(statement, locals, None);
+            genStatement(y)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -566,6 +575,17 @@ pub struct StatementCtx<'a> {
 }
 
 impl StatementCtx<'_> {
+    pub fn deflate(&mut self) -> SimpleCtx {
+        SimpleCtx {
+            ops: self.ops,
+            functionReturns: self.functionReturns,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labelCounter: self.labelCounter,
+        }
+    }
+
     pub fn transfer<'a>(&'a mut self, statement: &'a Statement) -> StatementCtx {
         StatementCtx {
             statement,
@@ -683,12 +703,12 @@ impl StatementCtx<'_> {
 pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>) -> Result<(), CodeGenError> {
     match ctx.statement {
         Statement::While(w) => {
-            for s in &w.body {
+            for s in &w.body.statements {
                 buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
         }
         Statement::If(i) => {
-            for s in &i.body {
+            for s in &i.body.statements {
                 buildLocalsTable(&mut ctx.transfer(s), locals)?;
             }
             if let Some(body) = &i.elseBody {
@@ -762,17 +782,17 @@ pub fn genFunctionDef(fun: &FunctionMeta, mut ctx: SimpleCtx) -> Result<Vec<Vari
     }
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
-        for s in body {
+        for s in &body.statements {
             let mut sCtx = ctx.inflate(&s, &mut vTable, None);
 
             buildLocalsTable(&mut sCtx, &mut locals)?;
         }
 
-        for statement in body {
+        for statement in &body.statements {
             if DEBUG {
                 println!("gening {:?}", statement)
             }
-            let mut sCtx = ctx.inflate(&statement, &mut vTable, None);
+            let sCtx = ctx.inflate(&statement, &mut vTable, None);
             genStatement(sCtx)?;
         }
         match ctx.ops.last() {
@@ -804,10 +824,8 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             ctx.opJmp(loopEnd, False);
 
-            for s in &w.body {
-                let ctx2 = ctx.copy(s);
-                genStatement(ctx2)?;
-            }
+            w.body.generate(ctx.deflate(), ctx.vTable)?;
+
             ctx.opContinue();
 
             ctx.makeLabel(loopEnd);
@@ -837,10 +855,8 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 ctx.opJmp(endLabel, False)
             }
 
-            for s in &flow.body {
-                let op = ctx.copy(s);
-                genStatement(op)?;
-            }
+            flow.body.generate(ctx.deflate(), ctx.vTable)?;
+
             ctx.opJmp(endLabel, JmpType::Jmp);
 
             for (i, els) in flow.elseIfs.iter().enumerate() {

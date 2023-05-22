@@ -11,6 +11,7 @@ use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, BinaryOp,
 use crate::ast::Expression::{IntLiteral, NamespaceAccess};
 use crate::ast::BinaryOp::Add;
 use crate::ast::Statement::{Assignable, StatementExpression};
+use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, NoSuchParsingUnit, ParserError};
 use crate::lexer::{LexingUnit, Token, TokenType};
 use crate::lexer::TokenType::*;
@@ -596,7 +597,7 @@ impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
                 name,
                 localsMeta: args,
                 argsCount: argCount,
-                body,
+                body: Body::new(body),
                 returnType,
                 isNative,
                 isOneLine,
@@ -882,7 +883,7 @@ impl ParsingUnit<Operation, TokenType> for WhileParsingUnit {
 
         Ok(Operation::Statement(Statement::While(While {
             exp: op,
-            body: statements,
+            body: Body::new(statements),
         })))
     }
 
@@ -964,7 +965,7 @@ impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
 
         Ok(Operation::Statement(Statement::If(ast::If {
             condition,
-            body,
+            body: Body::new(body),
             elseBody,
             elseIfs,
         })))
@@ -1567,7 +1568,7 @@ impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
             parseBody(tokens, parser)?
         };
 
-        Ok(Operation::Expr(Expression::Lambda(args, body, returnType)))
+        Ok(Operation::Expr(Expression::Lambda(args, Body::new(body), returnType)))
     }
 
     fn getPriority(&self) -> usize {
