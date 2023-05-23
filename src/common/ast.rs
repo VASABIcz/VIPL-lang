@@ -5,7 +5,7 @@ use std::ops::Index;
 use crate::bytecodeGen::Body;
 
 use crate::errors::{InvalidTypeException, TypeNotFound};
-use crate::lexer::Location;
+use crate::lexer::{Location, Token, TokenType};
 use crate::utils::genFunName;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};

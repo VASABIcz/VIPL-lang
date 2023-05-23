@@ -12,12 +12,14 @@ use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, Symb
 use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::{tokenizeSource, TokenType};
+use crate::naughtyBox::Naughty;
 use crate::parser::{Operation, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
-use crate::vm::heap::{Allocation, HayCollector};
+use crate::vm::heap::{Allocation, Hay, HayCollector};
+use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
@@ -191,6 +193,7 @@ pub struct Namespace {
     pub id: usize,
     pub name: String,
     pub state: NamespaceState,
+    pub vm: Naughty<VirtualMachine>,
 
     functions: FastAcess<String, (FunctionMeta, Option<LoadedFunction>)>,
 
@@ -198,7 +201,7 @@ pub struct Namespace {
 
     structs: FastAcess<String, StructMeta>,
 
-    strings: FastAcess<String, *mut Str>,
+    strings: FastAcess<String, *mut ViplObject<Str>>,
 
     types: FastAcess<DataType, DataType>
 }
@@ -216,6 +219,16 @@ impl Allocation for Namespace {
 }
 
 impl Namespace {
+    pub fn allocateOrGetString(&mut self, s: &str) -> usize {
+        match self.strings.getSlowStr(s) {
+            None => {
+                let al = self.vm.getMut().allocateString(s);
+                self.strings.insert(s.to_string(), al.inner).unwrap()
+            }
+            Some(v) => v.1
+        }
+    }
+
     pub fn asPtr(&self) -> *mut Namespace {
         self as *const Namespace as *mut Namespace
     }
@@ -343,11 +356,12 @@ impl Namespace {
         res
     }
 
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, vm: *mut VirtualMachine) -> Self {
         Self {
             id: 0,
             name: name.to_string(),
             state: NamespaceState::PartiallyLoaded,
+            vm: Naughty::new(vm),
             functions: Default::default(),
             globals: Default::default(),
             structs: Default::default(),
@@ -357,7 +371,7 @@ impl Namespace {
     }
 
     pub fn constructNamespace(src: Vec<Operation>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
-        let mut n = Namespace::new(name);
+        let mut n = Namespace::new(name, vm);
         let mut initFunction = FunctionDef{
             name: String::from("__init"),
             localsMeta: mainLocals,
@@ -390,12 +404,12 @@ impl Namespace {
                     }
                 }
                 Operation::Statement(v) => {
-                    initFunction.body.statements.push(v);
+                    initFunction.body.push(v);
                 }
                 Operation::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
-                        c => initFunction.body.statements.push(Statement::StatementExpression(c))
+                        c => initFunction.body.push(Statement::StatementExpression(c))
                     }
                 }
             }

@@ -11,7 +11,7 @@ use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {
-    let mut namespace = Namespace::new("out");
+    let mut namespace = Namespace::new("out", vm);
 
     namespace.makeNativeNoRat(
         "print",

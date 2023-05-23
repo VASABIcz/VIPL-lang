@@ -21,6 +21,7 @@ pub struct FastVec<T> {
 
 #[inline]
 pub fn genFunName(name: &str, args: &[DataType]) -> String {
+
     format!("{}({})", name, argsToString(args))
 }
 

@@ -36,7 +36,7 @@ struct InvalidOperation {
 }
 
 impl Display for InvalidOperation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "expected {:?} to be {}", self.operation, self.expected)
     }
 }
@@ -53,9 +53,9 @@ fn getParsingUnit<'a, OUT, IN: PartialEq + Clone + Debug>(
         let parserType = it.getType();
 
         let canParse = match typ {
-            ParsingUnitSearchType::Around => parserType != ParsingUnitSearchType::Ahead,
-            ParsingUnitSearchType::Back => parserType == ParsingUnitSearchType::Back,
-            ParsingUnitSearchType::Ahead => parserType == ParsingUnitSearchType::Ahead,
+            Around => parserType != Ahead,
+            Back => parserType == Back,
+            Ahead => parserType == Ahead,
         };
 
         let p = match &previous {

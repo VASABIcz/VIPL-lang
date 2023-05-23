@@ -1,11 +1,12 @@
 use std::{intrinsics, ptr};
 use std::alloc::{alloc, dealloc, Layout};
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
 use std::intrinsics::{read_via_copy, unlikely};
-use std::mem::size_of;
+use std::mem::{size_of, transmute};
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
@@ -111,7 +112,7 @@ pub enum OpCode {
     ArrayLoad,
     ArrayLength,
     StringLength,
-    StrNew(MyStr),
+    StrNew(usize),
     GetChar,
     Inc {
         typ: DataType,
@@ -758,67 +759,72 @@ impl VirtualMachine {
     pub fn link(&mut self) -> Result<(), CodeGenError> {
         let functionReturns = self.buildFunctionReturn();
 
-        let v = self as *mut VirtualMachine as *const VirtualMachine;
+        let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
 
-        for n in &mut self.namespaces.actual {
-            let nn = n as *mut Namespace;
-            if n.state == Loaded {
-                continue
-            }
-
-            for (index, g) in n.getGlobalsMut().iter_mut().enumerate() {
-                unsafe {
-                    let mut ctx = ExpressionCtx{
-                        ops: &mut vec![],
-                        exp: &g.0.default,
-                        functionReturns: &functionReturns,
-                        vTable: &Default::default(),
-                        typeHint: None,
-                        currentNamespace: &mut *nn,
-                        vm: &*v,
-                        labelCounter: &mut 0,
-                    };
-                    g.0.typ = ctx.toDataType()?;
+        unsafe {
+            for n in &mut (&mut *warCrime.get()).namespaces.actual {
+                let nn = n as *mut Namespace;
+                if n.state == Loaded {
+                    continue
                 }
-            }
 
-            let nId = n.id;
+                let anotherWarCrime: &mut UnsafeCell<Namespace> = unsafe { transmute(n) };
 
-            for (index, (f, a)) in n.getFunctionsMut().iter_mut().enumerate() {
-                unsafe {
-                    if let FunctionTypeMeta::Runtime(_) = f.functionType {
-                        let mut ops = vec![];
-                        let mut labelCounter = 0;
-
-                        let ctx = SimpleCtx{
-                            ops: &mut ops,
+                for (index, g) in (&mut *anotherWarCrime.get()).getGlobalsMut().iter_mut().enumerate() {
+                    unsafe {
+                        let mut ctx = ExpressionCtx {
+                            ops: &mut vec![],
+                            exp: &g.0.default,
                             functionReturns: &functionReturns,
-                            currentNamespace: &mut *nn,
-                            vm: &*v,
-                            handle: self.handleStatementExpression,
-                            labelCounter: &mut labelCounter,
+                            vTable: &Default::default(),
+                            typeHint: None,
+                            currentNamespace: anotherWarCrime,
+                            vm: warCrime,
+                            labelCounter: &mut 0,
                         };
-
-                        let res = genFunctionDef(f, ctx)?;
-                        f.localsMeta = res.into_boxed_slice();
-
-                        let opt = optimizeOps(ops);
-
-                        let opt = emitOpcodes(opt);
-
-                        if DEBUG {
-                            println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
-                        }
-
-                        // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                        // *a = Some(Native(nf))
-
-                        *a = Some(LoadedFunction::Virtual(opt));
+                        g.0.typ = ctx.toDataType()?;
                     }
                 }
-            }
 
-            n.state = Loaded;
+                let nId = (&*anotherWarCrime.get()).id;
+
+                for (index, (f, a)) in (&mut *anotherWarCrime.get()).getFunctionsMut().iter_mut().enumerate() {
+                    unsafe {
+                        if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                            let mut ops = vec![];
+                            let mut labelCounter = 0;
+
+                            let ctx = SimpleCtx {
+                                ops: &mut ops,
+                                functionReturns: &functionReturns,
+                                currentNamespace: anotherWarCrime,
+                                handle: (&*warCrime.get()).handleStatementExpression,
+                                vm: warCrime,
+                                labelCounter: &mut labelCounter,
+                            };
+
+
+                            let res = genFunctionDef(f, ctx)?;
+                            f.localsMeta = res.into_boxed_slice();
+
+                            let opt = optimizeOps(ops);
+
+                            let opt = emitOpcodes(opt);
+
+                            if DEBUG {
+                                println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
+                            }
+
+                            // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
+                            // *a = Some(Native(nf))
+
+                            *a = Some(LoadedFunction::Virtual(opt));
+                        }
+                    }
+                }
+
+                (&mut *anotherWarCrime.get()).state = Loaded;
+            }
         }
         Ok(())
     }

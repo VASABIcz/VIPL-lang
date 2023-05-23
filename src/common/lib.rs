@@ -45,3 +45,4 @@ pub mod utils;
 pub mod vm;
 pub mod regix;
 pub mod fastAcess;
+pub mod naughtyBox;

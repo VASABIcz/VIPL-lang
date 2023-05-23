@@ -1,0 +1,15 @@
+
+fn sum(arr: Array<int>): int {
+    s = 0
+    for i in arr {
+        s += i
+    }
+
+    return i
+}
+
+a = [1, 2, 3, 4]
+
+out::print(sum a)
+
+// out::print(a.sum())

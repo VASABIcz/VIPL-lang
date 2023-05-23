@@ -55,7 +55,7 @@ pub extern fn dropVm(ptr: *mut VirtualMachine) {
 pub extern fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> usize {
     let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-    let namespace = Namespace::new(name);
+    let namespace = Namespace::new(name, vm);
 
     vm.registerNamespace(namespace)
 }

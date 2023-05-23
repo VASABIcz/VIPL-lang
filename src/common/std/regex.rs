@@ -28,7 +28,7 @@ impl Allocation for RegixData {
 }
 
 pub fn registerRegex(vm: &mut VirtualMachine) {
-    let mut n = Namespace::new("re");
+    let mut n = Namespace::new("re", vm);
 
     n.makeNative("compile", &[DataType::str()], |vm, s| {
         let str = s.getRef(0).getString();

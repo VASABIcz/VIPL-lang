@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -206,7 +207,7 @@ impl JSON {
 }
 
 pub fn registerJson(vm: &mut VirtualMachine) {
-    let mut n = Namespace::new("js");
+    let mut n = Namespace::new("js", vm);
 
     n.registerStruct(StructMeta{
         name: "JBool".to_string(),
