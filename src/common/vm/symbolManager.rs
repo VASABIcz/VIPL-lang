@@ -1,6 +1,3 @@
-
-
-
 /*
 structs, functions, globals, local variable lifetime
 
@@ -14,16 +11,10 @@ out::something().sum()
 x.y.z.sum || field of fn tyoe || extension fn
 ()
  */
-pub struct SymbolManager {
-
-}
+pub struct SymbolManager {}
 
 impl SymbolManager {
-    pub fn lookupFunction(&self) {
+    pub fn lookupFunction(&self) {}
 
-    }
-
-    pub fn lookupGlobal(&self) {
-
-    }
+    pub fn lookupGlobal(&self) {}
 }

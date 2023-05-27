@@ -1,15 +1,14 @@
+use libc::exit;
 use std::arch::asm;
 use std::ffi::{c_char, c_int, CStr};
 use std::fmt::{Debug, Formatter};
 use std::mem::forget;
 use std::ptr;
 use std::time::Duration;
-use libc::exit;
 
 use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
 use crate::vm::heap::Hay;
-use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{callNative, LoadedFunction, Namespace};
 use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::{Array, Str};
@@ -19,9 +18,8 @@ use crate::vm::vm::VirtualMachine;
 
 const DEBUG: bool = false;
 
-
 #[no_mangle]
-pub extern fn createVm() -> *mut VirtualMachine {
+pub extern "C" fn createVm() -> *mut VirtualMachine {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
     forget(ptr);
@@ -29,30 +27,30 @@ pub extern fn createVm() -> *mut VirtualMachine {
 }
 
 #[no_mangle]
-pub extern fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
+pub extern "C" fn pushStack(vm: &mut VirtualMachine, value: &mut Value) {
     vm.push(*value);
 }
 
 #[no_mangle]
-pub extern fn popStack(vm: &mut VirtualMachine) -> Value {
+pub extern "C" fn popStack(vm: &mut VirtualMachine) -> Value {
     vm.pop()
 }
 
 #[no_mangle]
-pub extern fn test(vm: *mut VirtualMachine) {
+pub extern "C" fn test(vm: *mut VirtualMachine) {
     println!("hello from vipl :3");
     unsafe { println!("{:?}", &*vm) }
 }
 
 #[no_mangle]
-pub extern fn dropVm(ptr: *mut VirtualMachine) {
+pub extern "C" fn dropVm(ptr: *mut VirtualMachine) {
     unsafe {
         ptr::drop_in_place(ptr);
     }
 }
 
 #[no_mangle]
-pub extern fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> usize {
+pub extern "C" fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> usize {
     let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
     let namespace = Namespace::new(name, vm);
@@ -61,7 +59,7 @@ pub extern fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) -> u
 }
 
 #[no_mangle]
-pub extern fn pushValue(vm: &mut VirtualMachine, v: isize) {
+pub extern "C" fn pushValue(vm: &mut VirtualMachine, v: isize) {
     if DEBUG {
         println!("[ffi] pushInt {}", v);
     }
@@ -69,7 +67,7 @@ pub extern fn pushValue(vm: &mut VirtualMachine, v: isize) {
 }
 
 #[no_mangle]
-pub extern fn popValue(vm: &mut VirtualMachine) -> isize {
+pub extern "C" fn popValue(vm: &mut VirtualMachine) -> isize {
     if DEBUG {
         println!("[ffi] popInt");
     }
@@ -77,7 +75,7 @@ pub extern fn popValue(vm: &mut VirtualMachine) -> isize {
 }
 
 #[no_mangle]
-pub extern fn getLocalsValue(vm: &mut StackFrame, index: usize) -> isize {
+pub extern "C" fn getLocalsValue(vm: &mut StackFrame, index: usize) -> isize {
     if DEBUG {
         println!("[ffi] getLocalsInt");
     }
@@ -85,7 +83,12 @@ pub extern fn getLocalsValue(vm: &mut StackFrame, index: usize) -> isize {
 }
 
 #[no_mangle]
-pub extern fn arrSetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize, value: isize) {
+pub extern "C" fn arrSetValue(
+    _vm: &mut VirtualMachine,
+    obj: &mut ViplObject<Array>,
+    index: usize,
+    value: isize,
+) {
     if DEBUG {
         println!("[ffi] arrSetInt");
     }
@@ -93,7 +96,11 @@ pub extern fn arrSetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>,
 }
 
 #[no_mangle]
-pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject<Str>, index: usize) -> u8 {
+pub extern "C" fn stringGetChar(
+    _vm: &mut VirtualMachine,
+    obj: &mut ViplObject<Str>,
+    index: usize,
+) -> u8 {
     if DEBUG {
         println!("[ffi] stringGetChar");
     }
@@ -102,7 +109,11 @@ pub extern fn stringGetChar(_vm: &mut VirtualMachine, obj: &mut ViplObject<Str>,
 }
 
 #[no_mangle]
-pub extern fn arrGetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>, index: usize) -> isize {
+pub extern "C" fn arrGetValue(
+    _vm: &mut VirtualMachine,
+    obj: &mut ViplObject<Array>,
+    index: usize,
+) -> isize {
     if DEBUG {
         println!("[ffi] arrGetInt");
     }
@@ -110,7 +121,11 @@ pub extern fn arrGetValue(_vm: &mut VirtualMachine, obj: &mut ViplObject<Array>,
 }
 
 #[no_mangle]
-pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *const c_char) -> *mut ViplObject<Str> {
+pub extern "C" fn stringNew(
+    vm: *mut VirtualMachine,
+    _locals: *mut StackFrame,
+    s: *const c_char,
+) -> *mut ViplObject<Str> {
     if DEBUG {
         println!("[ffi] stringNew");
     }
@@ -125,7 +140,7 @@ pub extern fn stringNew(vm: *mut VirtualMachine, _locals: *mut StackFrame, s: *c
 }
 
 #[no_mangle]
-pub extern fn strConcat(
+pub extern "C" fn strConcat(
     vm: &mut VirtualMachine,
     _locals: &mut StackFrame,
     s1: &mut ViplObject<Str>,
@@ -145,11 +160,18 @@ pub extern fn strConcat(
     ptr.asHay().inner
 }
 
-
 #[no_mangle]
-pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usize, rsp: *mut Value) -> Value {
+pub extern "C" fn lCall(
+    vm: &mut VirtualMachine,
+    functionID: usize,
+    namespaceID: usize,
+    rsp: *mut Value,
+) -> Value {
     if DEBUG {
-        println!("[ffi] LCall {:?} {} {} {:?}", vm as *mut VirtualMachine, namespaceID, functionID, rsp)
+        println!(
+            "[ffi] LCall {:?} {} {} {:?}",
+            vm as *mut VirtualMachine, namespaceID, functionID, rsp
+        )
     }
     let namespace = vm.getNamespace(namespaceID);
     let f = namespace.getFunction(functionID);
@@ -162,7 +184,7 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
 
     let callable = f.1.as_ref().unwrap();
 
-    let frame = StackFrame{
+    let frame = StackFrame {
         localVariables: rsp,
         programCounter: 0,
         namespaceId: namespaceID,
@@ -174,36 +196,46 @@ pub extern fn lCall(vm: &mut VirtualMachine, functionID: usize, namespaceID: usi
     let ret = callable.call(vm2, frame, returns);
 
     if DEBUG {
-        println!("[ffi] after call {} {:?}", vm.frameCount(), vm.getFrame().localVariables);
+        println!(
+            "[ffi] after call {} {:?}",
+            vm.frameCount(),
+            vm.getFrame().localVariables
+        );
     }
 
     return ret;
 }
 
 #[no_mangle]
-pub extern fn printDigit(n: isize) {
+pub extern "C" fn printDigit(n: isize) {
     println!("[debug] dec: \"{}\"", n);
     println!("[debug] hex: \"{:#01x}\"", n);
 }
 
 #[repr(C)]
 pub struct NativeWrapper {
-    pub pushValue: extern fn(&mut VirtualMachine, isize) -> (),
+    pub pushValue: extern "C" fn(&mut VirtualMachine, isize) -> (),
 
-    pub popValue: extern fn(&mut VirtualMachine) -> isize,
+    pub popValue: extern "C" fn(&mut VirtualMachine) -> isize,
 
-    pub getLocalsValue: extern fn(&mut StackFrame, usize) -> isize,
+    pub getLocalsValue: extern "C" fn(&mut StackFrame, usize) -> isize,
 
-    pub arrGetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize) -> isize,
+    pub arrGetValue: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Array>, usize) -> isize,
 
-    pub arrSetValue: extern fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
+    pub arrSetValue: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
-    pub stringNew: extern fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
+    pub stringNew:
+        extern "C" fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
 
-    pub stringGetChar: extern fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
-    pub strConcat: extern fn(&mut VirtualMachine, &mut StackFrame, &mut ViplObject<Str>, &mut ViplObject<Str>) -> *mut ViplObject<Str>,
-    pub lCall: extern fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,
-    pub printDigit: extern fn(isize)
+    pub stringGetChar: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
+    pub strConcat: extern "C" fn(
+        &mut VirtualMachine,
+        &mut StackFrame,
+        &mut ViplObject<Str>,
+        &mut ViplObject<Str>,
+    ) -> *mut ViplObject<Str>,
+    pub lCall: extern "C" fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,
+    pub printDigit: extern "C" fn(isize),
 }
 
 impl NativeWrapper {
@@ -218,7 +250,7 @@ impl NativeWrapper {
             stringGetChar,
             strConcat,
             lCall,
-            printDigit
+            printDigit,
         }
     }
 }

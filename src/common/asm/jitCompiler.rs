@@ -1,8 +1,3 @@
-use std::env::temp_dir;
-use std::fs;
-use std::mem::transmute;
-use std::process::Command;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::asm::asmExec::allocateBinFunction;
 use crate::asm::asmGen::Jitter;
 use crate::asm::nasmGen::NasmGen;
@@ -11,6 +6,11 @@ use crate::vm::namespace::Namespace;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::{OpCode, VirtualMachine};
+use std::env::temp_dir;
+use std::fs;
+use std::mem::transmute;
+use std::process::Command;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     let dir = temp_dir();
@@ -25,13 +25,17 @@ pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     let p = dir.join(format!("{}.asm", name));
     fs::write(p, asm).unwrap();
 
-    let cmd = format!("nasm -f bin {}", dir.join(format!("{}.asm", name)).to_str().unwrap());
+    let cmd = format!(
+        "nasm -f bin {}",
+        dir.join(format!("{}.asm", name)).to_str().unwrap()
+    );
 
     let e: Vec<&str> = cmd.split(' ').collect();
 
     let res = Command::new(e.first().unwrap())
         .args(&e[1..e.len()])
-        .output().unwrap();
+        .output()
+        .unwrap();
 
     println!("{}", cmd);
     println!("ERR: {}", String::from_utf8_lossy(&res.stderr));
@@ -46,22 +50,27 @@ pub fn compileAssembly(asm: &str) -> Box<[u8]> {
 pub struct JITCompiler {}
 
 impl JITCompiler {
-    pub fn compile(&self, ops: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
+    pub fn compile(
+        &self,
+        ops: Vec<OpCode>,
+        vm: &VirtualMachine,
+        namespace: &Namespace,
+        returns: bool,
+    ) -> extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value {
         let gen = OptimizingGen::new();
         let mut nasmGen = NasmGen::new();
 
         let mut j = Jitter::new(gen);
 
         if true {
-            j.generateAssembly( ops, vm, namespace, returns);
+            j.generateAssembly(ops, vm, namespace, returns);
 
             println!("{:?}", j.gen.data);
             let optimzed = j.gen.optimize();
             println!("{:?}", optimzed.data);
 
             optimzed.compile(&mut nasmGen);
-        }
-        else {
+        } else {
             j.generateAssembly(ops, vm, namespace, returns)
         }
 

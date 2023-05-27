@@ -6,7 +6,7 @@ use std::io::Stderr;
 use std::ops::Deref;
 use std::ptr::write;
 
-use crate::asm::asmLib::Register::{R13, Rax, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R13};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Register {
@@ -33,13 +33,13 @@ pub enum Register {
 
 impl Into<AsmLocation> for Register {
     fn into(self) -> AsmLocation {
-        return AsmLocation::Register(self)
+        return AsmLocation::Register(self);
     }
 }
 
 impl Into<AsmValue> for Register {
     fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Register(self))
+        return AsmValue::Concrete(Concrete::Register(self));
     }
 }
 
@@ -71,38 +71,34 @@ impl Register {
 pub enum AsmLocation {
     Register(Register),
     Indexing(Concrete, isize),
-    Identifier(String)
+    Identifier(String),
 }
 
 #[derive(Clone, Debug)]
 pub enum AsmValue {
     Concrete(Concrete),
     Indexing(Concrete, isize),
-    Identifier(String)
+    Identifier(String),
 }
 
 impl AsmValue {
     pub fn tryGetAmount(&self) -> Option<usize> {
         match self {
-            AsmValue::Concrete(c) => {
-                match c {
-                    Concrete::Number(v) => Some(*v),
-                    _ => None
-                }
-            }
-            _ => None
+            AsmValue::Concrete(c) => match c {
+                Concrete::Number(v) => Some(*v),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
     pub fn tryGetRegister(&self) -> Option<Register> {
         match self {
-            AsmValue::Concrete(c) => {
-                match c {
-                    Concrete::Register(v) => Some(v.clone()),
-                    _ => None
-                }
-            }
-            _ => None
+            AsmValue::Concrete(c) => match c {
+                Concrete::Register(v) => Some(v.clone()),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }
@@ -112,7 +108,7 @@ impl AsmLocation {
         match self {
             AsmLocation::Register(v) => v.toStr().to_string(),
             AsmLocation::Indexing(inner, offset) => format!("[{}+{}]", inner.toString(), offset),
-            AsmLocation::Identifier(v) => v.to_string()
+            AsmLocation::Identifier(v) => v.to_string(),
         }
     }
 }
@@ -121,7 +117,7 @@ impl AsmLocation {
 pub enum Concrete {
     Number(usize),
     Register(Register),
-    Lejbl(String)
+    Lejbl(String),
 }
 
 impl Debug for Concrete {
@@ -129,7 +125,7 @@ impl Debug for Concrete {
         match self {
             Concrete::Number(v) => write!(f, "{}", v),
             Concrete::Register(v) => write!(f, "{:?}", v),
-            Concrete::Lejbl(v) => write!(f, "{:?}", v)
+            Concrete::Lejbl(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -139,7 +135,7 @@ impl Concrete {
         match self {
             Concrete::Number(v) => v.to_string(),
             Concrete::Register(v) => v.toStr().to_string(),
-            Concrete::Lejbl(v) => v.to_string()
+            Concrete::Lejbl(v) => v.to_string(),
         }
     }
 }
@@ -149,62 +145,62 @@ impl AsmValue {
         match self {
             AsmValue::Indexing(inner, offset) => format!("[{}+{}]", inner.toString(), offset),
             AsmValue::Concrete(v) => v.toString(),
-            AsmValue::Identifier(v) => v.to_string()
+            AsmValue::Identifier(v) => v.to_string(),
         }
     }
 }
 
 impl Into<Concrete> for i32 {
     fn into(self) -> Concrete {
-        return Concrete::Number(self as usize)
+        return Concrete::Number(self as usize);
     }
 }
 
 impl Into<Concrete> for Register {
     fn into(self) -> Concrete {
-        return Concrete::Register(self)
+        return Concrete::Register(self);
     }
 }
 
 impl Into<AsmValue> for i32 {
     fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize))
+        return AsmValue::Concrete(Concrete::Number(self as usize));
     }
 }
 
 impl Into<AsmValue> for isize {
     fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize))
+        return AsmValue::Concrete(Concrete::Number(self as usize));
     }
 }
 
 impl Into<AsmValue> for usize {
     fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize))
+        return AsmValue::Concrete(Concrete::Number(self as usize));
     }
 }
 
 impl Into<AsmValue> for Concrete {
     fn into(self) -> AsmValue {
-        return AsmValue::Concrete(self)
+        return AsmValue::Concrete(self);
     }
 }
 
 impl Into<AsmLocation> for &str {
     fn into(self) -> AsmLocation {
-        return AsmLocation::Identifier(String::from(self))
+        return AsmLocation::Identifier(String::from(self));
     }
 }
 
 impl Into<AsmLocation> for String {
     fn into(self) -> AsmLocation {
-        return AsmLocation::Identifier(self)
+        return AsmLocation::Identifier(self);
     }
 }
 
 impl Into<AsmValue> for String {
     fn into(self) -> AsmValue {
-        return AsmValue::Identifier(self)
+        return AsmValue::Identifier(self);
     }
 }
 
@@ -254,10 +250,9 @@ pub trait AsmGen {
 
     fn offsetStack(&mut self, offset: isize) {
         if offset < 0 {
-            self.sub(Rsp.into(), (8*offset*-1).into())
-        }
-        else if offset > 0 {
-            self.add(Rsp.into(), (8*offset).into());
+            self.sub(Rsp.into(), (8 * offset * -1).into())
+        } else if offset > 0 {
+            self.add(Rsp.into(), (8 * offset).into());
         }
     }
 

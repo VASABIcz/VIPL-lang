@@ -50,24 +50,24 @@ fn main() {
         let printArray = *outNamespace.functionsLookup.get("print(Array)").unwrap();
 
         match t {
-            DataType::Int => {
-                ctx.push(LCall { namespace: outNamespaceID, id: printInt })
-            }
-            DataType::Float => {
-                ctx.push(LCall { namespace: outNamespaceID, id: printFloat })
-            }
-            DataType::Bool => {
-                ctx.push(LCall { namespace: outNamespaceID, id: printBool })
-            }
-            DataType::Char => {
-                ctx.push(LCall { namespace: outNamespaceID, id: printChar })
-            }
-            DataType::Object(_) => {
-                ctx.push(Pop)
-            }
-            DataType::Function { .. } => {
-                ctx.push(Pop)
-            }
+            DataType::Int => ctx.push(LCall {
+                namespace: outNamespaceID,
+                id: printInt,
+            }),
+            DataType::Float => ctx.push(LCall {
+                namespace: outNamespaceID,
+                id: printFloat,
+            }),
+            DataType::Bool => ctx.push(LCall {
+                namespace: outNamespaceID,
+                id: printBool,
+            }),
+            DataType::Char => ctx.push(LCall {
+                namespace: outNamespaceID,
+                id: printChar,
+            }),
+            DataType::Object(_) => ctx.push(Pop),
+            DataType::Function { .. } => ctx.push(Pop),
             DataType::Void => {}
         }
     };
@@ -81,7 +81,7 @@ fn main() {
             Ok(v) => v,
             Err(e) => {
                 handleError(e);
-                continue
+                continue;
             }
         };
 
@@ -92,7 +92,7 @@ fn main() {
             Ok(_) => {}
             Err(e) => {
                 handleError(e);
-                continue
+                continue;
             }
         }
 
@@ -101,7 +101,7 @@ fn main() {
         let fMeta = nn.functionsMeta.last().unwrap();
 
         if fMeta.localsMeta.len() > localValues.len() {
-            for _ in 0..(fMeta.localsMeta.len()-localValues.len()) {
+            for _ in 0..(fMeta.localsMeta.len() - localValues.len()) {
                 localValues.push(Value::from(0))
             }
         }
@@ -109,14 +109,17 @@ fn main() {
         mainLocals = fMeta.localsMeta.clone().into_vec();
 
         unsafe {
-            f.as_ref().unwrap().call(&mut *d, StackFrame {
-                localVariables: &mut localValues,
-                objects: None,
-                previous: None,
-                programCounter: 0,
-                namespaceId: nn,
-                functionId: nn.functions.len()-1,
-            })
+            f.as_ref().unwrap().call(
+                &mut *d,
+                StackFrame {
+                    localVariables: &mut localValues,
+                    objects: None,
+                    previous: None,
+                    programCounter: 0,
+                    namespaceId: nn,
+                    functionId: nn.functions.len() - 1,
+                },
+            )
         }
     }
 }

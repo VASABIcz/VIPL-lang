@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
+use crate::vm::nativeObjects::UntypedObject;
 use std::ops::{Deref, DerefMut};
 use std::process::exit;
-use crate::vm::nativeObjects::UntypedObject;
 
 const DEBUG: bool = false;
 
@@ -12,7 +12,7 @@ pub trait Allocation {
 
 pub struct HayCollector<'a> {
     pub visited: HashSet<usize>,
-    pub allocated: &'a HashSet<usize>
+    pub allocated: &'a HashSet<usize>,
 }
 
 impl HayCollector<'_> {
@@ -37,13 +37,13 @@ impl HayCollector<'_> {
 
 #[derive(Debug)]
 pub struct Hay<T: Allocation> {
-    pub inner: *mut T
+    pub inner: *mut T,
 }
 
 impl<T: Allocation> Clone for Hay<T> {
     #[inline(always)]
     fn clone(&self) -> Self {
-        Self{ inner: self.inner }
+        Self { inner: self.inner }
     }
 }
 
@@ -52,9 +52,7 @@ impl<T: Allocation> Copy for Hay<T> {}
 impl<T: Allocation> Hay<T> {
     #[inline]
     pub fn new(ptr: *mut T) -> Hay<T> {
-        Self {
-            inner: ptr,
-        }
+        Self { inner: ptr }
     }
 }
 
@@ -76,7 +74,7 @@ impl<T: Allocation> DerefMut for Hay<T> {
 
 #[derive(Debug, Default)]
 pub struct Heap {
-    pub allocations: HashSet<usize>
+    pub allocations: HashSet<usize>,
 }
 
 impl Heap {

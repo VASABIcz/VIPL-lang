@@ -1,16 +1,18 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::StructMeta;
 use crate::vm::objects::{Array, Str};
 use crate::vm::value::{Value, Xd};
 use crate::vm::vm::VirtualMachine;
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 pub fn blankDestroy<T>(this: &mut T) {
     println!("blankDestroy called")
 }
 
-pub fn blankGetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value> { return None }
+pub fn blankGetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value> {
+    return None;
+}
 
 pub fn blankSetField<T>(this: &mut T, vm: &mut VirtualMachine, index: usize, value: Value) {
     println!("blankSetField called")
@@ -30,10 +32,10 @@ pub trait NativeObject: Allocation + Debug {
 
 #[derive(Debug, Copy, Clone)]
 pub struct ViplNativeObject<T: Debug> {
-    pub getField: fn (&mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value>,
-    pub setField: fn (&mut T, vm: &mut VirtualMachine, index: usize, value: Value) -> (),
-    pub destroy: fn (&mut T) -> (),
-    pub collect: fn (&mut T, allocations: &mut HayCollector) -> ()
+    pub getField: fn(&mut T, vm: &mut VirtualMachine, index: usize) -> Option<Value>,
+    pub setField: fn(&mut T, vm: &mut VirtualMachine, index: usize, value: Value) -> (),
+    pub destroy: fn(&mut T) -> (),
+    pub collect: fn(&mut T, allocations: &mut HayCollector) -> (),
 }
 
 impl<T: Allocation + Debug> Default for ViplNativeObject<T> {
@@ -49,7 +51,7 @@ impl<T: Allocation + Debug> Default for ViplNativeObject<T> {
 
 #[derive(Debug)]
 pub struct SimpleObjectWrapper<const N: usize> {
-    pub fields: [Value; N]
+    pub fields: [Value; N],
 }
 
 impl<const N: usize> Allocation for SimpleObjectWrapper<N> {
@@ -63,12 +65,10 @@ impl<const N: usize> Allocation for SimpleObjectWrapper<N> {
 #[derive(Debug, Clone)]
 pub enum ObjectType<T: Debug> {
     Simple(usize),
-    Native(ViplNativeObject<T>)
+    Native(ViplNativeObject<T>),
 }
 
-impl<T: Debug + Copy> Copy for ObjectType<T> {
-
-}
+impl<T: Debug + Copy> Copy for ObjectType<T> {}
 
 #[derive(Debug)]
 pub struct ViplObjectMeta<T: Debug> {
@@ -90,28 +90,33 @@ impl<T: Debug + Copy> Clone for ViplObjectMeta<T> {
 #[derive(Debug)]
 pub struct ViplObject<T: Allocation + Debug> {
     pub meta: ViplObjectMeta<T>,
-    pub data: T
+    pub data: T,
 }
 
 impl ViplObject<Array> {
     #[inline]
     pub fn arr(arr: Array) -> ViplObject<Array> {
-        ViplObject{ meta: ViplObjectMeta {
-            namespaceId: 0,
-            structId: 1,
-            objectType: ObjectType::Native(ViplNativeObject::default()),
-        }, data: arr }
+        ViplObject {
+            meta: ViplObjectMeta {
+                namespaceId: 0,
+                structId: 1,
+                objectType: ObjectType::Native(ViplNativeObject::default()),
+            },
+            data: arr,
+        }
     }
 }
 
 impl ViplObject<Str> {
     #[inline]
     pub fn str(str: Str) -> ViplObject<Str> {
-        ViplObject{ meta: ViplObjectMeta {
-            namespaceId: 0,
-            structId: 1,
-            objectType: ObjectType::Native(ViplNativeObject::default()),
-        }, data: str
+        ViplObject {
+            meta: ViplObjectMeta {
+                namespaceId: 0,
+                structId: 1,
+                objectType: ObjectType::Native(ViplNativeObject::default()),
+            },
+            data: str,
         }
     }
 }
@@ -131,8 +136,8 @@ impl<T: Debug> ViplObjectMeta<T> {
             ObjectType::Native(v) => unsafe {
                 let offsetPtr = (self as *const ViplObjectMeta<T>).add(1);
 
-                v.destroy.call((&mut *(offsetPtr as *mut T), ))
-            }
+                v.destroy.call((&mut *(offsetPtr as *mut T),))
+            },
         }
     }
 }
@@ -151,7 +156,7 @@ impl<T: Debug> Allocation for ViplObjectMeta<T> {
             }
             ObjectType::Native(n) => unsafe {
                 n.collect.call((&mut *(offsetPtr as *mut T), allocations));
-            }
+            },
         }
     }
 }

@@ -1,0 +1,9 @@
+x = [1, 2, 3, 4]
+
+
+i = 0
+
+while i < x.size {
+    out::print(x[i])
+    i += 1
+}

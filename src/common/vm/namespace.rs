@@ -1,21 +1,18 @@
-use std::alloc::Global;
 use std::arch::asm;
 use std::collections::HashMap;
-use std::error::Error;
-use std::hint::black_box;
 use std::mem::transmute;
-use libc::printf;
 
-use crate::ast::{Expression, FunctionDef, Node, BinaryOp, Statement, VariableModd};
-use crate::bytecodeGen::{Body, ExpressionCtx, genFunctionDef};
+use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, Node, Statement, VariableModd};
+use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
 use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, SymbolType};
-use crate::fastAcess::FastAcess;
+use crate::fastAccess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::{tokenizeSource, TokenType};
 use crate::naughtyBox::Naughty;
-use crate::parser::{ASTNode, parseTokens};
-use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters};
-use crate::vm::variableMetadata::VariableMetadata;
+use crate::parser::parseTokens;
+use crate::utils::{
+    genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters,
+};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, Hay, HayCollector};
@@ -23,6 +20,7 @@ use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::{OpCode, VirtualMachine};
 
 #[derive(Debug, PartialEq)]
@@ -35,7 +33,7 @@ pub enum NamespaceState {
 pub enum FunctionTypeMeta {
     Runtime(Body),
     Builtin,
-    Native
+    Native,
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +44,7 @@ pub struct FunctionMeta {
     pub localsMeta: Box<[VariableMetadata]>,
     pub returnType: DataType,
     pub isPure: bool,
-    pub returns: bool
+    pub returns: bool,
 }
 
 impl FunctionMeta {
@@ -60,49 +58,95 @@ impl FunctionMeta {
 pub struct GlobalMeta {
     pub name: String,
     pub default: Expression,
-    pub typ: DataType
+    pub typ: DataType,
 }
 
 #[derive(Debug, Clone)]
 pub struct StructMeta {
     pub name: String,
-    pub fieldsLookup: HashMap<String, usize>,
-    pub fields: Vec<VariableMetadata>
-    // TODO default values
+    fields: FastAcess<String, VariableMetadata>, // TODO default values
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumArm {
+    name: String,
+    valueType: DataType,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumMeta {
+    pub name: String,
+    arms: FastAcess<String, EnumArm>,
 }
 
 impl StructMeta {
+    pub fn n(name: &str, fields: FastAcess<String, VariableMetadata>) -> Self {
+        Self {
+            name: name.to_string(),
+            fields,
+        }
+    }
+
+    pub fn new(name: String, fields: FastAcess<String, VariableMetadata>) -> Self {
+        Self { name, fields }
+    }
+
     pub fn findField(&self, name: &str) -> Result<(&VariableMetadata, usize), CodeGenError> {
-        let fieldId = self.fieldsLookup.get(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
+        self.fields
+            .getSlowStr(name)
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::obj(name)))
+    }
 
-        let field = self.fields.get(*fieldId)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
-
-        Ok((field, *fieldId))
+    #[inline]
+    pub fn fieldCount(&self) -> usize {
+        self.fields.len()
     }
 }
 
 impl FunctionMeta {
     pub fn toFunctionType(&self) -> DataType {
-        DataType::Function { args: self.localsMeta.iter().map(|it|{it.typ.clone()}).collect::<Vec<_>>(), ret: Box::new(self.returnType.clone()) }
+        DataType::Function {
+            args: self
+                .localsMeta
+                .iter()
+                .map(|it| it.typ.clone())
+                .collect::<Vec<_>>(),
+            ret: Box::new(self.returnType.clone()),
+        }
     }
 }
 
 impl Into<FunctionMeta> for FunctionDef {
     fn into(self) -> FunctionMeta {
-        FunctionMeta::makeRuntime(self.name, self.localsMeta.into_boxed_slice(), self.argsCount, self.returnType.unwrap_or(Void), self.body)
+        FunctionMeta::makeRuntime(
+            self.name,
+            self.localsMeta.into_boxed_slice(),
+            self.argsCount,
+            self.returnType.unwrap_or(Void),
+            self.body,
+        )
     }
 }
 
 impl FunctionMeta {
     pub fn genName(&self) -> String {
-        genFunName(&self.name, &self.localsMeta.iter().map(|it| {
-            it.typ.clone()
-        }).collect::<Vec<_>>())
+        genFunName(
+            &self.name,
+            &self
+                .localsMeta
+                .iter()
+                .map(|it| it.typ.clone())
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn makeNative(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, pure: bool) -> Self {
+    pub fn makeNative(
+        name: String,
+        locals: Box<[VariableMetadata]>,
+        argsCount: usize,
+        ret: DataType,
+        pure: bool,
+    ) -> Self {
         Self {
             name,
             argsCount,
@@ -114,7 +158,13 @@ impl FunctionMeta {
         }
     }
 
-    pub fn makeBuiltin(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, pure: bool) -> Self {
+    pub fn makeBuiltin(
+        name: String,
+        locals: Box<[VariableMetadata]>,
+        argsCount: usize,
+        ret: DataType,
+        pure: bool,
+    ) -> Self {
         Self {
             name,
             argsCount,
@@ -126,7 +176,13 @@ impl FunctionMeta {
         }
     }
 
-    pub fn makeRuntime(name: String, locals: Box<[VariableMetadata]>, argsCount: usize, ret: DataType, body: Body) -> Self {
+    pub fn makeRuntime(
+        name: String,
+        locals: Box<[VariableMetadata]>,
+        argsCount: usize,
+        ret: DataType,
+        body: Body,
+    ) -> Self {
         Self {
             name,
             argsCount,
@@ -141,9 +197,9 @@ impl FunctionMeta {
 
 #[derive(Debug)]
 pub enum LoadedFunction {
-    BuiltIn(fn (&mut VirtualMachine, &mut StackFrame) -> Value),
-    Native(extern fn (&mut VirtualMachine, &mut StackFrame) -> Value),
-    Virtual(Vec<OpCode>)
+    BuiltIn(fn(&mut VirtualMachine, &mut StackFrame) -> Value),
+    Native(extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value),
+    Virtual(Vec<OpCode>),
 }
 
 #[inline(always)]
@@ -160,7 +216,11 @@ pub fn printStack() {
 
 // this is stupid
 #[inline(never)]
-pub fn callNative(f: &extern fn (&mut VirtualMachine, &mut StackFrame) -> Value, vm: &mut VirtualMachine, frame: &mut StackFrame) -> Value {
+pub fn callNative(
+    f: &extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value,
+    vm: &mut VirtualMachine,
+    frame: &mut StackFrame,
+) -> Value {
     saveRegisters();
     let res = f(vm, frame);
     restoreRegisters();
@@ -203,7 +263,9 @@ pub struct Namespace {
 
     strings: FastAcess<String, *mut ViplObject<Str>>,
 
-    types: FastAcess<DataType, DataType>
+    types: FastAcess<DataType, DataType>,
+
+    enums: FastAcess<String, EnumMeta>,
 }
 
 impl Allocation for Namespace {
@@ -229,7 +291,7 @@ impl Namespace {
                 let al = self.vm.getMut().allocateString(s);
                 self.strings.insert(s.to_string(), al.inner).unwrap()
             }
-            Some(v) => v.1
+            Some(v) => v.1,
         }
     }
 
@@ -238,16 +300,45 @@ impl Namespace {
     }
 
     pub fn findFunction(&self, name: &str) -> Result<(&FunctionMeta, usize), CodeGenError> {
-        let id = self.functions.getSlowStr(name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name)).ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Namespace }))?;
+        let id = self
+            .functions
+            .getSlowStr(
+                name.strip_prefix(&format!("{}::", self.name))
+                    .unwrap_or(name),
+            )
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::fun(name)))?;
 
-        Ok((&id.0.0, id.1))
+        Ok((&id.0 .0, id.1))
+    }
+
+    pub fn lookupFunction(
+        &self,
+        name: &str,
+        args: &[DataType],
+    ) -> Result<(&FunctionMeta, usize), CodeGenError> {
+        let genName = genFunName(name, args);
+
+        println!("functions: {:?}", self.functions);
+
+        let id = self
+            .functions
+            .getSlowStr(
+                genName
+                    .strip_prefix(&format!("{}::", self.name))
+                    .unwrap_or(&genName),
+            )
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::fun(&genName)))?;
+
+        Ok((&id.0 .0, id.1))
     }
 
     pub fn findGlobal(&self, name: &str) -> Result<(&GlobalMeta, usize), CodeGenError> {
-        let gId = self.globals.getSlowStr(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Global }))?;
+        let gId = self
+            .globals
+            .getSlowStr(name)
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::global(name)))?;
 
-        Ok((&gId.0.0, gId.1))
+        Ok((&gId.0 .0, gId.1))
     }
 
     pub fn getGlobal(&self, id: usize) -> &(GlobalMeta, Value) {
@@ -283,13 +374,21 @@ impl Namespace {
     }
 
     pub fn findStruct(&self, name: &str) -> Result<(&StructMeta, usize), CodeGenError> {
-        let strc = self.structs.getSlowStr(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound{ name: name.to_string(), typ: SymbolType::Struct }))?;
+        panic!();
+
+        let strc = self
+            .structs
+            .getSlowStr(name)
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::obj(name)))?;
 
         Ok(strc)
     }
 
-    pub fn findStructField(&self, structName: &str, fieldName: &str) -> Result<(&StructMeta, usize, &VariableMetadata, usize), CodeGenError> {
+    pub fn findStructField(
+        &self,
+        structName: &str,
+        fieldName: &str,
+    ) -> Result<(&StructMeta, usize, &VariableMetadata, usize), CodeGenError> {
         let (struc, structId) = self.findStruct(structName)?;
 
         let (field, fieldId) = struc.findField(fieldName)?;
@@ -304,7 +403,7 @@ impl Namespace {
     pub fn getFunctionMeta(&self, id: usize) -> Option<&FunctionMeta> {
         match self.functions.getFast(id) {
             None => None,
-            Some(v) => Some(&v.0)
+            Some(v) => Some(&v.0),
         }
     }
 
@@ -314,16 +413,25 @@ impl Namespace {
         args: &[DataType],
         fun: fn(&mut VirtualMachine, &mut StackFrame) -> Value,
         ret: DataType,
-        pure: bool
+        pure: bool,
     ) {
         let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
-        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, ret, pure);
+        let meta = FunctionMeta::makeBuiltin(
+            name.to_string(),
+            args.iter()
+                .map(|it| it.clone().into())
+                .collect::<Vec<VariableMetadata>>()
+                .into_boxed_slice(),
+            argsCount,
+            ret,
+            pure,
+        );
 
-        self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
+        self.functions
+            .insert(genName, (meta, Some(LoadedFunction::BuiltIn(fun))));
     }
-
 
     // 🐀
     // this is pretty hacky ngl
@@ -332,16 +440,26 @@ impl Namespace {
         name: &str,
         args: &[DataType],
         fun: fn(&mut VirtualMachine, &mut StackFrame) -> (),
-        pure: bool
+        pure: bool,
     ) {
         let uwuFn: fn(&mut VirtualMachine, &mut StackFrame) -> Value = unsafe { transmute(fun) };
 
         let genName = genFunNameMetaTypes(&name, &args, args.len());
         let argsCount = args.len();
 
-        let meta = FunctionMeta::makeBuiltin(name.to_string(), args.iter().map(|it| { it.clone().into() }).collect::<Vec<VariableMetadata>>().into_boxed_slice(), argsCount, DataType::Void, pure);
+        let meta = FunctionMeta::makeBuiltin(
+            name.to_string(),
+            args.iter()
+                .map(|it| it.clone().into())
+                .collect::<Vec<VariableMetadata>>()
+                .into_boxed_slice(),
+            argsCount,
+            DataType::Void,
+            pure,
+        );
 
-        self.functions.insert(genName, (meta, Some(LoadedFunction::BuiltIn(uwuFn))));
+        self.functions
+            .insert(genName, (meta, Some(LoadedFunction::BuiltIn(uwuFn))));
     }
 
     pub fn registerFunctionDef(&mut self, d: FunctionMeta) -> usize {
@@ -355,7 +473,10 @@ impl Namespace {
     }
 
     pub fn registerGlobal(&mut self, global: GlobalMeta) -> usize {
-        let res = self.globals.insert(global.name.as_str().to_string(), (global, Value::null())).unwrap();
+        let res = self
+            .globals
+            .insert(global.name.as_str().to_string(), (global, Value::null()))
+            .unwrap();
 
         res
     }
@@ -371,12 +492,18 @@ impl Namespace {
             structs: Default::default(),
             strings: Default::default(),
             types: Default::default(),
+            enums: Default::default(),
         }
     }
 
-    pub fn constructNamespace(src: Vec<ASTNode>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
+    pub fn constructNamespace(
+        src: Vec<ASTNode>,
+        name: &str,
+        vm: &mut VirtualMachine,
+        mainLocals: Vec<VariableMetadata>,
+    ) -> Namespace {
         let mut n = Namespace::new(name, vm);
-        let mut initFunction = FunctionDef{
+        let mut initFunction = FunctionDef {
             name: String::from("__init"),
             localsMeta: mainLocals,
             argsCount: 0,
@@ -399,7 +526,7 @@ impl Namespace {
                         Node::Import(_) => todo!(),
                         // TODO default value
                         Node::GlobalVarDef(name, default) => {
-                            n.registerGlobal(GlobalMeta{
+                            n.registerGlobal(GlobalMeta {
                                 name,
                                 default,
                                 typ: DataType::Void,
@@ -413,7 +540,7 @@ impl Namespace {
                 ASTNode::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
-                        c => initFunction.body.push(Statement::StatementExpression(c))
+                        c => initFunction.body.push(Statement::StatementExpression(c)),
                     }
                 }
             }
@@ -423,18 +550,19 @@ impl Namespace {
     }
 }
 
-pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
+pub fn loadSourceFile(
+    src: String,
+    vm: &mut VirtualMachine,
+) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
     let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
-        Err(e) => {
-            return Err(e.into())
-        }
+        Err(e) => return Err(e.into()),
     };
 
     println!("tokens {:?}", tokens);
 
     if tokens.is_empty() {
-        return Ok(vec![])
+        return Ok(vec![]);
     }
 
     Ok(parseTokens(tokens)?)

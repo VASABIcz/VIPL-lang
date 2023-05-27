@@ -1,15 +1,17 @@
-use libc::{c_void, c_int, PROT_READ, PROT_WRITE, PROT_EXEC, mprotect};
-use std::ptr::{null_mut, copy_nonoverlapping};
-use std::mem::{size_of, transmute, forget};
-use std::alloc::{alloc, dealloc, Layout};
-use std::arch::asm;
-use std::fs;
 use crate::vm::heap::Allocation;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::{ExternFn, VirtualMachine};
+use libc::{c_int, c_void, mprotect, PROT_EXEC, PROT_READ, PROT_WRITE};
+use std::alloc::{alloc, dealloc, Layout};
+use std::arch::asm;
+use std::fs;
+use std::mem::{forget, size_of, transmute};
+use std::ptr::{copy_nonoverlapping, null_mut};
 
-pub fn allocateBinFunction(machineCode: &mut [u8]) -> extern fn(&mut VirtualMachine, &mut StackFrame) -> Value {
+pub fn allocateBinFunction(
+    machineCode: &mut [u8],
+) -> extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value {
     if machineCode.len() > 4096 {
         todo!()
     }
@@ -20,7 +22,13 @@ pub fn allocateBinFunction(machineCode: &mut [u8]) -> extern fn(&mut VirtualMach
     let ptr = unsafe { alloc(layout) };
 
     // todo handle more pages
-    unsafe { mprotect(ptr as *mut c_void, layout.size(), PROT_READ | PROT_WRITE | PROT_EXEC) };
+    unsafe {
+        mprotect(
+            ptr as *mut c_void,
+            layout.size(),
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+        )
+    };
 
     unsafe { copy_nonoverlapping(machineCode.as_ptr(), ptr, machineCode.len()) };
 

@@ -1,13 +1,12 @@
 use crate::ast::Expression;
 use crate::lexer::TokenType::In;
-use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::dataType::{DataType, Generic};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
-use crate::vm::myStr::MyStr;
-use crate::vm::namespace::{GlobalMeta, Namespace};
+use crate::vm::dataType::{DataType, Generic};
 use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::namespace::{GlobalMeta, Namespace};
 use crate::vm::objects::{Array, Str};
 use crate::vm::value::Value;
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {
@@ -17,28 +16,28 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         "print",
         &[Int],
         |_a, b| println!("{}", b.get(0).getNumRef()),
-        false
+        false,
     );
 
     namespace.makeNativeNoRat(
         "print",
         &[Bool],
         |_a, b| println!("{}", b.get(0).getBool()),
-        false
+        false,
     );
 
     namespace.makeNativeNoRat(
         "print",
         &[Float],
         |_a, b| println!("{}", b.get(0).getFlo()),
-        false
+        false,
     );
 
     namespace.makeNativeNoRat(
         "print",
         &[Char],
         |_a, b| println!("{}", b.get(0).getChar()),
-        false
+        false,
     );
 
     namespace.makeNativeNoRat(
@@ -49,7 +48,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             let str = &c.asRef::<Str>().data;
             println!("{}", str.string);
         },
-        false
+        false,
     );
 
     namespace.makeNativeNoRat(
@@ -64,10 +63,10 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             }
             println!()
         },
-        false
+        false,
     );
 
-    let index = namespace.registerGlobal(GlobalMeta{
+    let index = namespace.registerGlobal(GlobalMeta {
         name: "newLine".to_string(),
         default: Expression::CharLiteral('\n'),
         typ: DataType::Char,

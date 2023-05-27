@@ -1,8 +1,7 @@
-
 use std::fs;
 
-use std::os::unix::fs::DirEntryExt2;
 use crate::vm::vm::VirtualMachine;
+use std::os::unix::fs::DirEntryExt2;
 
 pub fn setupFs(vm: &mut VirtualMachine) {
     todo!("needs to be ported to namespaces");

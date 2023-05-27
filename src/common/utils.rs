@@ -1,29 +1,29 @@
-use std::error::Error;
-use std::{env, fs};
-use std::arch::asm;
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
 use crate::lexer::{tokenizeSource, TokenType};
-use crate::parser::{parseDataType, TokenProvider};
+use crate::parser::TokenProvider;
+use crate::parsingUnits::parseDataType;
 use crate::vm;
-use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::value::Value;
-use crate::vm::vm::{OpCode, VirtualMachine};
+use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::OpCode::{GetGlobal, LCall, SCall, SetGlobal};
+use crate::vm::vm::{OpCode, VirtualMachine};
+use std::arch::asm;
+use std::error::Error;
+use std::{env, fs};
 
 // same as Vec but can be unsafely modified and accessed
 pub struct FastVec<T> {
     pub cap: usize,
     pub ptr: *mut T,
-    pub size: usize
+    pub size: usize,
 }
 
 #[inline]
 pub fn genFunName(name: &str, args: &[DataType]) -> String {
-
     format!("{}({})", name, argsToString(args))
 }
 
@@ -94,17 +94,17 @@ pub fn namespacePath(path: &str) -> Vec<String> {
         let c = con.next();
         let r = cwd.next();
         if c.is_none() {
-            break
+            break;
         }
         if hasResolved || c != r {
             strBuf.push(c.unwrap().to_str().unwrap().to_string());
             hasResolved = true;
         }
     }
-    let id = strBuf.len()-1;
-    strBuf.get_mut(id).map(|it| {
-        *it = it.strip_suffix(".vipl").unwrap().to_string()
-    });
+    let id = strBuf.len() - 1;
+    strBuf
+        .get_mut(id)
+        .map(|it| *it = it.strip_suffix(".vipl").unwrap().to_string());
     strBuf
 }
 
@@ -136,20 +136,20 @@ macro_rules! viplDbg {
 pub fn saveRegisters() {
     unsafe {
         asm!(
-        "push rbx",
-        "push rsi",
-        "push rdi",
-        // "push rbp",
-        // "push rsp",
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        "sub rsp, 8"
+            "push rbx",
+            "push rsi",
+            "push rdi",
+            // "push rbp",
+            // "push rsp",
+            "push r8",
+            "push r9",
+            "push r10",
+            "push r11",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "sub rsp, 8"
         )
     }
 }
@@ -158,37 +158,37 @@ pub fn saveRegisters() {
 pub fn callNative(ptr: usize) -> Value {
     unsafe {
         asm!(
-        "push rbx",
-        "push rsi",
-        "push rdi",
-        // "push rbp",
-        // "push rsp",
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        "sub rsp, 8"
+            "push rbx",
+            "push rsi",
+            "push rdi",
+            // "push rbp",
+            // "push rsp",
+            "push r8",
+            "push r9",
+            "push r10",
+            "push r11",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "sub rsp, 8"
         );
 
         asm!(
-        "add rsp, 8",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
-        // "pop rsp",
-        // "pop rbp",
-        "pop rdi",
-        "pop rsi",
-        "pop rbx",
+            "add rsp, 8",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            // "pop rsp",
+            // "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rbx",
         );
     }
 
@@ -199,20 +199,20 @@ pub fn callNative(ptr: usize) -> Value {
 pub fn restoreRegisters() {
     unsafe {
         asm!(
-        "add rsp, 8",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
-        // "pop rsp",
-        // "pop rbp",
-        "pop rdi",
-        "pop rsi",
-        "pop rbx",
+            "add rsp, 8",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop r11",
+            "pop r10",
+            "pop r9",
+            "pop r8",
+            // "pop rsp",
+            // "pop rbp",
+            "pop rdi",
+            "pop rsi",
+            "pop rbx",
         )
     }
 }
@@ -296,22 +296,16 @@ fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
             SCall { id } => {
                 let f = namespace.getFunction(*id);
 
-                return f.0.isPure
+                return f.0.isPure;
             }
             LCall { namespace, id } => {
                 let f = vm.getNamespace(*namespace).getFunction(*id);
 
-                return f.0.isPure
+                return f.0.isPure;
             }
-            OpCode::DynamicCall => {
-                return false
-            }
-            SetGlobal { .. } => {
-                return false
-            }
-            GetGlobal { .. } => {
-                return false
-            }
+            OpCode::DynamicCall => return false,
+            SetGlobal { .. } => return false,
+            GetGlobal { .. } => return false,
             _ => {}
         }
     }
@@ -334,9 +328,7 @@ pub fn getSymbolicChunks(ops: &Vec<SymbolicOpcode>) -> Vec<Vec<OpCode>> {
 
     for op in ops {
         match op {
-            Op(o) => {
-                curBuf.push(o.clone())
-            }
+            Op(o) => curBuf.push(o.clone()),
             SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
             _ => {
                 if !curBuf.is_empty() {
@@ -350,17 +342,17 @@ pub fn getSymbolicChunks(ops: &Vec<SymbolicOpcode>) -> Vec<Vec<OpCode>> {
     buf
 }
 
-pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(ops: Vec<SymbolicOpcode>, f: F) -> Vec<SymbolicOpcode> {
+pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(
+    ops: Vec<SymbolicOpcode>,
+    f: F,
+) -> Vec<SymbolicOpcode> {
     let mut buf = vec![];
 
     let mut curBuf = vec![];
 
     for op in ops {
         match op {
-            Op(o) => {
-                curBuf.push(o.clone())
-            }
-            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => buf.push(op),
+            Op(o) => curBuf.push(o.clone()),
             _ => {
                 if !curBuf.is_empty() {
                     buf.extend(f(curBuf).into_iter().map(|it| Op(it)));

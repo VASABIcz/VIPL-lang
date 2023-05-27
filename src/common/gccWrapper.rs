@@ -2,7 +2,7 @@ use std::env::temp_dir;
 use std::error::Error;
 use std::fs;
 use std::process::Command;
-use std::time::{Instant};
+use std::time::Instant;
 
 static LIBRARY: &str =
     "#include <stdbool.h>
@@ -63,7 +63,10 @@ pub fn compile(sc: &str) -> Result<String, Box<dyn Error>> {
 
     fs::write(cPath, buf)?;
 
-    let cmd = format!("gcc -Ofast -march=native -shared -o {} -fPIC {}", soPath, cPath);
+    let cmd = format!(
+        "gcc -Ofast -march=native -shared -o {} -fPIC {}",
+        soPath, cPath
+    );
 
     let e: Vec<&str> = cmd.split(' ').collect();
 

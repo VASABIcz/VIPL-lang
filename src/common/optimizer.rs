@@ -1,4 +1,4 @@
-use crate::ast::{Expression, BinaryOp};
+use crate::ast::{BinaryOp, Expression};
 use crate::vm::value::Value;
 
 pub fn evalE(exp: &Expression) -> Option<Expression> {
@@ -12,7 +12,7 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
             let r = evalExpr(right)?;
 
             match op {
-                BinaryOp::Add => todo!()/*l.add(r, &l.toDataType())*/,
+                BinaryOp::Add => todo!(), /*l.add(r, &l.toDataType())*/
                 BinaryOp::Sub => l.sub(&r, &l.toDataType()),
                 BinaryOp::Mul => l.mul(&r, &l.toDataType()),
                 BinaryOp::Div => l.div(&r, &l.toDataType()),
@@ -42,6 +42,6 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::StructInit(_, _) => None,
         Expression::FieldAccess(_, _) => None,
         Expression::Null => None,
-        Expression::TernaryOperator(_, _, _) => None
+        Expression::TernaryOperator(_, _, _) => None,
     }
 }

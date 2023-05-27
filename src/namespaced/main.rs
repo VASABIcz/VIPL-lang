@@ -1,21 +1,13 @@
 #![feature(slice_ptr_get)]
 
 use std::{env, fs};
-use std::mem::ManuallyDrop;
 use std::process::exit;
 use std::time::Instant;
 
-use libc::link;
-
-use vipl::errors::LoadFileError;
-use vipl::lexer::TokenType;
-use vipl::parser::ASTNode;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
-use vipl::vm::dataType::DataType;
 use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;
-use vipl::vm::vm::OpCode::{LCall, Pop};
 use vipl::vm::vm::VirtualMachine;
 
 fn main() {
@@ -41,18 +33,26 @@ fn main() {
     let nn = vm.getNamespace(id);
 
     let (fMeta, f) = nn.getFunctions().last().unwrap();
-    let xd = fMeta.localsMeta.iter().map(|it| { it.typ.toDefaultValue() }).collect::<Vec<_>>();
+    let xd = fMeta
+        .localsMeta
+        .iter()
+        .map(|it| it.typ.toDefaultValue())
+        .collect::<Vec<_>>();
     let now = Instant::now();
 
     let ptr = Box::into_raw(xd.into_boxed_slice());
 
     unsafe {
-        f.as_ref().unwrap().call(&mut *vm1, StackFrame {
-            localVariables: ptr.as_mut_ptr(),
-            programCounter: 0,
-            namespaceId: nn.id,
-            functionId: nn.getFunctions().len() - 1,
-        }, false);
+        f.as_ref().unwrap().call(
+            &mut *vm1,
+            StackFrame {
+                localVariables: ptr.as_mut_ptr(),
+                programCounter: 0,
+                namespaceId: nn.id,
+                functionId: nn.getFunctions().len() - 1,
+            },
+            false,
+        );
     }
     let elapsed = now.elapsed();
     unsafe { Box::from_raw(ptr) };

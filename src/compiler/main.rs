@@ -87,9 +87,10 @@ fn main() {
 
      */
     vm.addOpcodes(bs.0);
-    let mut res = bs.1.iter().map(|it| {
-        it.toDefaultValue()
-    }).collect::<Vec<_>>();
+    let mut res =
+        bs.1.iter()
+            .map(|it| it.toDefaultValue())
+            .collect::<Vec<_>>();
     vm.pushFrame(StackFrame::new(&mut res));
 
     let e = now.elapsed();

@@ -1,4 +1,3 @@
-use crate::vm::dataType::DataType;
 use crate::vm::value::Value;
 use crate::vm::vm::OpCode;
 
@@ -6,7 +5,7 @@ use crate::vm::vm::OpCode;
 pub enum ConstValue {
     I(isize),
     F(f64),
-    B(bool)
+    B(bool),
 }
 
 impl Into<ConstValue> for isize {
@@ -32,7 +31,7 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => (v as f64).into(),
             ConstValue::B(v) => (v as isize as f64).into(),
-            v => v
+            v => v,
         }
     }
 
@@ -56,27 +55,27 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *v += v1,
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *v += v1,
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
     pub fn div(&mut self, other: Self) {
         match self {
             ConstValue::I(v) => match other {
-                ConstValue::I(v1) => *self = ConstValue::F(*v as f64/v1 as f64),
-                _ => panic!()
-            }
+                ConstValue::I(v1) => *self = ConstValue::F(*v as f64 / v1 as f64),
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
-                ConstValue::F(v1) => *self = ConstValue::F(*v/v1),
-                _ => panic!()
-            }
-            _ => panic!()
+                ConstValue::F(v1) => *self = ConstValue::F(*v / v1),
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -84,13 +83,13 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *v -= v1,
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *v -= v1,
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -98,13 +97,13 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *v *= v1,
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *v *= v1,
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -112,13 +111,13 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *self = (*v == v1).into(),
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *self = (*v == v1).into(),
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -126,13 +125,13 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *self = (*v > v1).into(),
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *self = (*v > v1).into(),
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -140,13 +139,13 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => match other {
                 ConstValue::I(v1) => *self = (*v < v1).into(),
-                _ => panic!()
-            }
+                _ => panic!(),
+            },
             ConstValue::F(v) => match other {
                 ConstValue::F(v1) => *self = (*v < v1).into(),
-                _ => panic!()
-            }
-            _ => panic!()
+                _ => panic!(),
+            },
+            _ => panic!(),
         }
     }
 
@@ -154,9 +153,9 @@ impl ConstValue {
         match self {
             ConstValue::B(v) => match other {
                 ConstValue::B(v1) => *v = v1 && *v,
-                _ => panic!()
+                _ => panic!(),
             },
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -164,16 +163,16 @@ impl ConstValue {
         match self {
             ConstValue::B(v) => match other {
                 ConstValue::B(v1) => *v = v1 || *v,
-                _ => panic!()
+                _ => panic!(),
             },
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
     pub fn logNot(&mut self) {
         match self {
             ConstValue::B(v) => *v = !*v,
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -181,7 +180,7 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => Value::from(v),
             ConstValue::F(v) => Value::from(v),
-            ConstValue::B(v) => Value::from(v)
+            ConstValue::B(v) => Value::from(v),
         }
     }
 
@@ -189,7 +188,7 @@ impl ConstValue {
         match self {
             ConstValue::I(v) => OpCode::PushInt(v),
             ConstValue::F(v) => OpCode::PushFloat(v),
-            ConstValue::B(v) => OpCode::PushBool(v)
+            ConstValue::B(v) => OpCode::PushBool(v),
         }
     }
 }
@@ -202,8 +201,8 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
         match op {
             OpCode::F2I => match constStack.pop() {
                 Some(v) => constStack.push(v),
-                None => finaly.push(op)
-            }
+                None => finaly.push(op),
+            },
             OpCode::I2F => {}
             OpCode::PushInt(v) => constStack.push(v.into()),
             OpCode::PushFunction(_, _) => {}
@@ -212,34 +211,35 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
             OpCode::PushChar(v) => constStack.push((v as isize).into()),
             OpCode::Pop => match constStack.pop() {
                 None => finaly.push(op),
-                Some(_) => {},
-            }
-            OpCode::Dup => if constStack.len() >= 2 {
-                let a = constStack.pop().unwrap();
-                let b = constStack.pop().unwrap();
+                Some(_) => {}
+            },
+            OpCode::Dup if constStack.len() >= 1 => match constStack.len() {
+                2.. => {
+                    let a = constStack.pop().unwrap();
+                    let b = constStack.pop().unwrap();
 
-                constStack.push(b);
-                constStack.push(a);
-            }
-            else if constStack.len() == 1 {
-                let a = constStack.pop().unwrap();
-                constStack.push(a);
-                constStack.push(a);
-            }
-            OpCode::Swap => match constStack.pop() {
-                None => {
-                    finaly.push(op)
+                    constStack.push(b);
+                    constStack.push(a);
                 }
-                Some(v) => {}
-            }
+                1 => {
+                    let a = constStack.pop().unwrap();
+                    finaly.push(a.toOp());
+                    finaly.push(op);
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Swap => match constStack.pop() {
+                None => finaly.push(op),
+                Some(v) => todo!(),
+            },
             OpCode::SetLocal { .. } => match constStack.pop() {
                 Some(v) => {
                     finaly.push(v.toOp());
                     finaly.push(op);
-                },
-                None => finaly.push(op)
-            }
-            OpCode::Add(_) => match constStack.len() {
+                }
+                None => finaly.push(op),
+            },
+            OpCode::Add(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -251,10 +251,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Sub(_) => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Sub(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -266,10 +266,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Div(_) => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Div(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -281,9 +281,9 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
+                }
+                _ => unreachable!(),
+            },
             OpCode::Mul(_) => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
@@ -296,10 +296,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Equals(_) => match constStack.len() {
+                }
+                _ => finaly.push(op),
+            },
+            OpCode::Equals(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -311,10 +311,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Greater(_) => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Greater(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -326,10 +326,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Less(_) => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Less(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -341,10 +341,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Or => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Or if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -356,10 +356,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::And => match constStack.len() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::And if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -371,38 +371,17 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 1 => {
                     finaly.push(constStack.pop().unwrap().toOp());
                     finaly.push(op);
-                },
-                _ => finaly.push(op)
-            }
-            OpCode::Not => match constStack.pop() {
+                }
+                _ => unreachable!(),
+            },
+            OpCode::Not if constStack.len() >= 1 => match constStack.pop() {
                 Some(mut v) => {
                     v.logNot();
 
                     constStack.push(v);
                 }
-                _ => finaly.push(op)
-            }
-            OpCode::SetField { .. } => match constStack.pop() {
-                None => finaly.push(op),
-                Some(v) => {
-                    finaly.push(v.toOp());
-                    finaly.push(op);
-                }
-            }
-            OpCode::ArrayStore => match constStack.pop() {
-                None => finaly.push(op),
-                Some(v) => {
-                    finaly.push(v.toOp());
-                    finaly.push(op);
-                }
-            }
-            OpCode::SetGlobal { .. } => match constStack.pop() {
-                None => finaly.push(op),
-                Some(v) => {
-                    finaly.push(v.toOp());
-                    finaly.push(op);
-                }
-            }
+                _ => unreachable!(),
+            },
             OpCode::Inc { .. } => finaly.push(op),
             OpCode::Dec { .. } => finaly.push(op),
             v => {

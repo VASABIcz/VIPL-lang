@@ -4,13 +4,13 @@ use std::hint::black_box;
 use std::ops::{Add, Sub};
 use std::ptr;
 
-const SIZE: usize = 256+16;
+const SIZE: usize = 256 + 16;
 
 #[derive(Debug)]
 pub struct StackManager<const SIZE: usize> {
     pub nativeStackBase: usize,
     pub nativeStackOffset: usize,
-    pub cStack: usize
+    pub cStack: usize,
 }
 
 impl<const SIZE: usize> StackManager<SIZE> {
@@ -35,7 +35,7 @@ impl<const SIZE: usize> StackManager<SIZE> {
             rbp = out(reg) rbp
             )
         }
-        return (rbp, rsp)
+        return (rbp, rsp);
     }
 
     #[inline(always)]
@@ -59,20 +59,20 @@ impl<const SIZE: usize> StackManager<SIZE> {
     }
 
     #[inline(always)]
-    pub fn callNative(&mut self, f: fn () -> ()) {
+    pub fn callNative(&mut self, f: fn() -> ()) {
         Self::setupStack(self.nativeStackBase, SIZE);
         f();
         restoreStack();
     }
 
     #[inline(always)]
-    pub fn callC(&self, f: fn () -> ()) {
+    pub fn callC(&self, f: fn() -> ()) {
         Self::setupStack(self.cStack, 1)
     }
 }
 
 pub fn testProc(a: &usize, b: &usize) {
-    println!("{}", a*b);
+    println!("{}", a * b);
     black_box(a);
     black_box(a);
 }
@@ -104,10 +104,7 @@ pub fn printRegisters() {
 #[inline(always)]
 pub fn restoreStack() {
     unsafe {
-        asm!(
-        "pop rbp",
-        "pop rsp"
-        );
+        asm!("pop rbp", "pop rsp");
     }
 }
 
@@ -119,7 +116,7 @@ pub fn testStack(fin: bool) {
         let a = 12;
         let b = 64;
         let d = 1;
-        let mut x = a*a-b+d;
+        let mut x = a * a - b + d;
         x += a + b + d;
         println!("{}", x)
     }
@@ -133,7 +130,6 @@ pub fn myFunc() {
     testProc(&c, &c1);
     black_box(&c);
     black_box(&c1);
-
 }
 
 fn main() {
@@ -145,7 +141,9 @@ fn main() {
     Box::into_raw(bpx);
     println!("{:?}", ptr);
     println!("a {}", ptr as usize);
-    unsafe { println!("b {}", ptr.add(SIZE-1) as usize); }
+    unsafe {
+        println!("b {}", ptr.add(SIZE - 1) as usize);
+    }
     unsafe {
         asm!(
         // copy rsp and rbp to r8,9
@@ -165,10 +163,7 @@ fn main() {
     // printRegisters();
     // println!("KYS123");
     unsafe {
-        asm!(
-        "pop rbp",
-        "pop rsp",
-        );
+        asm!("pop rbp", "pop rsp",);
     }
     println!("{:?}", ptr as usize);
 }

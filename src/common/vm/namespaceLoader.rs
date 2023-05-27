@@ -4,7 +4,7 @@ use crate::vm::vm::VirtualMachine;
 #[derive(Debug)]
 pub struct NamespaceLoader {
     pub lookupPaths: Vec<String>,
-    pub lookupBuiltin: Vec<fn(&mut VirtualMachine)>
+    pub lookupBuiltin: Vec<fn(&mut VirtualMachine)>,
 }
 
 impl NamespaceLoader {
@@ -12,7 +12,7 @@ impl NamespaceLoader {
         todo!()
     }
 
-    pub fn registerBuiltin(&mut self, name: Vec<String>, init: fn (&mut VirtualMachine)) {
+    pub fn registerBuiltin(&mut self, name: Vec<String>, init: fn(&mut VirtualMachine)) {
         todo!()
     }
 

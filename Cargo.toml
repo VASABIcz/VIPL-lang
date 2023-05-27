@@ -9,12 +9,12 @@ rustflags = ["-C target-cpu=native"]
 [profile.release]
 lto = true
 codegen-units = 1
-panic = "abort"
-opt-level = 3
-strip = true
-debug = false
-overflow-checks = false
-debug-assertions = false
+# panic = "abort"
+opt-level = 2
+strip = false # true
+debug = true # false
+overflow-checks = true # false
+debug-assertions = true # false
 
 [[bin]]
 name = "repl"

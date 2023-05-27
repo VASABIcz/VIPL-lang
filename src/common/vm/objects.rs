@@ -1,19 +1,17 @@
+use crate::vm::dataType::DataType;
+use crate::vm::heap::{Allocation, Hay, HayCollector};
+use crate::vm::nativeObjects::{
+    ObjectType, UntypedObject, ViplNativeObject, ViplObject, ViplObjectMeta,
+};
+use crate::vm::value::{Value, Xd};
 use std::any::Any;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use crate::vm::dataType::DataType;
-use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::nativeObjects::{ViplObjectMeta, ObjectType, UntypedObject, ViplNativeObject, ViplObject};
-use crate::vm::value::{Value, Xd};
 
-unsafe impl<T: Allocation + Debug> Sync for ViplObject<T> {
+unsafe impl<T: Allocation + Debug> Sync for ViplObject<T> {}
 
-}
-
-unsafe impl<T: Allocation + Debug> Send for ViplObject<T> {
-
-}
+unsafe impl<T: Allocation + Debug> Send for ViplObject<T> {}
 
 pub trait Object: Debug + Any + Allocation {
     fn getName(&self) -> String;
@@ -76,16 +74,14 @@ pub struct Str {
 
 impl Str {
     pub fn new(str: String) -> Self {
-        Self {
-            string: str
-        }
+        Self { string: str }
     }
 }
 
 impl<T: Allocation + Debug> From<Hay<T>> for Value {
     fn from(value: Hay<T>) -> Self {
         Self {
-            Reference: Hay::new(value.inner as *mut Xd)
+            Reference: Hay::new(value.inner as *mut Xd),
         }
     }
 }
@@ -93,22 +89,28 @@ impl<T: Allocation + Debug> From<Hay<T>> for Value {
 impl From<Str> for ViplObject<Str> {
     #[inline]
     fn from(val: Str) -> Self {
-        ViplObject{ meta: ViplObjectMeta {
-            namespaceId: 0,
-            structId: 0,
-            objectType: ObjectType::Native(ViplNativeObject::default()),
-        }, data: val }
+        ViplObject {
+            meta: ViplObjectMeta {
+                namespaceId: 0,
+                structId: 0,
+                objectType: ObjectType::Native(ViplNativeObject::default()),
+            },
+            data: val,
+        }
     }
 }
 
 impl From<Array> for ViplObject<Array> {
     #[inline]
     fn from(val: Array) -> Self {
-        ViplObject{ meta: ViplObjectMeta {
-            namespaceId: 0,
-            structId: 1,
-            objectType: ObjectType::Native(ViplNativeObject::default()),
-        }, data: val }
+        ViplObject {
+            meta: ViplObjectMeta {
+                namespaceId: 0,
+                structId: 1,
+                objectType: ObjectType::Native(ViplNativeObject::default()),
+            },
+            data: val,
+        }
     }
 }
 
@@ -167,7 +169,7 @@ impl Allocation for Array {
             for obj in &self.internal {
                 match obj.asRef::<Xd>().meta.objectType {
                     ObjectType::Simple(_) => todo!(),
-                    ObjectType::Native(_) => todo!()
+                    ObjectType::Native(_) => todo!(),
                 }
             }
         }

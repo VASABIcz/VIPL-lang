@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use crate::asm::asmLib::{AsmGen, AsmValue, AsmLocation, Register};
 use crate::asm::asmLib::Register::{Rsi, Rsp};
+use crate::asm::asmLib::{AsmGen, AsmLocation, AsmValue, Register};
 use crate::asm::optimizedGen::AsmJumpType::Zero;
 use crate::asm::optimizedGen::AsmOpcode::Jmp;
 use crate::vm::vm::JmpType;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub enum AsmOpcode {
@@ -58,7 +58,7 @@ pub enum AsmOpcode {
     Setl(Register),
 
     BeginIgnore,
-    EndIgnore
+    EndIgnore,
 }
 
 impl AsmOpcode {
@@ -79,19 +79,19 @@ impl AsmOpcode {
             AsmOpcode::Comment(m) => gen.comment(&m),
             AsmOpcode::NewLine => gen.newLine(),
             AsmOpcode::SysCall => gen.sysCall(),
-            AsmOpcode::MakeString(s) => { gen.makeString(&s); },
+            AsmOpcode::MakeString(s) => {
+                gen.makeString(&s);
+            }
             AsmOpcode::Push(v) => gen.push(v),
             AsmOpcode::Pop(reg) => gen.pop(reg),
-            AsmOpcode::Jmp(loc, jmp) => {
-                match jmp {
-                    Zero => gen.jmpIfZero(loc),
-                    AsmJumpType::Always => gen.jmp(loc),
-                    _ => todo!()
-                }
-            }
+            AsmOpcode::Jmp(loc, jmp) => match jmp {
+                Zero => gen.jmpIfZero(loc),
+                AsmJumpType::Always => gen.jmp(loc),
+                _ => todo!(),
+            },
             AsmOpcode::EndIgnore => gen.endIgnore(),
             AsmOpcode::BeginIgnore => gen.beginIgnore(),
-            e => todo!("unimplemented opcode {:?}", e)
+            e => todo!("unimplemented opcode {:?}", e),
         }
     }
 }
@@ -105,7 +105,7 @@ pub enum AsmJumpType {
     Gt,
     Less,
     Equal,
-    Always
+    Always,
 }
 
 pub struct OptimizingGen {
@@ -113,7 +113,7 @@ pub struct OptimizingGen {
     pub stringCounter: usize,
     pub stringCache: HashMap<String, String>,
     pub availableRegisters: Vec<Register>,
-    pub stackOffset: usize
+    pub stackOffset: usize,
 }
 
 impl OptimizingGen {
@@ -126,7 +126,7 @@ impl OptimizingGen {
         // let mut resBuf = vec![];
         // let mut isIgnored = false;
 
-/*        for op in self.data {
+        /*        for op in self.data {
             match op {
                 AsmOpcode::Push(v) => {
                     if isIgnored {
@@ -213,7 +213,7 @@ impl OptimizingGen {
             Register::Rdx,
             Register::Rsi,
             Register::Rdi,
-            Register::Rax
+            Register::Rax,
         ];
         v.reverse();
 
@@ -295,7 +295,7 @@ impl AsmGen for OptimizingGen {
                 self.stringCache.insert(str.to_string(), id.clone());
                 id
             }
-            Some(v) => v.clone()
+            Some(v) => v.clone(),
         }
     }
 
@@ -419,12 +419,11 @@ impl AsmGen for OptimizingGen {
 
     fn offsetStack(&mut self, offset: isize) {
         if offset < 0 {
-            self.stackOffset += (offset*-1) as usize;
-            self.sub(Rsp.into(), (8*offset*-1).into())
-        }
-        else if offset > 0 {
+            self.stackOffset += (offset * -1) as usize;
+            self.sub(Rsp.into(), (8 * offset * -1).into())
+        } else if offset > 0 {
             self.stackOffset -= offset as usize;
-            self.add(Rsp.into(), (8*offset).into());
+            self.add(Rsp.into(), (8 * offset).into());
         }
     }
 }

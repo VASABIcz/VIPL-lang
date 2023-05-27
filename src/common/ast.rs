@@ -1,18 +1,19 @@
+use crate::ast::Statement::StatementExpression;
+use crate::bytecodeGen::Body;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::Index;
-use crate::bytecodeGen::Body;
 
-use crate::errors::{InvalidTypeException, TypeNotFound};
+use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
+use crate::fastAccess::FastAcess;
 use crate::lexer::{Location, Token, TokenType};
 use crate::utils::genFunName;
-use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Object};
 use crate::vm::dataType::Generic::Any;
-use crate::vm::myStr::MyStr;
+use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::namespace::StructMeta;
+use crate::vm::variableMetadata::VariableMetadata;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
@@ -32,7 +33,7 @@ pub enum ArithmeticOp {
     Add,
     Sub,
     Mul,
-    Div
+    Div,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,7 +60,7 @@ pub enum Expression {
     StructInit(String, Vec<(String, Expression)>),
     FieldAccess(Box<Expression>, String),
     TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
-    Null
+    Null,
 }
 
 impl Expression {
@@ -68,8 +69,8 @@ impl Expression {
             Expression::Variable(..) => true,
             Expression::NamespaceAccess(..) => true,
             Expression::FieldAccess(..) => true,
-            _ => false
-        }
+            _ => false,
+        };
     }
 
     pub fn isAssignable(&self) -> bool {
@@ -78,8 +79,8 @@ impl Expression {
             Expression::ArrayIndexing(..) => true,
             Expression::NamespaceAccess(..) => true,
             Expression::FieldAccess(..) => true,
-            _ => false
-        }
+            _ => false,
+        };
     }
 }
 
@@ -91,13 +92,13 @@ pub struct ArrayAccess {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
-    pub name: MyStr,
+    pub name: String,
     pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    While(While),
+    While(WhileS),
     If(If),
     Return(Expression),
     Continue,
@@ -107,7 +108,7 @@ pub enum Statement {
     StatementExpression(Expression),
     Assignable(Expression, Expression, Option<ArithmeticOp>),
     ForLoop(String, Expression, Body),
-    Repeat(String, usize, Body)
+    Repeat(String, usize, Body),
 }
 
 #[derive(Debug, Clone)]
@@ -146,19 +147,13 @@ pub struct StructDef {
 
 impl Into<StructMeta> for StructDef {
     fn into(self) -> StructMeta {
-        let mut fieldsLookup = HashMap::new();
-        let mut fields = vec![];
+        let mut fields = FastAcess::default();
 
         for (k, v) in self.fields {
-            fields.push(VariableMetadata{ name: k.clone().into(), typ: v });
-            fieldsLookup.insert(k, fields.len()-1);
+            fields.insert(k.clone(), VariableMetadata::n(&k, v));
         }
 
-        StructMeta {
-            name: self.name,
-            fieldsLookup,
-            fields,
-        }
+        StructMeta::new(self.name, fields)
     }
 }
 
@@ -167,7 +162,7 @@ pub enum Node {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
     GlobalVarDef(String, Expression),
-    Import(Vec<String>)
+    Import(Vec<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -178,19 +173,24 @@ pub struct FunctionDef {
     pub body: Body,
     pub returnType: Option<DataType>,
     pub isNative: bool,
-    pub isOneLine: bool
+    pub isOneLine: bool,
 }
 
 impl FunctionDef {
     pub fn genName(&self) -> String {
-        genFunName(&self.name, &self.localsMeta.iter().map(|it| {
-            it.typ.clone()
-        }).collect::<Vec<_>>())
+        genFunName(
+            &self.name,
+            &self
+                .localsMeta
+                .iter()
+                .map(|it| it.typ.clone())
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct While {
+pub struct WhileS {
     pub exp: Expression,
     pub body: Body,
 }
@@ -200,4 +200,73 @@ pub struct VariableCreate {
     pub name: String,
     pub init: Option<Expression>,
     pub typeHint: Option<DataType>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ASTNode {
+    Global(Node),
+    Statement(Statement),
+    Expr(Expression),
+}
+
+impl ASTNode {
+    pub fn isExpr(&self) -> bool {
+        match self {
+            ASTNode::Expr(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn isStatement(&self) -> bool {
+        match self {
+            ASTNode::Statement(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn isGlobal(&self) -> bool {
+        match self {
+            ASTNode::Global(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
+        match self {
+            ASTNode::Expr(e) => Ok(e),
+            _ => Err(ParserError::Unknown(Box::new(InvalidOperation {
+                operation: self.clone(),
+                expected: "Expression".to_string(),
+            }))),
+        }
+    }
+
+    pub fn asExprRef(&self) -> Result<&Expression, Box<dyn Error>> {
+        match self {
+            ASTNode::Expr(e) => Ok(e),
+            _ => Err(Box::new(InvalidOperation {
+                operation: self.clone(),
+                expected: "Expression".to_string(),
+            })),
+        }
+    }
+
+    pub fn asStatement(self) -> Result<Statement, ParserError<TokenType>> {
+        let clone = self.clone();
+        match self {
+            ASTNode::Statement(s) => Ok(s),
+            ASTNode::Expr(e) => match e {
+                Expression::NamespaceAccess(f) => todo!(),
+                Expression::Callable(_, _) => Ok(StatementExpression(e.clone())),
+                _ => Err(ParserError::InvalidOperation(InvalidOperation {
+                    operation: clone,
+                    expected: String::from("Statement"),
+                })),
+            },
+            _ => Err(ParserError::InvalidOperation(InvalidOperation {
+                operation: clone,
+                expected: String::from("Statement"),
+            })),
+        }
+    }
 }

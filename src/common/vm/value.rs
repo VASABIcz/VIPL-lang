@@ -1,15 +1,14 @@
-use std::fmt::{Debug, Formatter};
-use std::hint::unreachable_unchecked;
 use crate::ast::Expression;
 use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::*;
+use std::fmt::{Debug, Formatter};
+use std::hint::unreachable_unchecked;
 
 use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::nativeObjects::{ViplObjectMeta, UntypedObject, ViplNativeObject, ViplObject};
+use crate::vm::nativeObjects::{UntypedObject, ViplNativeObject, ViplObject, ViplObjectMeta};
 use crate::vm::objects::{Array, Str};
 use crate::vm::vm::VirtualMachine;
-
 
 #[derive(Copy, Clone, Debug)]
 pub struct Xd;
@@ -28,7 +27,7 @@ pub union Value {
     pub Bol: bool,
     pub Chr: char,
     pub Reference: Hay<Xd>,
-    pub FunctionPointer: (u32, u32)
+    pub FunctionPointer: (u32, u32),
 }
 
 impl Value {
@@ -40,7 +39,10 @@ impl Value {
 
 impl Allocation for Value {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
-        if allocations.allocated.contains(&(self.asRefMeta() as *const UntypedObject as usize)) {
+        if allocations
+            .allocated
+            .contains(&(self.asRefMeta() as *const UntypedObject as usize))
+        {
             self.asRefMeta().collectAllocations(allocations)
         }
     }
@@ -69,42 +71,44 @@ impl From<DataType> for Value {
 impl From<isize> for Value {
     #[inline]
     fn from(val: isize) -> Self {
-        Self{Num: val}
+        Self { Num: val }
     }
 }
 
 impl From<i32> for Value {
     #[inline]
     fn from(val: i32) -> Self {
-        Self{Num: val as isize}
+        Self { Num: val as isize }
     }
 }
 
 impl From<char> for Value {
     #[inline]
     fn from(val: char) -> Self {
-        Value{Chr: val}
+        Value { Chr: val }
     }
 }
 
 impl From<f64> for Value {
     #[inline]
     fn from(val: f64) -> Self {
-        Value{Flo: val}
+        Value { Flo: val }
     }
 }
 
 impl From<bool> for Value {
     #[inline]
     fn from(val: bool) -> Self {
-        Value{Bol: val}
+        Value { Bol: val }
     }
 }
 
 impl From<usize> for Value {
     #[inline]
     fn from(val: usize) -> Self {
-        Value{Reference: Hay::new(val as *mut () as *mut Xd)}
+        Value {
+            Reference: Hay::new(val as *mut () as *mut Xd),
+        }
     }
 }
 
@@ -119,12 +123,12 @@ impl Value {
     pub fn asHay<T: Allocation + Debug>(&self) -> Hay<ViplObject<T>> {
         let casted = self.asHayUntyped().inner as *mut ViplObject<T>;
 
-        return Hay::new(casted)
+        return Hay::new(casted);
     }
 
     #[inline(always)]
     pub fn asHayUntyped(&self) -> Hay<Xd> {
-        return unsafe { self.Reference }
+        return unsafe { self.Reference };
     }
 
     #[inline(always)]
@@ -190,22 +194,20 @@ impl Value {
                 *self.getRefFlo() += value.getFlo();
             }
             DataType::Bool => {}
-            Object(it) => {
-                match it.name.as_str() {
-                    "String" => {
-                        let str1 = self.getString();
-                        let str2 = value.getString();
+            Object(it) => match it.name.as_str() {
+                "String" => {
+                    let str1 = self.getString();
+                    let str2 = value.getString();
 
-                        let mut buf = String::with_capacity(str1.len() + str2.len());
+                    let mut buf = String::with_capacity(str1.len() + str2.len());
 
-                        buf.push_str(str1);
-                        buf.push_str(str2);
+                    buf.push_str(str1);
+                    buf.push_str(str2);
 
-                        self.Reference = Value::makeString(buf, vm).asHayUntyped()
-                    }
-                    _ => unreachable!(),
+                    self.Reference = Value::makeString(buf, vm).asHayUntyped()
                 }
-            }
+                _ => unreachable!(),
+            },
             _ => unreachable!(),
         }
     }
@@ -263,18 +265,10 @@ impl Value {
 impl Value {
     pub fn toExpression(&self, t: &DataType) -> Expression {
         match t {
-            Int => {
-                Expression::IntLiteral(self.asNum().to_string())
-            }
-            Float => {
-                Expression::FloatLiteral(self.asFlo().to_string())
-            }
-            Bool => {
-                Expression::BoolLiteral(self.asBool())
-            }
-            Char => {
-                Expression::CharLiteral(self.asChar())
-            }
+            Int => Expression::IntLiteral(self.asNum().to_string()),
+            Float => Expression::FloatLiteral(self.asFlo().to_string()),
+            Bool => Expression::BoolLiteral(self.asBool()),
+            Char => Expression::CharLiteral(self.asChar()),
             _ => unsafe { unreachable_unchecked() },
         }
     }
@@ -323,7 +317,7 @@ impl Value {
             Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -333,7 +327,7 @@ impl Value {
             Int => self.getNumRef() > val.getNumRef(),
             Float => self.getFlo() > val.getFlo(),
             Bool => self.getBool() & !val.getBool(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         *self = l.into()
@@ -345,7 +339,7 @@ impl Value {
             Int => self.getNumRef() < val.getNumRef(),
             Float => self.getFlo() < val.getFlo(),
             Bool => !self.getBool() & val.getBool(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         *self = l.into()
@@ -358,7 +352,7 @@ impl Value {
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -370,7 +364,7 @@ impl Value {
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
             Object(a) => self.getNumRef() == val.getNumRef(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         *self = x.into()
     }
@@ -471,16 +465,24 @@ impl Value {
 
         let hObj = vm.allocate(obj);
 
-        Value{Reference: hObj.into()}
+        Value {
+            Reference: hObj.into(),
+        }
     }
 
     pub fn makeFunction(namespaceID: u32, functionID: u32) -> Value {
-        Value{FunctionPointer: (namespaceID, functionID)}
+        Value {
+            FunctionPointer: (namespaceID, functionID),
+        }
     }
 
     #[inline]
     pub fn makeArray(arr: Vec<Value>, typ: DataType, vm: &mut VirtualMachine) -> Value {
-        Value{Reference: vm.allocate(ViplObject::<Array>::arr(Array{internal: arr, typ})).into()}
+        Value {
+            Reference: vm
+                .allocate(ViplObject::<Array>::arr(Array { internal: arr, typ }))
+                .into(),
+        }
     }
 
     #[inline]

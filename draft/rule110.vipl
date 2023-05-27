@@ -1,0 +1,3 @@
+repeat i 10_000_000 {
+    out::print("UwU")
+}

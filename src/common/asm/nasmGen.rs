@@ -1,7 +1,7 @@
+use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R12, R13};
+use crate::asm::asmLib::{writeToFile, AsmGen, AsmLocation, AsmValue, Register};
 use std::collections::HashMap;
 use std::ops::Deref;
-use crate::asm::asmLib::{AsmGen, AsmValue, AsmLocation, Register, writeToFile};
-use crate::asm::asmLib::Register::{R12, R13, Rax, Rdi, Rdx, Rsi, Rsp};
 
 pub struct NasmGen {
     pub executable: String,
@@ -10,7 +10,7 @@ pub struct NasmGen {
     pub jmpCounter: usize,
     pub labelCounter: usize,
     pub stringCache: HashMap<String, String>,
-    pub stackSize: usize
+    pub stackSize: usize,
 }
 
 impl NasmGen {
@@ -32,7 +32,11 @@ impl NasmGen {
 
         for c in s.bytes() {
             let chr = c as char;
-            if chr.is_ascii_alphanumeric() || chr.is_ascii_graphic() || chr.is_ascii_hexdigit() || chr == ' ' {
+            if chr.is_ascii_alphanumeric()
+                || chr.is_ascii_graphic()
+                || chr.is_ascii_hexdigit()
+                || chr == ' '
+            {
                 if !isInString {
                     if !buf.is_empty() {
                         buf.push(',');
@@ -41,8 +45,7 @@ impl NasmGen {
                     isInString = true;
                 }
                 buf.push(c as char);
-            }
-            else {
+            } else {
                 if isInString {
                     buf.push('\"');
                     isInString = false;
@@ -58,15 +61,14 @@ impl NasmGen {
         }
         if buf.is_empty() {
             buf += "0";
-        }
-        else {
+        } else {
             buf += ", 0";
         }
         buf
     }
 
     pub fn generate(&self) -> String {
-        let mut buf = String::with_capacity(self.readOnly.len()+self.executable.len());
+        let mut buf = String::with_capacity(self.readOnly.len() + self.executable.len());
         buf.push_str("BITS 64\n");
         buf.push_str("DEFAULT REL\n\n");
         buf.push_str("section .text\n");
@@ -170,7 +172,7 @@ impl AsmGen for NasmGen {
                 self.stringCache.insert(str.to_string(), id.clone());
                 id
             }
-            Some(v) => v.clone()
+            Some(v) => v.clone(),
         }
     }
 
@@ -262,12 +264,11 @@ impl AsmGen for NasmGen {
 
     fn offsetStack(&mut self, offset: isize) {
         if offset < 0 {
-            self.stackSize += (offset*-1) as usize;
-            self.sub(Rsp.into(), (8*offset*-1).into())
-        }
-        else if offset > 0 {
+            self.stackSize += (offset * -1) as usize;
+            self.sub(Rsp.into(), (8 * offset * -1).into())
+        } else if offset > 0 {
             self.stackSize -= offset as usize;
-            self.add(Rsp.into(), (8*offset).into());
+            self.add(Rsp.into(), (8 * offset).into());
         }
     }
 

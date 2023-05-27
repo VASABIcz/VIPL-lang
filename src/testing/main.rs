@@ -8,9 +8,9 @@ use std::io::{BufRead, Write};
 use std::mem::{ManuallyDrop, size_of};
 use std::process::exit;
 use std::rc::Rc;
+
 use rust_vm::asm::asmGen::generateAssembly;
 use rust_vm::asm::asmLib::NasmGen;
-
 use rust_vm::codegen::{bytecodeGen2, complexBytecodeGen};
 use rust_vm::fs::setupFs;
 use rust_vm::lexer::tokenizeSource;
@@ -74,7 +74,6 @@ fn main() {
     };
 
     /// println!("{:?}", &vm.functions.keys());
-
     let mut rets = HashMap::new();
 
     for f in &vm.functions {
@@ -99,9 +98,12 @@ fn main() {
 
     vm.addBytecode(bs.0);
 
-    let mut locals = bs.1.iter().map(|it| { it.toDefaultValue() }).collect::<Vec<_>>();
+    let mut locals =
+        bs.1.iter()
+            .map(|it| it.toDefaultValue())
+            .collect::<Vec<_>>();
 
-    vm.pushFrame(StackFrame{
+    vm.pushFrame(StackFrame {
         localVariables: &mut locals,
         objects: None,
         previous: None,

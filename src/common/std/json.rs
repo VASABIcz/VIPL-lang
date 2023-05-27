@@ -3,12 +3,19 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use crate::errors::{Errorable, LoadFileError, ParserError};
-use crate::lexer::{AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit, RangeLexingUnit, SourceProvider, tokenize, WhitespaceLexingUnit};
+use crate::fastAccess::FastAcess;
+use crate::lexer::{
+    tokenize, AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit,
+    RangeLexingUnit, SourceProvider, WhitespaceLexingUnit,
+};
 
-use crate::parser::{parseOne, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::parser::ParsingUnitSearchType::Ahead;
-use crate::std::json::JsonToken::{ArrayBegin, ArrayEnd, Comma, False, Identifier, Null, ObjectBegin, ObjectEnd, Sep, True};
+use crate::parser::{parseOne, ParsingUnit, ParsingUnitSearchType, TokenProvider};
+use crate::std::json::JsonToken::{
+    ArrayBegin, ArrayEnd, Comma, False, Identifier, Null, ObjectBegin, ObjectEnd, Sep, True,
+};
 use crate::vm::dataType::DataType;
+use crate::vm::dataType::DataType::Bool;
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::{Namespace, StructMeta};
 use crate::vm::nativeObjects::{ObjectType, ViplNativeObject, ViplObject, ViplObjectMeta};
@@ -25,13 +32,12 @@ pub enum JSON {
     JInt(isize),
     JFloat(f64),
     JString(String),
-    JNull
+    JNull,
 }
 
 impl Allocation for JSON {
     fn collectAllocations(&self, allocations: &mut HayCollector) {}
 }
-
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum JsonToken {
@@ -47,7 +53,7 @@ pub enum JsonToken {
 
     Null,
     True,
-    False
+    False,
 }
 
 #[derive(Debug)]
@@ -61,18 +67,27 @@ impl ParsingUnit<JSON, JsonToken> for JObjectParsingUnit {
         tokenProvider.isPeekType(ObjectBegin)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider<JsonToken>,
+        previous: Option<JSON>,
+        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+    ) -> Result<JSON, ParserError<JsonToken>> {
         let mut pairs = HashMap::new();
 
         tokenProvider.getAssert(ObjectBegin)?;
 
-        let parsed = tokenProvider.parseManyWithSeparatorUntil(|it| {
-            let key = it.getAssert(Identifier)?.str.clone();
-            it.getAssert(Comma)?;
-            let value = parseOne(it, Ahead, parser, None)?;
+        let parsed = tokenProvider.parseManyWithSeparatorUntil(
+            |it| {
+                let key = it.getAssert(Identifier)?.str.clone();
+                it.getAssert(Comma)?;
+                let value = parseOne(it, Ahead, parser, None)?;
 
-            Ok((key, value))
-        }, Some(Sep), ObjectEnd)?;
+                Ok((key, value))
+            },
+            Some(Sep),
+            ObjectEnd,
+        )?;
 
         for p in parsed {
             pairs.insert(p.0, p.1);
@@ -102,12 +117,19 @@ impl ParsingUnit<JSON, JsonToken> for JArrayParsingUnit {
         tokenProvider.isPeekType(ArrayBegin)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider<JsonToken>,
+        previous: Option<JSON>,
+        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+    ) -> Result<JSON, ParserError<JsonToken>> {
         tokenProvider.getAssert(ArrayBegin);
 
-        let res = tokenProvider.parseManyWithSeparatorUntil(|it| {
-            parseOne(it, Ahead, parser, None)
-        }, Some(Sep), ArrayEnd)?;
+        let res = tokenProvider.parseManyWithSeparatorUntil(
+            |it| parseOne(it, Ahead, parser, None),
+            Some(Sep),
+            ArrayEnd,
+        )?;
 
         Ok(JSON::JArray(res))
     }
@@ -130,29 +152,34 @@ impl ParsingUnit<JSON, JsonToken> for JKeywordParsingUnit {
     }
 
     fn canParse(&self, tokenProvider: &TokenProvider<JsonToken>, previous: Option<&JSON>) -> bool {
-        tokenProvider.isPeekType(True) || tokenProvider.isPeekType(False) || tokenProvider.isPeekType(True) || tokenProvider.isPeekType(Null) || tokenProvider.isPeekType(Identifier)
+        tokenProvider.isPeekType(True)
+            || tokenProvider.isPeekType(False)
+            || tokenProvider.isPeekType(True)
+            || tokenProvider.isPeekType(Null)
+            || tokenProvider.isPeekType(Identifier)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<JsonToken>, previous: Option<JSON>, parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>]) -> Result<JSON, ParserError<JsonToken>> {
+    fn parse(
+        &self,
+        tokenProvider: &mut TokenProvider<JsonToken>,
+        previous: Option<JSON>,
+        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+    ) -> Result<JSON, ParserError<JsonToken>> {
         if tokenProvider.isPeekType(True) {
             tokenProvider.getAssert(True)?;
 
             Ok(JSON::JBool(true))
-        }
-        else if tokenProvider.isPeekType(False) {
+        } else if tokenProvider.isPeekType(False) {
             tokenProvider.getAssert(False)?;
             Ok(JSON::JBool(false))
-        }
-        else if tokenProvider.isPeekType(Null) {
+        } else if tokenProvider.isPeekType(Null) {
             tokenProvider.getAssert(Null)?;
             Ok(JSON::JNull)
-        }
-        else if tokenProvider.isPeekType(Identifier) {
+        } else if tokenProvider.isPeekType(Identifier) {
             let t = tokenProvider.getAssert(Identifier)?;
 
             Ok(JSON::JString(t.str.clone()))
-        }
-        else {
+        } else {
             unreachable!()
         }
     }
@@ -170,7 +197,7 @@ pub fn jsonParsingUnits() -> Vec<Box<dyn ParsingUnit<JSON, JsonToken>>> {
     vec![
         Box::new(JObjectParsingUnit),
         Box::new(JArrayParsingUnit),
-        Box::new(JKeywordParsingUnit)
+        Box::new(JKeywordParsingUnit),
     ]
 }
 
@@ -179,23 +206,29 @@ pub fn jsonTokenizingUnits() -> Vec<Box<dyn LexingUnit<JsonToken>>> {
         AlphabeticKeywordLexingUnit::new("false", JsonToken::False),
         AlphabeticKeywordLexingUnit::new("true", JsonToken::False),
         AlphabeticKeywordLexingUnit::new("null", JsonToken::False),
-
         KeywordLexingUnit::new("{", JsonToken::ObjectBegin),
         KeywordLexingUnit::new("}", JsonToken::ObjectEnd),
         KeywordLexingUnit::new("[", JsonToken::ArrayBegin),
         KeywordLexingUnit::new("]", JsonToken::ArrayEnd),
         KeywordLexingUnit::new(",", JsonToken::Sep),
         KeywordLexingUnit::new(":", JsonToken::Comma),
-
         RangeLexingUnit::new("\"", "\"", Some(JsonToken::Identifier)),
         WhitespaceLexingUnit::new(),
-        IdentifierLexingUnit::new(JsonToken::Identifier) // we do lil bit of troling :D
+        IdentifierLexingUnit::new(JsonToken::Identifier), // we do lil bit of troling :D
     ]
 }
 
 impl JSON {
     pub fn parse(s: &str) -> Result<JSON, LoadFileError<JsonToken>> {
-        let res = tokenize(&mut jsonTokenizingUnits(), SourceProvider{ data: s, index: 0, row: 0, col: 0 })?;
+        let res = tokenize(
+            &mut jsonTokenizingUnits(),
+            SourceProvider {
+                data: s,
+                index: 0,
+                row: 0,
+                col: 0,
+            },
+        )?;
         let units = jsonParsingUnits();
 
         let mut provider = TokenProvider::new(res);
@@ -209,73 +242,112 @@ impl JSON {
 pub fn registerJson(vm: &mut VirtualMachine) {
     let mut n = Namespace::new("js", vm);
 
-    n.registerStruct(StructMeta{
-        name: "JBool".to_string(),
-        fieldsLookup: Default::default(),
-        fields: vec![VariableMetadata{ name: "v".into(), typ: DataType::Bool }],
-    });
+    n.registerStruct(StructMeta::n(
+        "JBool",
+        FastAcess::ofStr(vec![("v", VariableMetadata::n("v", Bool))]),
+    ));
 
-    n.makeNative("load", &[DataType::str()], |vm, s| {
-        let str = s.getString(0);
+    n.makeNative(
+        "load",
+        &[DataType::str()],
+        |vm, s| {
+            let str = s.getString(0);
 
-        let v = match JSON::parse(str).ok() {
-            None => Value::null(),
-            Some(v) => {
-                let obj = ViplObject{
-                    meta: ViplObjectMeta{
-                        namespaceId: 0,
-                        structId: 0,
-                        objectType: ObjectType::Native(ViplNativeObject::default()),
-                    },
-                    data: v,
-                };
-                vm.allocate(obj).into()
-            }
-        };
+            let v = match JSON::parse(str).ok() {
+                None => Value::null(),
+                Some(v) => {
+                    let obj = ViplObject {
+                        meta: ViplObjectMeta {
+                            namespaceId: 0,
+                            structId: 0,
+                            objectType: ObjectType::Native(ViplNativeObject::default()),
+                        },
+                        data: v,
+                    };
+                    vm.allocate(obj).into()
+                }
+            };
 
-        v
+            v
+        },
+        DataType::obj("Json"),
+        false,
+    );
 
-    }, DataType::obj("Json"), false);
+    n.makeNative(
+        "save",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::str(),
+        false,
+    );
 
-    n.makeNative("save", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::str(), false);
+    n.makeNative(
+        "getIndex",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("Json"),
+        false,
+    );
 
-    n.makeNative("getIndex", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("Json"), false);
+    n.makeNative(
+        "length",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("JInt"),
+        false,
+    );
 
-    n.makeNative("length", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("JInt"), false);
+    n.makeNative(
+        "hasKey",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("JBool"),
+        false,
+    );
 
-    n.makeNative("hasKey", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("JBool"), false);
+    n.makeNative(
+        "getField",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("Json"),
+        false,
+    );
 
-    n.makeNative("getField", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("Json"), false);
+    n.makeNative(
+        "asString",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::str(),
+        false,
+    );
 
-    n.makeNative("asString", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::str(), false);
+    n.makeNative(
+        "asInt",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("JInt"),
+        false,
+    );
 
-    n.makeNative("asInt", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("JInt"), false);
+    n.makeNative(
+        "asBool",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("JBool"),
+        false,
+    );
 
-    n.makeNative("asBool", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("JBool"), false);
-
-    n.makeNative("asNull", &[DataType::obj("Json")], |vm, s| {
-        todo!()
-    }, DataType::obj("JNull"), false);
+    n.makeNative(
+        "asNull",
+        &[DataType::obj("Json")],
+        |vm, s| todo!(),
+        DataType::obj("JNull"),
+        false,
+    );
 
     vm.registerNamespace(n);
 }
-
 
 #[test]
 fn testParse() {

@@ -1,23 +1,20 @@
-use core::slice::GetManyMutError;
 use crate::asm::asmLib::Register;
+use core::slice::GetManyMutError;
 
 pub struct RegisterRecord {
     pub reg: Register,
-    pub aquires: usize
+    pub aquires: usize,
 }
 
 impl RegisterRecord {
     pub fn new(reg: Register) -> Self {
-        Self {
-            reg,
-            aquires: 0,
-        }
+        Self { reg, aquires: 0 }
     }
 }
 
 pub struct RegisterManager {
     pub registers: Vec<RegisterRecord>,
-    aquires: Vec<Register>
+    aquires: Vec<Register>,
 }
 
 impl RegisterManager {
@@ -33,15 +30,16 @@ impl RegisterManager {
             Register::Rdx,
             Register::Rsi,
             Register::Rdi,
-            Register::Rax
+            Register::Rax,
         ];
 
         regs.reverse();
 
         Self {
-            registers: regs.into_iter().map(|it| {
-                RegisterRecord::new(it)
-            }).collect::<Vec<_>>(),
+            registers: regs
+                .into_iter()
+                .map(|it| RegisterRecord::new(it))
+                .collect::<Vec<_>>(),
             aquires: vec![],
         }
     }
@@ -51,9 +49,7 @@ impl RegisterManager {
     // acquires gona use
 
     pub fn aquireSpecific(&mut self, reg: Register) -> bool {
-        let res = self.registers.iter_mut().find(|it| {
-            it.reg == reg
-        }).unwrap();
+        let res = self.registers.iter_mut().find(|it| it.reg == reg).unwrap();
 
         res.aquires += 1;
 
@@ -63,17 +59,18 @@ impl RegisterManager {
     }
 
     pub fn release(&mut self, reg: Register) -> bool {
-        let res = self.registers.iter_mut().find(|it| {
-            it.reg == reg
-        }).unwrap();
+        let res = self.registers.iter_mut().find(|it| it.reg == reg).unwrap();
 
         let r = self.aquires.pop().unwrap();
 
         if r != reg {
-            panic!("registers restored in invalid order {:?} vs {:?} | {:?}", r, reg, self.aquires)
+            panic!(
+                "registers restored in invalid order {:?} vs {:?} | {:?}",
+                r, reg, self.aquires
+            )
         }
 
-        res.aquires-=1;
+        res.aquires -= 1;
 
         res.aquires > 0
     }
@@ -82,24 +79,24 @@ impl RegisterManager {
         let mut counter = 0usize;
 
         loop {
-            let items = match self.registers.get_many_mut([counter, counter+1]) {
+            let items = match self.registers.get_many_mut([counter, counter + 1]) {
                 Ok(v) => v,
                 Err(_) => {
                     let a = self.registers.get_mut(counter).unwrap();
                     self.aquires.push(a.reg);
                     a.aquires += 1;
-                    return (a.reg, a.aquires > 1)
+                    return (a.reg, a.aquires > 1);
                 }
             };
 
             if items[1].aquires <= items[0].aquires {
                 counter += 1;
-                continue
+                continue;
             }
             self.aquires.push(items[0].reg);
             items[0].aquires += 1;
 
-            return (items[0].reg, items[0].aquires > 1)
+            return (items[0].reg, items[0].aquires > 1);
         }
     }
 

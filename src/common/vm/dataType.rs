@@ -1,9 +1,9 @@
-use std::error::Error;
 use crate::ast::Expression;
 use crate::errors::{CodeGenError, TypeError};
 use crate::vm::dataType::DataType::*;
-use crate::vm::myStr::MyStr;
+use crate::vm::objects::Str;
 use crate::vm::value::Value;
+use std::error::Error;
 
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
@@ -13,11 +13,11 @@ pub enum DataType {
     Bool,
     Char,
     Object(ObjectMeta),
-    Function{
+    Function {
         args: Vec<DataType>,
-        ret: Box<DataType>
+        ret: Box<DataType>,
     },
-    Void
+    Void,
 }
 
 impl DataType {
@@ -43,68 +43,70 @@ impl DataType {
 
     pub fn isString(&self) -> bool {
         match self {
-            Object(o) => {
-                return o.name.as_str() == "String"
-            }
-            _ => false
+            Object(o) => return o.name.as_str() == "String",
+            _ => false,
         }
     }
 
     pub fn isArray(&self) -> bool {
         match self {
-            Object(o) => {
-                return o.name.as_str() == "Array"
-            }
-            _ => false
+            Object(o) => return o.name.as_str() == "Array",
+            _ => false,
         }
     }
 
     pub fn isVoid(&self) -> bool {
         match self {
             Void => true,
-            _ => false
+            _ => false,
         }
     }
 
-    pub fn asArray(&self) -> Result<&ObjectMeta, CodeGenError>  {
+    pub fn isFunction(&self) -> bool {
+        match self {
+            Function { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn asArray(&self) -> Result<&ObjectMeta, CodeGenError> {
         match self {
             Object(o) => {
                 if o.name.as_str() == "Array" {
                     Ok(o)
-                }
-                else {
-                    Err(CodeGenError::TypeError(TypeError{
+                } else {
+                    Err(CodeGenError::TypeError(TypeError {
                         expected: DataType::arr(Generic::Any),
                         actual: self.clone(),
                         exp: None,
                     }))
                 }
             }
-            v => Err(CodeGenError::TypeError(TypeError{
+            v => Err(CodeGenError::TypeError(TypeError {
                 expected: DataType::arr(Generic::Any),
                 actual: self.clone(),
                 exp: None,
-            }))
+            })),
         }
     }
 
     pub fn str() -> Self {
         Object(ObjectMeta {
-            name: MyStr::Static("String"),
+            name: "String".to_string(),
             generics: Box::new([]),
         })
     }
 
     pub fn arr(inner: Generic) -> Self {
         Object(ObjectMeta {
-            name: MyStr::Static("Array"),
+            name: "Array".to_string(),
             generics: Box::new([inner]),
         })
     }
 
     pub fn obj(name: &'static str) -> Self {
         Object(ObjectMeta {
-            name: MyStr::Static(name),
+            name: name.to_string(),
             generics: Box::new([]),
         })
     }
@@ -114,13 +116,31 @@ impl DataType {
             Int => "int".to_string(),
             Float => "float".to_string(),
             Bool => "bool".to_string(),
-            Object(x) => x.name.clone().to_string(),
+            Object(x) => {
+                if x.generics.len() == 0 {
+                    return x.name.clone();
+                } else {
+                    format!(
+                        "{}<{}>",
+                        x.name,
+                        x.generics
+                            .iter()
+                            .map(|it| it.toString())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            }
             Char => "char".to_string(),
             Void => "!".to_string(),
-            Function { args, ret } =>
-                format!("({}): {}", args.iter().map(|it| {
-                    it.toString()
-                }).collect::<Vec<_>>().join(", "), ret.toString())
+            Function { args, ret } => format!(
+                "({}): {}",
+                args.iter()
+                    .map(|it| { it.toString() })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                ret.toString()
+            ),
         }
     }
 
@@ -132,7 +152,7 @@ impl DataType {
             Object(_) => "ViplObject*",
             Char => "char",
             Void => "void",
-            Function { .. } => todo!()
+            Function { .. } => todo!(),
         }
     }
 
@@ -158,6 +178,13 @@ pub enum Generic {
 }
 
 impl Generic {
+    pub fn toString(&self) -> String {
+        match self {
+            Generic::Any => "*".to_string(),
+            Generic::Type(t) => t.toString(),
+        }
+    }
+
     pub fn ok_or<E>(self, err: E) -> Result<DataType, E> {
         match self {
             Generic::Any => Err(err),
@@ -169,14 +196,14 @@ impl Generic {
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct ObjectMeta {
-    pub name: MyStr,
+    pub name: String,
     pub generics: Box<[Generic]>,
 }
 
 impl ObjectMeta {
     pub fn new(name: &'static str) -> Self {
         Self {
-            name: MyStr::Static(name),
+            name: name.to_string(),
             generics: Box::new([]),
         }
     }

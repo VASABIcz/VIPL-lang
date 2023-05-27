@@ -1,14 +1,16 @@
-use std::collections::HashMap;
-use libc::THOUSEP;
-use offset::offset_of;
-use crate::asm::asmLib::{AsmGen, AsmValue, Concrete, AsmLocation, Register};
-use crate::asm::asmLib::Register::{R10, R11, R12, R13, R14, R15, Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp};
+use crate::asm::asmLib::Register::{
+    Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp, R10, R11, R12, R13, R14, R15,
+};
+use crate::asm::asmLib::{AsmGen, AsmLocation, AsmValue, Concrete, Register};
 use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
 use crate::viplDbg;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
+use libc::THOUSEP;
+use offset::offset_of;
+use std::collections::HashMap;
 
 const DEBUG: bool = true;
 
@@ -45,7 +47,7 @@ static ARG_REGS: [Register; 6] = [Rdi, Rsi, Rdx, Rcx, Register::R8, Register::R8
 pub struct Jitter<T: AsmGen> {
     pub gen: T,
     pub regs: RegisterManager,
-    pub stack: Vec<Register>
+    pub stack: Vec<Register>,
 }
 
 impl<T: AsmGen> Jitter<T> {
@@ -133,7 +135,6 @@ impl<T: AsmGen> Jitter<T> {
         self.saveAquiredRegisters(&ARG_REGS[..argsCount]);
         self.saveCoreRegisters();
 
-
         let offset = self.gen.getStackOffset();
 
         // FIXME not sure if its even reliable it looks like rust doesnt align stack for ffi calls
@@ -158,7 +159,7 @@ impl<T: AsmGen> Jitter<T> {
 
         self.gen.comment("restore args registers");
         for i in 0..argsCount {
-            self.releaseRegister(ARG_REGS[(argsCount-1)-i])
+            self.releaseRegister(ARG_REGS[(argsCount - 1) - i])
         }
     }
 
@@ -178,8 +179,18 @@ impl<T: AsmGen> Jitter<T> {
         self.gen.pop(Rbx.into());
     }
 
-    fn genCall(&mut self, namespaceID: usize, functionID: usize, returns: bool, argsCount: usize, localsCount: usize) {
-        self.gen.comment(&format!("call {}:{} -> {}", namespaceID, functionID, returns));
+    fn genCall(
+        &mut self,
+        namespaceID: usize,
+        functionID: usize,
+        returns: bool,
+        argsCount: usize,
+        localsCount: usize,
+    ) {
+        self.gen.comment(&format!(
+            "call {}:{} -> {}",
+            namespaceID, functionID, returns
+        ));
 
         self.gen.comment("push args to stack");
 
@@ -198,7 +209,8 @@ impl<T: AsmGen> Jitter<T> {
         }
 
         if argsCount < localsCount {
-            self.gen.offsetStack(argsCount as isize - localsCount as isize)
+            self.gen
+                .offsetStack(argsCount as isize - localsCount as isize)
         }
 
         self.gen.comment("save pointer to stack args");
@@ -206,13 +218,13 @@ impl<T: AsmGen> Jitter<T> {
         let r = self.acquireAny();
         self.gen.mov(r.into(), Rsp.into());
 
-        self.safeCall(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::lCall).as_u32() as isize),
-                 &[
-                     R15.into(),
-                     functionID.into(),
-                     namespaceID.into(),
-                     r.into()
-                 ]);
+        self.safeCall(
+            AsmLocation::Indexing(
+                R15.into(),
+                offset_of!(NativeWrapper::lCall).as_u32() as isize,
+            ),
+            &[R15.into(), functionID.into(), namespaceID.into(), r.into()],
+        );
 
         self.releaseRegister(r);
 
@@ -230,7 +242,8 @@ impl<T: AsmGen> Jitter<T> {
             return;
         }
 
-        self.gen.comment(&format!("debugCrash {}", asmValue.clone().toString()));
+        self.gen
+            .comment(&format!("debugCrash {}", asmValue.clone().toString()));
         self.gen.mov(Rax.into(), 60.into());
         self.gen.mov(Rdi.into(), asmValue.into());
         self.gen.sysCall();
@@ -242,13 +255,21 @@ impl<T: AsmGen> Jitter<T> {
         }
         self.gen.beginIgnore();
 
-        self.gen.comment(&format!("printDigit {}", asmValue.clone().toString()));
+        self.gen
+            .comment(&format!("printDigit {}", asmValue.clone().toString()));
 
-        println!("offset {}", offset_of!(NativeWrapper::printDigit).as_u32() as isize);
+        println!(
+            "offset {}",
+            offset_of!(NativeWrapper::printDigit).as_u32() as isize
+        );
 
-        self.safeCall(AsmLocation::Indexing(R15.into(), offset_of!(NativeWrapper::printDigit).as_u32() as isize), &[
-            asmValue
-        ]);
+        self.safeCall(
+            AsmLocation::Indexing(
+                R15.into(),
+                offset_of!(NativeWrapper::printDigit).as_u32() as isize,
+            ),
+            &[asmValue],
+        );
 
         self.gen.endIgnore();
     }
@@ -259,7 +280,13 @@ impl<T: AsmGen> Jitter<T> {
         self.gen.mov(Rdi.into(), R15.into());
         self.gen.mov(Rsi.into(), R14.into());
         self.gen.lea(Rdx.into(), label.into());
-        self.gen.mov(R10.into(), AsmValue::Indexing(R15.into(), offset_of!(NativeWrapper::stringNew).as_u32() as isize));
+        self.gen.mov(
+            R10.into(),
+            AsmValue::Indexing(
+                R15.into(),
+                offset_of!(NativeWrapper::stringNew).as_u32() as isize,
+            ),
+        );
         self.gen.call(R10.into());
         self.gen.push(Rax.into());
     }
@@ -306,7 +333,13 @@ impl<T: AsmGen> Jitter<T> {
         self.gen.newLine();
     }
 
-    pub fn generateAssembly(&mut self, opCodes: Vec<OpCode>, vm: &VirtualMachine, namespace: &Namespace, returns: bool) {
+    pub fn generateAssembly(
+        &mut self,
+        opCodes: Vec<OpCode>,
+        vm: &VirtualMachine,
+        namespace: &Namespace,
+        returns: bool,
+    ) {
         let mut jmpCounter = 0usize;
 
         let mut makeLabelsGreatAgain = HashMap::new();
@@ -318,7 +351,7 @@ impl<T: AsmGen> Jitter<T> {
         for (i, op) in opCodes.iter().enumerate() {
             if let OpCode::Jmp { offset, jmpType } = op {
                 let o = *offset + 1;
-                let xd = (i as isize+o) as usize;
+                let xd = (i as isize + o) as usize;
                 let label = match makeLabelsGreatAgain.get(&xd) {
                     None => {
                         let a = format!("JMP{}", jmpCounter);
@@ -326,9 +359,7 @@ impl<T: AsmGen> Jitter<T> {
                         jmpCounter += 1;
                         a
                     }
-                    Some(v) => {
-                        v.clone()
-                    }
+                    Some(v) => v.clone(),
                 };
                 jmpLookup.insert(i, label);
             }
@@ -355,28 +386,28 @@ impl<T: AsmGen> Jitter<T> {
                 OpCode::PushInt(v) => {
                     let r = aqireReg();
                     self.gen.mov(r.into(), (*v).into());
-                },
+                }
                 OpCode::PushIntOne => {
                     let r = aqireReg();
                     self.gen.mov(r.into(), 1.into());
-                },
+                }
                 OpCode::PushIntZero => {
                     let r = aqireReg();
                     self.gen.mov(r.into(), 0.into());
-                },
+                }
                 OpCode::PushFloat(_) => todo!(),
                 OpCode::PushBool(b) => {
                     let r = aqireReg();
                     self.gen.mov(r.into(), ((*b) as usize).into());
-                },
+                }
                 OpCode::PushChar(c) => {
                     let r = aqireReg();
                     self.gen.mov(r.into(), ((*c) as usize).into());
-                },
+                }
                 OpCode::Pop => {
                     let r = self.stack.pop().unwrap();
                     self.releaseRegister(r)
-                },
+                }
                 OpCode::Dup => {
                     let r = self.stack.pop().unwrap();
                     let r1 = self.stack.pop().unwrap();
@@ -385,13 +416,15 @@ impl<T: AsmGen> Jitter<T> {
                 }
                 OpCode::GetLocal { index } => {
                     let r = aqireReg();
-                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
-                },
+                    self.gen
+                        .mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
+                }
                 OpCode::SetLocal { index } => {
                     let r = self.stack.pop().unwrap();
-                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+                    self.gen
+                        .mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
                     self.releaseRegister(r)
-                },
+                }
                 OpCode::Jmp { offset, jmpType } => {
                     let l = jmpLookup.get(&i).unwrap().clone();
                     match jmpType {
@@ -400,21 +433,21 @@ impl<T: AsmGen> Jitter<T> {
                             self.releaseRegister(r);
                             self.gen.compare(r.into(), 1.into());
                             self.gen.jmpIfOne(l.into())
-                        },
+                        }
                         JmpType::Zero | JmpType::False => {
                             let r = self.stack.pop().unwrap();
                             self.releaseRegister(r);
                             self.gen.compare(r.into(), 0.into());
                             self.gen.jmpIfZero(l.into())
-                        },
+                        }
                         JmpType::Jmp => self.gen.jmp(l.into()),
-                        _ => todo!()
+                        _ => todo!(),
                     }
                 }
                 OpCode::Return => {
-                    if i-1 == lastRet as usize {
+                    if i - 1 == lastRet as usize {
                         lastRet = i as isize;
-                        continue
+                        continue;
                     }
                     lastRet = i as isize;
                     if returns {
@@ -427,7 +460,7 @@ impl<T: AsmGen> Jitter<T> {
                     }
                     self.printDigit(Rax.into());
                     self.gen.ret()
-                },
+                }
                 OpCode::Add(t) => match t {
                     DataType::Int => {
                         let r2 = self.stack.pop().unwrap();
@@ -436,8 +469,8 @@ impl<T: AsmGen> Jitter<T> {
                         self.releaseRegister(r2);
                         self.stack.push(r1)
                     }
-                    _ => todo!()
-                }
+                    _ => todo!(),
+                },
                 OpCode::Sub(t) => match t {
                     DataType::Int => {
                         let r2 = self.stack.pop().unwrap();
@@ -446,8 +479,8 @@ impl<T: AsmGen> Jitter<T> {
                         self.releaseRegister(r2);
                         self.stack.push(r1)
                     }
-                    _ => todo!()
-                }
+                    _ => todo!(),
+                },
                 OpCode::Div(_) => todo!(),
                 OpCode::Mul(t) => match t {
                     DataType::Int => {
@@ -457,8 +490,8 @@ impl<T: AsmGen> Jitter<T> {
                         self.releaseRegister(r2);
                         self.stack.push(r1)
                     }
-                    _ => todo!()
-                }
+                    _ => todo!(),
+                },
                 OpCode::Equals(t) => {
                     todo!()
                 }
@@ -478,8 +511,8 @@ impl<T: AsmGen> Jitter<T> {
                         self.releaseRegister(r2);
                         self.stack.push(r1);
                     }
-                    _ => todo!()
-                }
+                    _ => todo!(),
+                },
                 OpCode::Less(t) => match t {
                     DataType::Int | DataType::Bool | DataType::Char => {
                         let r2 = self.stack.pop().unwrap();
@@ -496,8 +529,8 @@ impl<T: AsmGen> Jitter<T> {
                         self.releaseRegister(r2);
                         self.stack.push(r1);
                     }
-                    _ => todo!()
-                }
+                    _ => todo!(),
+                },
                 OpCode::Or => {
                     let r2 = self.stack.pop().unwrap();
                     let r1 = self.stack.pop().unwrap();
@@ -520,20 +553,20 @@ impl<T: AsmGen> Jitter<T> {
                 OpCode::StrNew(v) => {
                     todo!();
                     // pushStr(self.gen, v.as_str())
-                },
+                }
                 OpCode::SCall { id } => {
                     let f = namespace.getFunctionMeta(*id).unwrap();
                     let argsCount = f.argsCount;
                     let returns = f.returns();
 
                     self.genCall(namespace.id, *id, returns, argsCount, f.localsMeta.len())
-                },
+                }
                 OpCode::LCall { namespace, id } => {
                     let f = &vm.getNamespace(*namespace).getFunction(*id).0;
                     let returns = f.returns();
                     let argsCount = f.argsCount;
 
-                    self.genCall( *namespace, *id, returns, argsCount, f.localsMeta.len())
+                    self.genCall(*namespace, *id, returns, argsCount, f.localsMeta.len())
                 }
                 OpCode::GetLocalZero => {
                     let r = aqireReg();
@@ -586,7 +619,7 @@ impl<T: AsmGen> Jitter<T> {
                 OpCode::ArrayNew(t) => {
                     todo!()
                 }
-                e => todo!("{:?}", e)
+                e => todo!("{:?}", e),
             }
             self.gen.comment(&format!("end opcode {:?}\n", op));
         }
