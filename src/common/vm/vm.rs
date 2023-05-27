@@ -10,11 +10,11 @@ use std::mem::{size_of, transmute};
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, getSymbolicChunks, SimpleCtx, StatementCtx, SymbolicOpcode};
+use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, SimpleCtx, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
 use crate::fastAcess::FastAcess;
 use crate::ffi::NativeWrapper;
-use crate::utils::{FastVec, readNeighbours};
+use crate::utils::{FastVec, readNeighbours, transform};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
@@ -26,6 +26,8 @@ use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeObjects::{ViplObjectMeta, ObjectType, SimpleObjectWrapper, UntypedObject, ViplObject};
 use crate::vm::nativeStack::StackManager;
 use crate::vm::objects::{Array, Str};
+use crate::vm::optimizations::bytecodeOptimizer::optimizeBytecode;
+use crate::vm::optimizations::constEval::constEvaluation;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
@@ -807,9 +809,12 @@ impl VirtualMachine {
                             let res = genFunctionDef(f, ctx)?;
                             f.localsMeta = res.into_boxed_slice();
 
-                            let opt = optimizeOps(ops);
+                            ops = transform(ops, |it| {
+                                let r = constEvaluation(it);
+                                optimizeBytecode(r)
+                            });
 
-                            let opt = emitOpcodes(opt);
+                            let opt = emitOpcodes(ops);
 
                             if DEBUG {
                                 println!("link opcodes N: {}, F: {} {} {:?}", nId, index, f.name, opt);
@@ -842,43 +847,6 @@ impl VirtualMachine {
             handleStatementExpression: |it, t| { if t != Void { it.push(Pop) } },
         }
     }
-}
-
-fn optimizeOps(i: Vec<SymbolicOpcode>) -> Vec<SymbolicOpcode> {
-    let mut res = vec![];
-
-    for op in i.into_iter() {
-        match op {
-            SymbolicOpcode::Op(op) => {
-                if op == OpCode::Add(Int) {
-                    res.push(OpCode::AddInt.into())
-                }
-                else if op == OpCode::Sub(Int) {
-                    res.push(OpCode::SubInt.into())
-                }
-                else if op == OpCode::Mul(Int) {
-                    res.push(OpCode::MulInt.into())
-                }
-                else if op == OpCode::Less(Int) {
-                    res.push(OpCode::LessInt.into())
-                }
-                else if (op == OpCode::GetLocal{index: 0}) {
-                    res.push(OpCode::GetLocalZero.into())
-                }
-                else if (op == OpCode::SetLocal{index: 0}) {
-                    res.push(OpCode::SetLocalZero.into())
-                }
-                else {
-                    res.push(op.into())
-                }
-            }
-            _ => {
-                res.push(op)
-            }
-        }
-    }
-
-    res
 }
 
 impl Drop for VirtualMachine {

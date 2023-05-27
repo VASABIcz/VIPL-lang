@@ -67,6 +67,7 @@ impl Expression {
         return match self {
             Expression::Variable(..) => true,
             Expression::NamespaceAccess(..) => true,
+            Expression::FieldAccess(..) => true,
             _ => false
         }
     }

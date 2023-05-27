@@ -11,3 +11,5 @@ pub mod namespace;
 pub mod nativeStack;
 pub mod variableMetadata;
 pub mod nativeObjects;
+pub mod symbolManager;
+pub mod optimizations;

@@ -1,15 +1,18 @@
 
 fn sum(arr: Array<int>): int {
     s = 0
-    for i in arr {
-        s += i
+    counter = 0
+
+    while counter < arr.size {
+        s += arr[counter]
+        counter += 1
     }
 
-    return i
+    return s
 }
 
 a = [1, 2, 3, 4]
 
-out::print(sum a)
+x = a.sum()
 
-// out::print(a.sum())
+out::print(x)

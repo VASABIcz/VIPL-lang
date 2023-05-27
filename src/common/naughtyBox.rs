@@ -4,6 +4,7 @@ pub struct Naughty<T> {
 }
 
 impl<T> Naughty<T> {
+    #[inline(always)]
     pub fn getMut(&mut self) -> &mut T {
         unsafe { &mut *self.inner }
     }

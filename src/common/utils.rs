@@ -1,6 +1,8 @@
 use std::error::Error;
 use std::{env, fs};
 use std::arch::asm;
+use crate::bytecodeGen::SymbolicOpcode;
+use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
 use crate::lexer::{tokenizeSource, TokenType};
 use crate::parser::{parseDataType, TokenProvider};
@@ -323,4 +325,55 @@ pub fn readNeighbours(ptr: *const Value, amount: usize) {
             println!("read {:?} at offset {}", v, x)
         }
     }
+}
+
+pub fn getSymbolicChunks(ops: &Vec<SymbolicOpcode>) -> Vec<Vec<OpCode>> {
+    let mut buf = vec![];
+
+    let mut curBuf = vec![];
+
+    for op in ops {
+        match op {
+            Op(o) => {
+                curBuf.push(o.clone())
+            }
+            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
+            _ => {
+                if !curBuf.is_empty() {
+                    buf.push(curBuf);
+                    curBuf = vec![];
+                }
+            }
+        }
+    }
+
+    buf
+}
+
+pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(ops: Vec<SymbolicOpcode>, f: F) -> Vec<SymbolicOpcode> {
+    let mut buf = vec![];
+
+    let mut curBuf = vec![];
+
+    for op in ops {
+        match op {
+            Op(o) => {
+                curBuf.push(o.clone())
+            }
+            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
+            _ => {
+                if !curBuf.is_empty() {
+                    buf.extend(f(curBuf).into_iter().map(|it| Op(it)));
+                    curBuf = vec![];
+                }
+                buf.push(op);
+            }
+        }
+    }
+
+    if !curBuf.is_empty() {
+        buf.extend(f(curBuf).into_iter().map(|it| Op(it)));
+    }
+
+    buf
 }
