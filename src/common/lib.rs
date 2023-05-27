@@ -19,6 +19,7 @@
 #![feature(slice_ptr_get)]
 #![feature(try_trait_v2)]
 #![allow(non_snake_case)]
+#![feature(slice_internals)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

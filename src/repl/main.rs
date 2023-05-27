@@ -1,9 +1,10 @@
+use std::{env, io};
 use std::collections::HashMap;
 use std::error::Error;
-use std::{env, io};
 use std::io::{BufRead, Write};
 use std::process::exit;
-use vipl::parser::Operation;
+
+use vipl::parser::ASTNode;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;

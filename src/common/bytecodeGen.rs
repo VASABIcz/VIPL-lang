@@ -1,3 +1,4 @@
+use core::slice::sort::quicksort;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 
@@ -23,7 +24,7 @@ use crate::vm::myStr::MyStr;
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, GetLocal, Return, SCall, SetField, SetLocal, StringLength, StrNew, Sub, Swap, SetGlobal, Greater};
 
 const DEBUG: bool = true;
 
@@ -82,22 +83,28 @@ impl Body {
         }
     }
 
-    pub fn buildLocalsTable(&self, mut ctx: SimpleCtx, locals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<(), CodeGenError> {
-        let mut buf = vec![];
-
-
+    pub fn buildLocalsTableC(&self, mut a: (SimpleCtx, &mut HashMap<MyStr, (DataType, usize)>)) -> Result<(), CodeGenError> {
         for statement in &self.statements {
-            let mut statementCtx = ctx.inflate(statement, locals, None);
+            let mut statementCtx = a.0.inflate(statement, a.1, None);
 
-            buildLocalsTable(&mut statementCtx, &mut buf)?;
+            buildLocalsTable(&mut statementCtx)?;
         }
 
         Ok(())
     }
 
-    pub fn generate(&self, mut ctx: SimpleCtx, locals: &mut HashMap<MyStr, (DataType, usize)>) -> Result<(), CodeGenError> {
+    pub fn generateS(&self, mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         for statement in &self.statements {
-            let y = ctx.inflate(statement, locals, None);
+            let y = ctx.transfer(statement);
+            genStatement(y)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn generateC(&self, mut a: (SimpleCtx, &mut HashMap<MyStr, (DataType, usize)>)) -> Result<(), CodeGenError> {
+        for statement in &self.statements {
+            let y = a.0.inflate(statement, a.1, None);
             genStatement(y)?;
         }
 
@@ -619,6 +626,25 @@ impl StatementCtx<'_> {
     pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
         self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
+
+    pub fn getVariable(&self, name: &str) -> Result<&(DataType, usize), CodeGenError> {
+        Ok(self.vTable.get(&name.to_string().into()).ok_or(CodeGenError::SymbolNotFound(SymbolNotFound { name: name.to_string(), typ: SymbolType::Variable }))?)
+    }
+
+    pub fn registerVariable(&mut self, name: &str, t: DataType) {
+        assert!(self.vTable.contains_key(&name.to_string().into()));
+
+        self.vTable.insert(name.to_string().into(), (t, self.vTable.len()));
+    }
+
+    pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) {
+        match self.vTable.get(&name.to_string().into()) {
+            None => {self.vTable.insert(name.to_string().into(), (t, self.vTable.len()));},
+            Some(v) => {
+                assert_eq!(v.0, t.clone())
+            }
+        };
+    }
 }
 
 impl ExpressionCtx<'_> {
@@ -681,27 +707,24 @@ impl StatementCtx<'_> {
     }
 }
 
-pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadata>) -> Result<(), CodeGenError> {
+pub fn buildLocalsTable(ctx: &mut StatementCtx) -> Result<(), CodeGenError> {
     match ctx.statement {
         Statement::While(w) => {
-            for s in &w.body.statements {
-                buildLocalsTable(&mut ctx.transfer(s), locals)?;
-            }
+            w.body.buildLocalsTableC(ctx.deflate())?;
         }
         Statement::If(i) => {
-            for s in &i.body.statements {
-                buildLocalsTable(&mut ctx.transfer(s), locals)?;
-            }
+            i.body.buildLocalsTableC(ctx.deflate())?;
+
             if let Some(body) = &i.elseBody {
-                for s in body {
-                    buildLocalsTable(&mut ctx.transfer(s), locals)?;
-                }
+                body.buildLocalsTableC(ctx.deflate())?;
+            }
+
+            for b in &i.elseIfs {
+                b.1.buildLocalsTableC(ctx.deflate())?;
             }
         }
         Statement::Loop(body) => {
-            for s in body {
-                buildLocalsTable(&mut ctx.transfer(s), locals)?;
-            }
+            body.buildLocalsTableC(ctx.deflate())?;
         }
         Statement::Assignable(prev, init, t) => {
             if *t != None {
@@ -716,12 +739,8 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
                         }
                         ctx.vTable.insert(
                             c.clone().into(),
-                            (t.clone(), locals.len()),
+                            (t.clone(), ctx.vTable.len()),
                         );
-                        locals.push(VariableMetadata {
-                            name: c.clone().into(),
-                            typ: t,
-                        });
                     }
                 }
                 _ => {}
@@ -735,17 +754,16 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
             if !ctx.vTable.contains_key(&var.clone().into()) {
                 ctx.vTable.insert(
                     var.clone().into(),
-                    (typ.clone(), locals.len()),
+                    (typ.clone(), ctx.vTable.len()),
                 );
-                locals.push(VariableMetadata {
-                    name: var.clone().into(),
-                    typ,
-                });
             }
 
-            for s in body {
-                buildLocalsTable(&mut ctx.transfer(s), locals)?;
-            }
+            body.buildLocalsTableC(ctx.deflate())?;
+        }
+        Statement::Repeat(varName, _, body) => {
+            ctx.registerVariableIfNotExists(varName, Int);
+
+            body.buildLocalsTableC(ctx.deflate())?;
         }
         _ => {}
     }
@@ -755,18 +773,16 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx, locals: &mut Vec<VariableMetadat
 
 pub fn genFunctionDef(fun: &FunctionMeta, mut ctx: SimpleCtx) -> Result<Vec<VariableMetadata>, CodeGenError> {
     let mut vTable = HashMap::new();
-    let mut locals = vec![];
 
     for arg in fun.localsMeta.iter() {
-        vTable.insert(arg.name.clone(), (arg.typ.clone(), locals.len()));
-        locals.push(arg.clone())
+        vTable.insert(arg.name.clone(), (arg.typ.clone(), vTable.len()));
     }
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
         for s in &body.statements {
             let mut sCtx = ctx.inflate(&s, &mut vTable, None);
 
-            buildLocalsTable(&mut sCtx, &mut locals)?;
+            buildLocalsTable(&mut sCtx)?;
         }
 
         for statement in &body.statements {
@@ -783,6 +799,15 @@ pub fn genFunctionDef(fun: &FunctionMeta, mut ctx: SimpleCtx) -> Result<Vec<Vari
                     ctx.ops.push(Op(Return));
                 }
             }
+        }
+
+        let mut locals = vec![];
+
+        let mut loc = vTable.into_iter().map(|it| (it.0, it.1.0, it.1.1)).collect::<Vec<_>>();
+        quicksort(&mut loc, |a, b| a.2 < b.2);
+
+        for l in loc {
+            locals.push(VariableMetadata{ name: l.0, typ: l.1 })
         }
 
         Ok(locals)
@@ -805,9 +830,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             ctx.opJmp(loopEnd, False);
 
-            let (newCtx, vTable) = ctx.deflate();
-
-            w.body.generate(newCtx, vTable)?;
+            w.body.generateC(ctx.deflate())?;
 
             ctx.opContinue();
 
@@ -838,9 +861,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 ctx.opJmp(endLabel, False)
             }
 
-            let (newCtx, vTable) = ctx.deflate();
-
-            flow.body.generate(newCtx, vTable)?;
+            flow.body.generateC(ctx.deflate())?;
 
             ctx.opJmp(endLabel, JmpType::Jmp);
 
@@ -857,19 +878,13 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                     ctx.opJmp(endLabel, False);
                 }
 
-                for s in &els.1 {
-                    let op = ctx.copy(s);
-                    genStatement(op)?;
-                }
+                els.1.generateC(ctx.deflate())?;
                 ctx.opJmp(endLabel, JmpType::Jmp);
             }
 
             if let Some(els) = &flow.elseBody {
                 ctx.makeLabel(*ifLabels.last().unwrap());
-                for s in els {
-                    let ctx1 = ctx.copy(s);
-                    genStatement(ctx1)?;
-                }
+                els.generateC(ctx.deflate())?;
             }
             ctx.makeLabel(endLabel);
         }
@@ -880,13 +895,10 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         Statement::Continue => ctx.opContinue(),
         Statement::Break => ctx.opBreak(),
         Statement::Loop(body) => {
-            let context = ctx.ops.len();
             ctx.beginLoop();
-            for s in body {
-                let mut cop = ctx.copy(s);
-                cop.loopContext = Some(context);
-                genStatement(cop)?;
-            }
+
+            body.generateC(ctx.deflate())?;
+
             ctx.opContinue();
             ctx.endLoop();
         }
@@ -1024,10 +1036,8 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.push(ArrayLoad);
             ctx.push(SetLocal { index: varId });
 
-            for s in body {
-                let sCtx = ctx.transfer(s);
-                genStatement(sCtx)?;
-            }
+
+            body.generateC(ctx.deflate())?;
 
             ctx.opJmp(endLabel, True);
 
@@ -1039,6 +1049,25 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.endLoop();
             ctx.makeLabel(endLabel);
             ctx.push(Pop);
+        }
+        Statement::Repeat(var, count, body) => {
+            let endLoop = ctx.nextLabel();
+            let varId = ctx.getVariable(var)?.1;
+
+            ctx.beginLoop();
+
+            ctx.push(GetLocal { index: varId });
+            ctx.push(PushInt(*count as isize));
+            ctx.push(Greater(Int));
+            ctx.opJmp(endLoop, False);
+
+            body.generateC(ctx.deflate())?;
+
+            ctx.push(OpCode::Inc { typ: Int, index: varId });
+            ctx.opContinue();
+
+            ctx.endLoop();
+            ctx.makeLabel(endLoop);
         }
     }
     Ok(())

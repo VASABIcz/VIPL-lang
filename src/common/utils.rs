@@ -360,7 +360,7 @@ pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(ops: Vec<SymbolicOpcode>, f:
             Op(o) => {
                 curBuf.push(o.clone())
             }
-            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
+            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => buf.push(op),
             _ => {
                 if !curBuf.is_empty() {
                     buf.extend(f(curBuf).into_iter().map(|it| Op(it)));

@@ -248,7 +248,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Sub(_) => match constStack.len() {
@@ -260,7 +263,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Div(_) => match constStack.len() {
@@ -272,7 +278,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Mul(_) => match constStack.len() {
@@ -284,7 +293,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Equals(_) => match constStack.len() {
@@ -296,7 +308,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Greater(_) => match constStack.len() {
@@ -308,7 +323,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Less(_) => match constStack.len() {
@@ -320,7 +338,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Or => match constStack.len() {
@@ -332,7 +353,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::And => match constStack.len() {
@@ -344,7 +368,10 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
 
                     constStack.push(a);
                 }
-                1 => unreachable!(),
+                1 => {
+                    finaly.push(constStack.pop().unwrap().toOp());
+                    finaly.push(op);
+                },
                 _ => finaly.push(op)
             }
             OpCode::Not => match constStack.pop() {

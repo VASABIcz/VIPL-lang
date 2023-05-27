@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::FromResidual;
 use crate::ast::Expression;
 use crate::lexer::{Location, Stringable, Token, TokenType};
-use crate::parser::{Operation, ParsingUnitSearchType};
+use crate::parser::{ASTNode, ParsingUnitSearchType};
 use crate::vm::dataType::DataType;
 
 pub type Errorable<T> = Result<T, Box<dyn Error>>;

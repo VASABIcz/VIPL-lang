@@ -2,24 +2,20 @@ use core::fmt;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::intrinsics::fabsf32;
 use std::usize;
-use libc::read;
 
 use crate::ast;
-use crate::ast::{ArrayAccess, Expression, FunctionCall, ModType, Node, BinaryOp, Statement, StructDef, VariableCreate, VariableModd, While, ArithmeticOp};
+use crate::ast::{ArithmeticOp, ArrayAccess, BinaryOp, Expression, Node, Statement, StructDef, VariableCreate, VariableModd, While};
 use crate::ast::Expression::{IntLiteral, NamespaceAccess};
-use crate::ast::BinaryOp::Add;
 use crate::ast::Statement::{Assignable, StatementExpression};
 use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, NoSuchParsingUnit, ParserError};
-use crate::lexer::{LexingUnit, Token, TokenType};
+use crate::lexer::{Token, TokenType};
 use crate::lexer::TokenType::*;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Back};
-use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::myStr::MyStr;
-
+use crate::vm::variableMetadata::VariableMetadata;
 
 const VALID_EXPRESSION_TOKENS: [TokenType; 5] = [
     StringLiteral,
@@ -31,7 +27,7 @@ const VALID_EXPRESSION_TOKENS: [TokenType; 5] = [
 
 #[derive(Debug)]
 struct InvalidOperation {
-    operation: Operation,
+    operation: ASTNode,
     expected: String,
 }
 
@@ -69,7 +65,7 @@ fn getParsingUnit<'a, OUT, IN: PartialEq + Clone + Debug>(
 
 fn parseExprOneLine(
     tokenProvider: &mut TokenProvider<TokenType>,
-    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
+    parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
 ) -> Result<Expression, ParserError<TokenType>> {
     let res = parseOneOneLine(tokenProvider, Ahead, parser, None)?;
     res.asExpr()
@@ -241,7 +237,7 @@ pub fn parseType<OUT, IN: PartialEq + Clone + Debug>(parsingUnits: &Vec<Box<dyn 
     Ok(false)
 }
 
-pub fn parseTokens(toks: Vec<Token<TokenType>>) -> Result<Vec<Operation>, ParserError<TokenType>> {
+pub fn parseTokens(toks: Vec<Token<TokenType>>) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
     let mut buf = vec![];
     let parsingUnits = &parsingUnits();
     let mut tokens = TokenProvider::new(toks);
@@ -430,37 +426,37 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Operation {
+pub enum ASTNode {
     Global(Node),
     Statement(Statement),
     Expr(Expression),
 }
 
-impl Operation {
+impl ASTNode {
     pub fn isExpr(&self) -> bool {
         match self {
-            Operation::Expr(_) => true,
+            ASTNode::Expr(_) => true,
             _ => false
         }
     }
 
     pub fn isStatement(&self) -> bool {
         match self {
-            Operation::Statement(_) => true,
+            ASTNode::Statement(_) => true,
             _ => false
         }
     }
 
     pub fn isGlobal(&self) -> bool {
         match self {
-            Operation::Global(_) => true,
+            ASTNode::Global(_) => true,
             _ => false
         }
     }
 
     pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
         match self {
-            Operation::Expr(e) => Ok(e),
+            ASTNode::Expr(e) => Ok(e),
             _ => Err(ParserError::Unknown(Box::new(InvalidOperation {
                 operation: self.clone(),
                 expected: "Expression".to_string(),
@@ -470,7 +466,7 @@ impl Operation {
 
     fn asExprRef(&self) -> Result<&Expression, Box<dyn Error>> {
         match self {
-            Operation::Expr(e) => Ok(e),
+            ASTNode::Expr(e) => Ok(e),
             _ => Err(Box::new(InvalidOperation {
                 operation: self.clone(),
                 expected: "Expression".to_string(),
@@ -481,8 +477,8 @@ impl Operation {
     fn asStatement(self) -> Result<Statement, ParserError<TokenType>> {
         let clone = self.clone();
         match self {
-            Operation::Statement(s) => Ok(s),
-            Operation::Expr(e) => match e {
+            ASTNode::Statement(s) => Ok(s),
+            ASTNode::Expr(e) => match e {
                 Expression::NamespaceAccess(f) => todo!(),
                 Expression::Callable(_, _) => { Ok(StatementExpression(e.clone())) },
                 _ => {
@@ -528,21 +524,21 @@ pub trait ParsingUnit<OUT, IN: PartialEq + Clone + Debug>: Debug {
 #[derive(Debug)]
 pub struct FunctionParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for FunctionParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         ParsingUnitSearchType::Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::Fn) && tokenProvider.isPeekIndexType(Identifier, 1)
     }
 
     fn parse(
         &self,
         tokens: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let mut isNative = false;
 
         tokens.getAssert(TokenType::Fn)?;
@@ -586,18 +582,18 @@ impl ParsingUnit<Operation, TokenType> for FunctionParsingUnit {
         let body = if tokens.isPeekType(Equals) {
             tokens.getAssert(Equals)?;
             isOneLine = true;
-            vec![ast::Statement::Return(parseExpr(tokens, parser)?)]
+            Body::new(vec![ast::Statement::Return(parseExpr(tokens, parser)?)])
         }
         else {
             parseBody(tokens, parser)?
         };
 
-        Ok(Operation::Global(Node::FunctionDef(
+        Ok(ASTNode::Global(Node::FunctionDef(
             ast::FunctionDef {
                 name,
                 localsMeta: args,
                 argsCount: argCount,
-                body: Body::new(body),
+                body,
                 returnType,
                 isNative,
                 isOneLine,
@@ -619,27 +615,27 @@ pub struct ArithmeticParsingUnit {
     pub priority: usize,
 }
 
-impl ParsingUnit<Operation, TokenType> for ArithmeticParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ArithmeticParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(self.typ)
     }
 
     fn parse(
         &self,
         tokens: &mut TokenProvider<TokenType>,
-        previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokens.consume();
         let res = parseOne(tokens, Ahead, parser, None)?;
         let par = getParsingUnit(tokens, Around, parser, previous.clone());
 
         match par {
-            None => Ok(Operation::Expr(Expression::BinaryOperation {
+            None => Ok(ASTNode::Expr(Expression::BinaryOperation {
                 // FIXME
                 left: Box::new(previous.unwrap().asExpr()?),
                 right: Box::new(res.asExpr()?),
@@ -649,7 +645,7 @@ impl ParsingUnit<Operation, TokenType> for ArithmeticParsingUnit {
                 if self.priority < p.getPriority() {
                     Ok(p.parse(
                         tokens,
-                        Some(Operation::Expr(Expression::BinaryOperation {
+                        Some(ASTNode::Expr(Expression::BinaryOperation {
                             left: Box::new(previous.unwrap().asExpr()?),
                             right: Box::new(res.asExpr()?),
                             op: self.op.clone(),
@@ -657,7 +653,7 @@ impl ParsingUnit<Operation, TokenType> for ArithmeticParsingUnit {
                         parser,
                     )?)
                 } else {
-                    Ok(Operation::Expr(Expression::BinaryOperation {
+                    Ok(ASTNode::Expr(Expression::BinaryOperation {
                         left: Box::new(previous.unwrap().asExpr()?),
                         right: Box::new(p.parse(tokens, Some(res), parser)?.asExpr()?),
                         op: self.op.clone(),
@@ -679,12 +675,12 @@ impl ParsingUnit<Operation, TokenType> for ArithmeticParsingUnit {
 #[derive(Debug)]
 pub struct NumericParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for NumericParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for NumericParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         let peek = match tokenProvider.peekOne() {
             None => return false,
             Some(v) => v,
@@ -719,9 +715,9 @@ impl ParsingUnit<Operation, TokenType> for NumericParsingUnit {
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let mut peek = tokenProvider.peekOne().unwrap();
 
         let mut buf = String::new();
@@ -735,19 +731,19 @@ impl ParsingUnit<Operation, TokenType> for NumericParsingUnit {
         let res = match peek.typ {
             TokenType::IntLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expr(IntLiteral(buf))
+                ASTNode::Expr(IntLiteral(buf))
             }
             TokenType::LongLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expr(Expression::LongLiteral(buf))
+                ASTNode::Expr(Expression::LongLiteral(buf))
             }
             TokenType::FloatLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expr(Expression::FloatLiteral(buf))
+                ASTNode::Expr(Expression::FloatLiteral(buf))
             }
             TokenType::DoubleLiteral => {
                 buf.push_str(&peek.str);
-                Operation::Expr(Expression::DoubleLiteral(buf))
+                ASTNode::Expr(Expression::DoubleLiteral(buf))
             }
             _ => {
                 return Err(ParserError::InvalidToken(InvalidToken{ expected: TokenType::IntLiteral, actual: Some(peek.clone()) }))
@@ -767,27 +763,27 @@ impl ParsingUnit<Operation, TokenType> for NumericParsingUnit {
 #[derive(Debug)]
 pub struct BoolParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for BoolParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for BoolParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::True) || tokenProvider.isPeekType(TokenType::False)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         if tokenProvider.isPeekType(TokenType::False) {
             tokenProvider.getAssert(TokenType::False)?;
-            return Ok(Operation::Expr(Expression::BoolLiteral(false)));
+            return Ok(ASTNode::Expr(Expression::BoolLiteral(false)));
         }
         tokenProvider.getAssert(TokenType::True)?;
-        Ok(Operation::Expr(Expression::BoolLiteral(true)))
+        Ok(ASTNode::Expr(Expression::BoolLiteral(true)))
     }
 
     fn getPriority(&self) -> usize {
@@ -800,22 +796,22 @@ impl ParsingUnit<Operation, TokenType> for BoolParsingUnit {
 #[derive(Debug)]
 pub struct VariableParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for VariableParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for VariableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Identifier)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
-        Ok(Operation::Expr(Expression::Variable(
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
+        Ok(ASTNode::Expr(Expression::Variable(
             tokenProvider.getIdentifier()?,
         )))
     }
@@ -830,24 +826,24 @@ impl ParsingUnit<Operation, TokenType> for VariableParsingUnit {
 #[derive(Debug)]
 pub struct ReturnParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ReturnParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ReturnParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Return)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Return)?;
         let exp = parseExpr(tokenProvider, parser)?;
-        Ok(Operation::Statement(Statement::Return(exp)))
+        Ok(ASTNode::Statement(Statement::Return(exp)))
     }
 
     fn getPriority(&self) -> usize {
@@ -860,30 +856,30 @@ impl ParsingUnit<Operation, TokenType> for ReturnParsingUnit {
 #[derive(Debug)]
 pub struct WhileParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for WhileParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for WhileParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::While)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(TokenType::While)?;
 
         let op = parseExpr(tokenProvider, parser)?;
 
         let statements = parseBody(tokenProvider, parser)?;
 
-        Ok(Operation::Statement(Statement::While(While {
+        Ok(ASTNode::Statement(Statement::While(While {
             exp: op,
-            body: Body::new(statements),
+            body: statements,
         })))
     }
 
@@ -899,8 +895,8 @@ pub struct IfParsingUnit;
 
 fn parseBody(
     tokenProvider: &mut TokenProvider<TokenType>,
-    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-) -> Result<Vec<Statement>, ParserError<TokenType>> {
+    parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+) -> Result<Body, ParserError<TokenType>> {
     let mut statements = vec![];
 
     tokenProvider.getAssert(TokenType::OCB)?;
@@ -912,32 +908,32 @@ fn parseBody(
 
     tokenProvider.getAssert(TokenType::CCB)?;
 
-    Ok(statements)
+    Ok(Body::new(statements))
 }
 
 fn parseExpr(
     tokenProvider: &mut TokenProvider<TokenType>,
-    parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
+    parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
 ) -> Result<Expression, ParserError<TokenType>> {
     let res = parseOne(tokenProvider, Ahead, parser, None)?;
     res.asExpr()
 }
 
-impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for IfParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::If)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let mut elseIfs = vec![];
         let mut elseBody = None;
 
@@ -963,9 +959,9 @@ impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
             elseBody = Some(parseBody(tokenProvider, parser)?);
         }
 
-        Ok(Operation::Statement(Statement::If(ast::If {
+        Ok(ASTNode::Statement(Statement::If(ast::If {
             condition,
-            body: Body::new(body),
+            body,
             elseBody,
             elseIfs,
         })))
@@ -981,23 +977,23 @@ impl ParsingUnit<Operation, TokenType> for IfParsingUnit {
 #[derive(Debug)]
 struct BracketsParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for BracketsParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for BracketsParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(ORB)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(ORB)?;
-        let expr = Ok(Operation::Expr(parseExpr(tokenProvider, parser)?));
+        let expr = Ok(ASTNode::Expr(parseExpr(tokenProvider, parser)?));
         tokenProvider.getAssert(CRB)?;
         expr
     }
@@ -1012,21 +1008,21 @@ impl ParsingUnit<Operation, TokenType> for BracketsParsingUnit {
 #[derive(Debug)]
 struct CharParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for CharParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for CharParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(CharLiteral)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let c = tokenProvider.getAssert(CharLiteral)?;
         let mut chars = c.str.chars();
         match &chars.next() {
@@ -1043,11 +1039,11 @@ impl ParsingUnit<Operation, TokenType> for CharParsingUnit {
                                 '\\' => '\\',
                                 _ => panic!(),
                             };
-                            return Ok(Operation::Expr(Expression::CharLiteral(e)));
+                            return Ok(ASTNode::Expr(Expression::CharLiteral(e)));
                         }
                     }
                 }
-                Ok(Operation::Expr(Expression::CharLiteral(*c)))
+                Ok(ASTNode::Expr(Expression::CharLiteral(*c)))
             }
         }
     }
@@ -1064,23 +1060,23 @@ impl ParsingUnit<Operation, TokenType> for CharParsingUnit {
 #[derive(Debug)]
 struct StringParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for StringParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for StringParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::StringLiteral)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let str = tokenProvider.getAssert(StringLiteral)?;
-        Ok(Operation::Expr(Expression::StringLiteral(str.str.clone())))
+        Ok(ASTNode::Expr(Expression::StringLiteral(str.str.clone())))
     }
 
     fn getPriority(&self) -> usize {
@@ -1141,21 +1137,21 @@ pub fn parseDataType(tokens: &mut TokenProvider<TokenType>) -> Result<DataType, 
 #[derive(Debug)]
 struct ArrayLiteralParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ArrayLiteralParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ArrayLiteralParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(OSB)?;
 
         let mut buf = vec![];
@@ -1168,7 +1164,7 @@ impl ParsingUnit<Operation, TokenType> for ArrayLiteralParsingUnit {
         }
         tokenProvider.getAssert(CSB)?;
 
-        Ok(Operation::Expr(Expression::ArrayLiteral(buf)))
+        Ok(ASTNode::Expr(Expression::ArrayLiteral(buf)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1181,26 +1177,26 @@ impl ParsingUnit<Operation, TokenType> for ArrayLiteralParsingUnit {
 #[derive(Debug)]
 struct ArrayIndexingParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ArrayIndexingParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ArrayIndexingParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(OSB)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(OSB)?;
         let expr = parseExpr(tokenProvider, parser)?;
         tokenProvider.getAssert(CSB)?;
 
-        Ok(Operation::Expr(Expression::ArrayIndexing(Box::new(
+        Ok(ASTNode::Expr(Expression::ArrayIndexing(Box::new(
             ArrayAccess {
                 // FIXME
                 expr: previous.unwrap().asExpr()?,
@@ -1219,23 +1215,23 @@ impl ParsingUnit<Operation, TokenType> for ArrayIndexingParsingUnit {
 #[derive(Debug)]
 struct ContinueParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ContinueParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ContinueParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Continue)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Continue)?;
-        Ok(Operation::Statement(Statement::Continue))
+        Ok(ASTNode::Statement(Statement::Continue))
     }
 
     fn getPriority(&self) -> usize {
@@ -1250,23 +1246,23 @@ impl ParsingUnit<Operation, TokenType> for ContinueParsingUnit {
 #[derive(Debug)]
 struct BreakParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for BreakParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for BreakParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::Break)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(TokenType::Break)?;
-        Ok(Operation::Statement(Statement::Break))
+        Ok(ASTNode::Statement(Statement::Break))
     }
 
     fn getPriority(&self) -> usize {
@@ -1281,24 +1277,24 @@ impl ParsingUnit<Operation, TokenType> for BreakParsingUnit {
 #[derive(Debug)]
 struct LoopParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for LoopParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for LoopParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Loop)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Loop)?;
         let body = parseBody(tokenProvider, parser)?;
-        Ok(Operation::Statement(Statement::Loop(body)))
+        Ok(ASTNode::Statement(Statement::Loop(body)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1313,26 +1309,26 @@ impl ParsingUnit<Operation, TokenType> for LoopParsingUnit {
 #[derive(Debug)]
 struct NotParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for NotParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for NotParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Not)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         let t = tokenProvider.getAssert(Not)?.location;
 
         let expr = parseExpr(tokenProvider, parser)?;
 
-        Ok(Operation::Expr(Expression::NotExpression(Box::new(expr),t)))
+        Ok(ASTNode::Expr(Expression::NotExpression(Box::new(expr), t)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1347,21 +1343,21 @@ impl ParsingUnit<Operation, TokenType> for NotParsingUnit {
 #[derive(Debug)]
 struct StructParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for StructParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for StructParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Struct)
     }
 
     fn parse(
         &self,
         tokenProvider: &mut TokenProvider<TokenType>,
-        _previous: Option<Operation>,
-        _parser: &[Box<dyn ParsingUnit<Operation, TokenType>>],
-    ) -> Result<Operation, ParserError<TokenType>> {
+        _previous: Option<ASTNode>,
+        _parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>],
+    ) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Struct)?;
         let name = tokenProvider.getIdentifier()?;
 
@@ -1385,7 +1381,7 @@ impl ParsingUnit<Operation, TokenType> for StructParsingUnit {
 
         tokenProvider.getAssert(CCB)?;
 
-        Ok(Operation::Global(Node::StructDef(StructDef {
+        Ok(ASTNode::Global(Node::StructDef(StructDef {
             name,
             fields,
         })))
@@ -1403,16 +1399,16 @@ impl ParsingUnit<Operation, TokenType> for StructParsingUnit {
 #[derive(Debug)]
 struct ImportParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ImportParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ImportParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Import)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Import)?;
         let mut buf = vec![];
 
@@ -1424,7 +1420,7 @@ impl ParsingUnit<Operation, TokenType> for ImportParsingUnit {
             buf.push(tokenProvider.getIdentifier()?);
         }
 
-        Ok(Operation::Global(Node::Import(buf)))
+        Ok(ASTNode::Global(Node::Import(buf)))
     }
 
     fn getPriority(&self) -> usize { todo!() }
@@ -1435,16 +1431,16 @@ impl ParsingUnit<Operation, TokenType> for ImportParsingUnit {
 #[derive(Debug)]
 struct NamespaceParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for NamespaceParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for NamespaceParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(Namespace, 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         let mut buf = vec![];
 
         while tokenProvider.isPeekType(Identifier) {
@@ -1458,7 +1454,7 @@ impl ParsingUnit<Operation, TokenType> for NamespaceParsingUnit {
             }
         }
 
-        Ok(Operation::Expr(NamespaceAccess(buf)))
+        Ok(ASTNode::Expr(NamespaceAccess(buf)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1473,14 +1469,14 @@ impl ParsingUnit<Operation, TokenType> for NamespaceParsingUnit {
 #[derive(Debug)]
 struct CallableParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for CallableParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for CallableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType { Around }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(ORB) && previous.map_or(false, |it| it.asExprRef().map_or(false, |it| { it.isCallable() }))
     }
 
-    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokens.getAssert(ORB)?;
 
         let mut args = vec![];
@@ -1503,7 +1499,7 @@ impl ParsingUnit<Operation, TokenType> for CallableParsingUnit {
         tokens.getAssert(TokenType::CRB)?;
 
         // FIXME
-        Ok(Operation::Expr(Expression::Callable(Box::new(previous.unwrap().asExpr()?), args)))
+        Ok(ASTNode::Expr(Expression::Callable(Box::new(previous.unwrap().asExpr()?), args)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1518,16 +1514,16 @@ impl ParsingUnit<Operation, TokenType> for CallableParsingUnit {
 #[derive(Debug)]
 struct LambdaParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for LambdaParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Fn) && tokenProvider.isPeekIndexType(ORB, 1)
     }
 
-    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokens: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokens.getAssert(Fn)?;
 
         let mut args = vec![];
@@ -1562,13 +1558,13 @@ impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
         let body = if tokens.isPeekType(Equals) {
             tokens.getAssert(Equals)?;
             isOneLine = true;
-            vec![ast::Statement::Return(parseExpr(tokens, parser)?)]
+            Body::new(vec![ast::Statement::Return(parseExpr(tokens, parser)?)])
         }
         else {
             parseBody(tokens, parser)?
         };
 
-        Ok(Operation::Expr(Expression::Lambda(args, Body::new(body), returnType)))
+        Ok(ASTNode::Expr(Expression::Lambda(args, body, returnType)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1583,26 +1579,26 @@ impl ParsingUnit<Operation, TokenType> for LambdaParsingUnit {
 #[derive(Debug)]
 struct IncParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for IncParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for IncParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {Back}
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::Inc) || tokenProvider.isPeekType(TokenType::Dec)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         // FIXME
         let prev = previous.unwrap().asExpr()?;
 
         if tokenProvider.isPeekType(TokenType::Inc) {
             tokenProvider.getAssert(TokenType::Inc)?;
 
-            Ok(Operation::Statement(Assignable(prev, Expression::IntLiteral("1".to_string()), Some(ArithmeticOp::Add))))
+            Ok(ASTNode::Statement(Assignable(prev, Expression::IntLiteral("1".to_string()), Some(ArithmeticOp::Add))))
         }
         else {
             tokenProvider.getAssert(TokenType::Dec)?;
 
-            Ok(Operation::Statement(Assignable(prev, Expression::IntLiteral("1".to_string()), Some(ArithmeticOp::Sub))))
+            Ok(ASTNode::Statement(Assignable(prev, Expression::IntLiteral("1".to_string()), Some(ArithmeticOp::Sub))))
         }
     }
 
@@ -1618,16 +1614,16 @@ impl ParsingUnit<Operation, TokenType> for IncParsingUnit {
 #[derive(Debug)]
 struct StructInitParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for StructInitParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for StructInitParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexType(OCB, 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         let name = tokenProvider.getIdentifier()?;
 
         tokenProvider.getAssert(OCB)?;
@@ -1640,7 +1636,7 @@ impl ParsingUnit<Operation, TokenType> for StructInitParsingUnit {
             Ok((fieldName, initializer))
         }, None, CCB)?;
 
-        Ok(Operation::Expr(Expression::StructInit(name, inits)))
+        Ok(ASTNode::Expr(Expression::StructInit(name, inits)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1655,20 +1651,20 @@ impl ParsingUnit<Operation, TokenType> for StructInitParsingUnit {
 #[derive(Debug)]
 struct FieldAccessParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for FieldAccessParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for FieldAccessParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Back
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Dot)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Dot)?;
         let fieldName = tokenProvider.getIdentifier()?;
 
-        Ok(Operation::Expr(Expression::FieldAccess(Box::new(previous.unwrap().asExpr()?), fieldName)))
+        Ok(ASTNode::Expr(Expression::FieldAccess(Box::new(previous.unwrap().asExpr()?), fieldName)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1683,12 +1679,12 @@ impl ParsingUnit<Operation, TokenType> for FieldAccessParsingUnit {
 #[derive(Debug)]
 struct AssignableParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for AssignableParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for AssignableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Equals)
             || tokenProvider.isPeekType(AddAs)
             || tokenProvider.isPeekType(SubAs)
@@ -1701,7 +1697,7 @@ impl ParsingUnit<Operation, TokenType> for AssignableParsingUnit {
         }).unwrap_or(false)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         let mut typ = None;
 
         if tokenProvider.isPeekType(AddAs) {
@@ -1721,7 +1717,7 @@ impl ParsingUnit<Operation, TokenType> for AssignableParsingUnit {
         let next = parseOne(tokenProvider, Ahead, parser, None)?.asExpr()?;
 
         // FIXME
-        Ok(Operation::Statement(Statement::Assignable(previous.unwrap().asExpr()?, next, typ)))
+        Ok(ASTNode::Statement(Statement::Assignable(previous.unwrap().asExpr()?, next, typ)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1736,16 +1732,16 @@ impl ParsingUnit<Operation, TokenType> for AssignableParsingUnit {
 #[derive(Debug)]
 struct GlobalParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for GlobalParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for GlobalParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(TokenType::Global)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Global)?;
 
         let name = tokenProvider.getIdentifier()?;
@@ -1766,7 +1762,7 @@ impl ParsingUnit<Operation, TokenType> for GlobalParsingUnit {
             Some(p) => p.parse(tokenProvider, Some(res), parser)?.asExpr()?,
         };
 
-        Ok(Operation::Global(Node::GlobalVarDef(name, op)))
+        Ok(ASTNode::Global(Node::GlobalVarDef(name, op)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1781,16 +1777,16 @@ impl ParsingUnit<Operation, TokenType> for GlobalParsingUnit {
 #[derive(Debug)]
 struct ForParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for ForParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for ForParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(For)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(For)?;
 
         let varName = tokenProvider.getIdentifier()?;
@@ -1801,7 +1797,7 @@ impl ParsingUnit<Operation, TokenType> for ForParsingUnit {
 
         let body = parseBody(tokenProvider, parser)?;
 
-        Ok(Operation::Statement(Statement::ForLoop(varName, res, body)))
+        Ok(ASTNode::Statement(Statement::ForLoop(varName, res, body)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1816,19 +1812,19 @@ impl ParsingUnit<Operation, TokenType> for ForParsingUnit {
 #[derive(Debug)]
 struct NullParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for NullParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for NullParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(Null)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(Null)?;
 
-        Ok(Operation::Expr(Expression::Null))
+        Ok(ASTNode::Expr(Expression::Null))
     }
 
     fn getPriority(&self) -> usize {
@@ -1843,12 +1839,12 @@ impl ParsingUnit<Operation, TokenType> for NullParsingUnit {
 #[derive(Debug)]
 struct OneArgFunctionParsintUnit;
 
-impl ParsingUnit<Operation, TokenType> for OneArgFunctionParsintUnit {
+impl ParsingUnit<ASTNode, TokenType> for OneArgFunctionParsintUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         let row = match tokenProvider.peekOne() {
             None => {
                 return false
@@ -1859,11 +1855,11 @@ impl ParsingUnit<Operation, TokenType> for OneArgFunctionParsintUnit {
         tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexOf(|it| VALID_EXPRESSION_TOKENS.contains(&it), 1) && tokenProvider.isPeekIndexRow(1, row)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         let name = tokenProvider.getIdentifier()?;
         let arg = parseExprOneLine(tokenProvider, parser)?;
 
-        return Ok(Operation::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![arg])))
+        return Ok(ASTNode::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![arg])))
     }
 
     fn getPriority(&self) -> usize {
@@ -1878,22 +1874,22 @@ impl ParsingUnit<Operation, TokenType> for OneArgFunctionParsintUnit {
 #[derive(Debug)]
 struct TwoArgFunctionParsintUnit;
 
-impl ParsingUnit<Operation, TokenType> for TwoArgFunctionParsintUnit {
+impl ParsingUnit<ASTNode, TokenType> for TwoArgFunctionParsintUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         previous.map_or(false, |it| it.isExpr()) && tokenProvider.isPeekType(Identifier) && tokenProvider.isPeekIndexOf(|it| VALID_EXPRESSION_TOKENS.contains(&it), 1)
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
 
         let name = tokenProvider.getIdentifier()?;
         let arg = parseExprOneLine(tokenProvider, parser)?;
         println!("previous {:?} {} {:?}", previous, name, arg);
 
-        return Ok(Operation::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![previous.unwrap().asExpr()?, arg])))
+        return Ok(ASTNode::Expr(Expression::Callable(Box::new(Expression::Variable(name)), vec![previous.unwrap().asExpr()?, arg])))
     }
 
     fn getPriority(&self) -> usize {
@@ -1908,16 +1904,16 @@ impl ParsingUnit<Operation, TokenType> for TwoArgFunctionParsintUnit {
 #[derive(Debug)]
 struct TernaryOperatorParsingUnit;
 
-impl ParsingUnit<Operation, TokenType> for TernaryOperatorParsingUnit {
+impl ParsingUnit<ASTNode, TokenType> for TernaryOperatorParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Around
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&Operation>) -> bool {
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
         tokenProvider.isPeekType(QuestionMark) && previous.map_or(false, |it| it.isExpr())
     }
 
-    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<Operation>, parser: &[Box<dyn ParsingUnit<Operation, TokenType>>]) -> Result<Operation, ParserError<TokenType>> {
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
         tokenProvider.getAssert(QuestionMark)?;
 
         let a = parseExpr(tokenProvider, parser)?;
@@ -1927,7 +1923,7 @@ impl ParsingUnit<Operation, TokenType> for TernaryOperatorParsingUnit {
         let b = parseExpr(tokenProvider, parser)?;
 
 
-        Ok(Operation::Expr(Expression::TernaryOperator(Box::new(previous.unwrap().asExpr()?), Box::new(a), Box::new(b))))
+        Ok(ASTNode::Expr(Expression::TernaryOperator(Box::new(previous.unwrap().asExpr()?), Box::new(a), Box::new(b))))
     }
 
     fn getPriority(&self) -> usize {
@@ -1939,7 +1935,38 @@ impl ParsingUnit<Operation, TokenType> for TernaryOperatorParsingUnit {
     }
 }
 
-pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
+#[derive(Debug)]
+struct RepeatParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType> for RepeatParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, tokenProvider: &TokenProvider<TokenType>, previous: Option<&ASTNode>) -> bool {
+        tokenProvider.isPeekType(Repeat)
+    }
+
+    fn parse(&self, tokenProvider: &mut TokenProvider<TokenType>, previous: Option<ASTNode>, parser: &[Box<dyn ParsingUnit<ASTNode, TokenType>>]) -> Result<ASTNode, ParserError<TokenType>> {
+        tokenProvider.getAssert(Repeat)?;
+        let varName = tokenProvider.getIdentifier()?;
+        let count = tokenProvider.getAssert(TokenType::IntLiteral)?.str.parse::<usize>().unwrap();
+
+        let body = parseBody(tokenProvider, parser)?;
+
+        Ok(ASTNode::Statement(Statement::Repeat(varName, count, body)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType>>> {
     vec![
         Box::new(AssignableParsingUnit),
         Box::new(StructInitParsingUnit),
@@ -2016,6 +2043,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<Operation, TokenType>>> {
         Box::new(ForParsingUnit),
         Box::new(LambdaParsingUnit),
         Box::new(TwoArgFunctionParsintUnit),
-        Box::new(TernaryOperatorParsingUnit)
+        Box::new(TernaryOperatorParsingUnit),
+        Box::new(RepeatParsingUnit)
     ]
 }

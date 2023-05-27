@@ -35,7 +35,7 @@ use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
 // DEBUG is faster than default
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -371,6 +371,13 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
+    pub fn currentNamespace(&self) -> &Namespace {
+        let f = self.getFrame();
+
+        self.getNamespace(f.namespaceId)
+    }
+
+    #[inline(always)]
     pub fn getMutFrame(&self) -> &mut StackFrame {
         unsafe { (&mut *(self as *const VirtualMachine as *mut VirtualMachine)).frames.get_unchecked_mut(self.frames.len().unchecked_sub(1)) }
     }
@@ -447,7 +454,9 @@ impl VirtualMachine {
             vm.push(Value::null());
         }
 
-        println!("args count {}", fMeta.argsCount);
+        if DEBUG {
+            println!("[call] args count {}", fMeta.argsCount);
+        }
 
         let res = if vm.stack.len() > 0 {
             vm.stack.len()-fMeta.localsMeta.len()
@@ -470,7 +479,9 @@ impl VirtualMachine {
 
         self.popAmount(fMeta.localsMeta.len());
 
-        self.push(ret)
+        if fMeta.returns {
+            self.push(ret)
+        }
     }
 
     #[inline]
@@ -634,9 +645,10 @@ impl VirtualMachine {
                     self.getMutLocal(*index).dec(typ)
                 },
                 PushChar(c) => self.push((*c).into()),
-                StrNew(s) => {
-                    let a = Value::makeString(s.to_string(), self);
-                    self.push(a)
+                StrNew(sId) => {
+                    let s = self.currentNamespace();
+
+                    self.push(s.getString(*sId))
                 },
                 GetChar => {
                     let index = self.pop().getNum();
@@ -809,11 +821,14 @@ impl VirtualMachine {
                             let res = genFunctionDef(f, ctx)?;
                             f.localsMeta = res.into_boxed_slice();
 
+                            println!("generated: {:?}", ops);
+
                             ops = transform(ops, |it| {
                                 let r = constEvaluation(it);
                                 optimizeBytecode(r)
                             });
 
+                            println!("generated: {:?}", ops);
                             let opt = emitOpcodes(ops);
 
                             if DEBUG {

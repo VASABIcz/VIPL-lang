@@ -102,11 +102,12 @@ pub enum Statement {
     Return(Expression),
     Continue,
     Break,
-    Loop(Vec<Statement>),
+    Loop(Body),
     NamespaceFunction(Vec<String>, FunctionCall),
     StatementExpression(Expression),
     Assignable(Expression, Expression, Option<ArithmeticOp>),
-    ForLoop(String, Expression, Vec<Statement>)
+    ForLoop(String, Expression, Body),
+    Repeat(String, usize, Body)
 }
 
 #[derive(Debug, Clone)]
@@ -133,8 +134,8 @@ pub struct Return {
 pub struct If {
     pub condition: Expression,
     pub body: Body,
-    pub elseBody: Option<Vec<Statement>>,
-    pub elseIfs: Vec<(Expression, Vec<Statement>)>,
+    pub elseBody: Option<Body>,
+    pub elseIfs: Vec<(Expression, Body)>,
 }
 
 #[derive(Debug, Clone)]

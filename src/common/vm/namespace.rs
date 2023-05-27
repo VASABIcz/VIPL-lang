@@ -13,7 +13,7 @@ use crate::fastAcess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::{tokenizeSource, TokenType};
 use crate::naughtyBox::Naughty;
-use crate::parser::{Operation, parseTokens};
+use crate::parser::{ASTNode, parseTokens};
 use crate::utils::{genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::dataType::DataType;
@@ -219,6 +219,10 @@ impl Allocation for Namespace {
 }
 
 impl Namespace {
+    pub fn getString(&self, id: usize) -> Value {
+        Value::from(*self.strings.getFast(id).unwrap() as usize)
+    }
+
     pub fn allocateOrGetString(&mut self, s: &str) -> usize {
         match self.strings.getSlowStr(s) {
             None => {
@@ -370,7 +374,7 @@ impl Namespace {
         }
     }
 
-    pub fn constructNamespace(src: Vec<Operation>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
+    pub fn constructNamespace(src: Vec<ASTNode>, name: &str, vm: &mut VirtualMachine, mainLocals: Vec<VariableMetadata>) -> Namespace {
         let mut n = Namespace::new(name, vm);
         let mut initFunction = FunctionDef{
             name: String::from("__init"),
@@ -384,7 +388,7 @@ impl Namespace {
 
         for s in src {
             match s {
-                Operation::Global(g) => {
+                ASTNode::Global(g) => {
                     match g {
                         Node::FunctionDef(d) => {
                             n.registerFunctionDef(d.into());
@@ -403,10 +407,10 @@ impl Namespace {
                         }
                     }
                 }
-                Operation::Statement(v) => {
+                ASTNode::Statement(v) => {
                     initFunction.body.push(v);
                 }
-                Operation::Expr(e) => {
+                ASTNode::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
                         c => initFunction.body.push(Statement::StatementExpression(c))
@@ -419,7 +423,7 @@ impl Namespace {
     }
 }
 
-pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<Operation>, LoadFileError<TokenType>> {
+pub fn loadSourceFile(src: String, vm: &mut VirtualMachine) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
     let tokens = match tokenizeSource(&src) {
         Ok(v) => v,
         Err(e) => {

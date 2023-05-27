@@ -9,7 +9,7 @@ use libc::link;
 
 use vipl::errors::LoadFileError;
 use vipl::lexer::TokenType;
-use vipl::parser::Operation;
+use vipl::parser::ASTNode;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;
