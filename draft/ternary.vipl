@@ -1,6 +1,5 @@
 x = 1
 
-// fixme proper parsing unit
 y = (x == 1) ? "UwU" : (x == 2) ? "OwO" : "OnO"
 
 

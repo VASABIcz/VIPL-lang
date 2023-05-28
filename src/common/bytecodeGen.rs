@@ -390,14 +390,14 @@ impl ExpressionCtx<'_> {
                 Ok(Bool)
             }
             Expression::NamespaceAccess(n) => {
-                let (namespace, namespaceId) =
+                let (namespace, _) =
                     self.vm.get_mut().findNamespaceParts(&n[..n.len() - 1])?;
 
                 let global = namespace.findGlobal(n.last().unwrap())?;
 
                 Ok(global.0.typ.clone())
             }
-            Expression::Lambda(l, body, ret) => {
+            Expression::Lambda(l, _, ret) => {
                 Ok(DataType::Function {
                     args: l.iter().map(|it| it.typ.clone()).collect(),
                     ret: Box::new(ret.clone().unwrap_or(DataType::Void)),
@@ -421,7 +421,7 @@ impl ExpressionCtx<'_> {
 
                         let var = self.vTable.get(v).unwrap();
                         match &var.0 {
-                            DataType::Function { args, ret } => return Ok(*ret.clone()),
+                            DataType::Function { ret, .. } => return Ok(*ret.clone()),
                             _ => panic!(),
                         }
                     }

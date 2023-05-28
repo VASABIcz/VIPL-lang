@@ -24,8 +24,12 @@ fn main() {
         }
     };
 
+    println!("AST: {:?}", res);
+
     let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
     let id = vm.registerNamespace(n);
+
+
     vm.link().unwrap();
 
     let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;

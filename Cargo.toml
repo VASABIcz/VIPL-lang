@@ -11,10 +11,10 @@ lto = true
 codegen-units = 1
 # panic = "abort"
 opt-level = 2
-strip = false # true
-debug = true # false
-overflow-checks = true # false
-debug-assertions = true # false
+strip = false
+debug = true
+overflow-checks = true
+debug-assertions = true
 
 [[bin]]
 name = "repl"

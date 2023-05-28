@@ -10,7 +10,7 @@ use crate::lexer::{
 };
 
 use crate::parser::ParsingUnitSearchType::Ahead;
-use crate::parser::{parseOne, ParsingUnit, ParsingUnitSearchType, TokenProvider};
+use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::std::json::JsonToken::{
     ArrayBegin, ArrayEnd, Comma, False, Identifier, Null, ObjectBegin, ObjectEnd, Sep, True,
 };
@@ -59,29 +59,33 @@ pub enum JsonToken {
 #[derive(Debug)]
 struct JObjectParsingUnit;
 
-impl ParsingUnit<JSON, JsonToken> for JObjectParsingUnit {
+#[derive(Debug)]
+pub struct JSONParsingState;
+
+type JSONParser = Parser<JsonToken, JSON, JSONParsingState>;
+
+impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JObjectParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
-    fn canParse(&self, tokenProvider: &TokenProvider<JsonToken>, previous: Option<&JSON>) -> bool {
-        tokenProvider.isPeekType(ObjectBegin)
+    fn canParse(&self, parser: &JSONParser) -> bool {
+        parser.tokens.isPeekType(ObjectBegin)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider<JsonToken>,
-        previous: Option<JSON>,
-        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+        parser: &mut JSONParser
     ) -> Result<JSON, ParserError<JsonToken>> {
         let mut pairs = HashMap::new();
+        let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
-        tokenProvider.getAssert(ObjectBegin)?;
+        parser.tokens.getAssert(ObjectBegin)?;
 
-        let parsed = tokenProvider.parseManyWithSeparatorUntil(
+        let parsed = parser.tokens.parseManyWithSeparatorUntil(
             |it| {
                 let key = it.getAssert(Identifier)?.str.clone();
                 it.getAssert(Comma)?;
-                let value = parseOne(it, Ahead, parser, None)?;
+                let value = s2.parseOne(Ahead)?;
 
                 Ok((key, value))
             },
@@ -108,25 +112,24 @@ impl ParsingUnit<JSON, JsonToken> for JObjectParsingUnit {
 #[derive(Debug)]
 struct JArrayParsingUnit;
 
-impl ParsingUnit<JSON, JsonToken> for JArrayParsingUnit {
+impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JArrayParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<JsonToken>, previous: Option<&JSON>) -> bool {
-        tokenProvider.isPeekType(ArrayBegin)
+    fn canParse(&self, parser: &JSONParser) -> bool {
+        parser.tokens.isPeekType(ArrayBegin)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider<JsonToken>,
-        previous: Option<JSON>,
-        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+        parser: &mut JSONParser
     ) -> Result<JSON, ParserError<JsonToken>> {
-        tokenProvider.getAssert(ArrayBegin);
+        parser.tokens.getAssert(ArrayBegin);
+        let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
-        let res = tokenProvider.parseManyWithSeparatorUntil(
-            |it| parseOne(it, Ahead, parser, None),
+        let res = parser.tokens.parseManyWithSeparatorUntil(
+            |it| s2.parseOne(Ahead),
             Some(Sep),
             ArrayEnd,
         )?;
@@ -146,37 +149,35 @@ impl ParsingUnit<JSON, JsonToken> for JArrayParsingUnit {
 #[derive(Debug)]
 struct JKeywordParsingUnit;
 
-impl ParsingUnit<JSON, JsonToken> for JKeywordParsingUnit {
+impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JKeywordParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
 
-    fn canParse(&self, tokenProvider: &TokenProvider<JsonToken>, previous: Option<&JSON>) -> bool {
-        tokenProvider.isPeekType(True)
-            || tokenProvider.isPeekType(False)
-            || tokenProvider.isPeekType(True)
-            || tokenProvider.isPeekType(Null)
-            || tokenProvider.isPeekType(Identifier)
+    fn canParse(&self, parser: &JSONParser) -> bool {
+        parser.tokens.isPeekType(True)
+            || parser.tokens.isPeekType(False)
+            || parser.tokens.isPeekType(True)
+            || parser.tokens.isPeekType(Null)
+            || parser.tokens.isPeekType(Identifier)
     }
 
     fn parse(
         &self,
-        tokenProvider: &mut TokenProvider<JsonToken>,
-        previous: Option<JSON>,
-        parser: &[Box<dyn ParsingUnit<JSON, JsonToken>>],
+        parser: &mut JSONParser
     ) -> Result<JSON, ParserError<JsonToken>> {
-        if tokenProvider.isPeekType(True) {
-            tokenProvider.getAssert(True)?;
+        if parser.tokens.isPeekType(True) {
+            parser.tokens.getAssert(True)?;
 
             Ok(JSON::JBool(true))
-        } else if tokenProvider.isPeekType(False) {
-            tokenProvider.getAssert(False)?;
+        } else if parser.tokens.isPeekType(False) {
+            parser.tokens.getAssert(False)?;
             Ok(JSON::JBool(false))
-        } else if tokenProvider.isPeekType(Null) {
-            tokenProvider.getAssert(Null)?;
+        } else if parser.tokens.isPeekType(Null) {
+            parser.tokens.getAssert(Null)?;
             Ok(JSON::JNull)
-        } else if tokenProvider.isPeekType(Identifier) {
-            let t = tokenProvider.getAssert(Identifier)?;
+        } else if parser.tokens.isPeekType(Identifier) {
+            let t = parser.tokens.getAssert(Identifier)?;
 
             Ok(JSON::JString(t.str.clone()))
         } else {
@@ -193,7 +194,7 @@ impl ParsingUnit<JSON, JsonToken> for JKeywordParsingUnit {
     }
 }
 
-pub fn jsonParsingUnits() -> Vec<Box<dyn ParsingUnit<JSON, JsonToken>>> {
+pub fn jsonParsingUnits() -> Vec<Box<dyn ParsingUnit<JSON, JsonToken, JSONParsingState>>> {
     vec![
         Box::new(JObjectParsingUnit),
         Box::new(JArrayParsingUnit),
@@ -233,7 +234,14 @@ impl JSON {
 
         let mut provider = TokenProvider::new(res);
 
-        let res = parseOne(&mut provider, Ahead, &units, None)?;
+        let mut parser = Parser{
+            tokens: provider,
+            units: units,
+            state: JSONParsingState,
+            previousBuf: vec![],
+        };
+
+        let res = parser.parseOne(Ahead)?;
 
         Ok(res)
     }
