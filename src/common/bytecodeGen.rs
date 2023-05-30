@@ -496,6 +496,9 @@ impl ExpressionCtx<'_> {
 
                 Ok(a)
             }
+            Expression::TypeCast(_, t) => {
+                Ok(t.clone())
+            }
         }
     }
 }
@@ -1464,6 +1467,15 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 r.constructCtx(fal).genExpression()?;
 
                 r.makeLabel(endLabel);
+            }
+            Expression::TypeCast(e, target) => {
+                let src = r.constructCtx(e).toDataType()?.assertNotVoid()?;
+
+                if target.isValue() || src.isValue() {
+                    r.constructCtx(e).genExpression()?;
+                    return Ok(())
+                }
+                panic!();
             }
         }
     }

@@ -473,6 +473,13 @@ pub fn parseTokens(toks: Vec<Token<TokenType>>) -> Result<Vec<ASTNode>, ParserEr
 }
 
 impl Parser<TokenType, ASTNode, VIPLParsingState> {
+    pub fn isPrevExpr(&self) -> bool {
+        match self.previous() {
+            None => false,
+            Some(v) => v.isExpr()
+        }
+    }
+
     pub fn parseExprOneLine(
         &mut self
     ) -> Result<Expression, ParserError<TokenType>> {
@@ -548,17 +555,18 @@ pub fn parseDataType(
     } else {
         let t = tokens.getIdentifier()?;
 
-        match t.as_str() {
-            "bool" => return Ok(DataType::Bool),
-            "char" => return Ok(DataType::Char),
-            "int" => return Ok(DataType::Int),
-            "float" => return Ok(DataType::Float),
-            c => {
-                return Ok(DataType::Object(ObjectMeta {
-                    name: c.to_string().into(),
-                    generics: Box::new([]),
-                }))
-            }
-        }
+        let v = match t.as_str() {
+            "bool" => DataType::Bool,
+            "char" => DataType::Char,
+            "int" => DataType::Int,
+            "float" => DataType::Float,
+            "value" => DataType::Value,
+            c => DataType::Object(ObjectMeta {
+                name: c.to_string().into(),
+                generics: Box::new([]),
+            })
+        };
+
+        Ok(v)
     }
 }

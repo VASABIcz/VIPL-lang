@@ -38,7 +38,7 @@ use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
 // DEBUG is faster than default
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]

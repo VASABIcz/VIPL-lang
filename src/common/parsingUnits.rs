@@ -1563,6 +1563,34 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
     fn setPriority(&mut self, _priority: usize) {}
 }
 
+#[derive(Debug)]
+struct TypeCastParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType { Behind }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.isPrevExpr() && parser.tokens.isPeekType(As)
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        let e = parser.prevPop().unwrap().asExpr()?;
+        parser.tokens.getAssert(As)?;
+
+        let t = parser.parseDataType()?;
+
+        Ok(ASTNode::Expr(Expression::TypeCast(Box::new(e), t)))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
     vec![
         Box::new(AssignableParsingUnit),
@@ -1582,6 +1610,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(NotParsingUnit),
         Box::new(ContinueParsingUnit),
         Box::new(ImportParsingUnit),
+        Box::new(TypeCastParsingUnit),
         Box::new(NullParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Mul,

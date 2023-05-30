@@ -61,6 +61,7 @@ pub enum Expression {
     FieldAccess(Box<Expression>, String),
     TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
     Null,
+    TypeCast(Box<Expression>, DataType)
 }
 
 impl Expression {

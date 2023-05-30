@@ -43,5 +43,6 @@ pub fn evalExpr(exp: &Expression) -> Option<Value> {
         Expression::FieldAccess(_, _) => None,
         Expression::Null => None,
         Expression::TernaryOperator(_, _, _) => None,
+        _ => None
     }
 }

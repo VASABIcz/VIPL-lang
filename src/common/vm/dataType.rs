@@ -18,6 +18,7 @@ pub enum DataType {
         ret: Box<DataType>,
     },
     Void,
+    Value
 }
 
 impl DataType {
@@ -52,6 +53,13 @@ impl DataType {
         match self {
             Object(o) => return o.name.as_str() == "Array",
             _ => false,
+        }
+    }
+
+    pub fn isValue(&self) -> bool {
+        match self {
+            Value => true,
+            _ => false
         }
     }
 
@@ -116,6 +124,7 @@ impl DataType {
             Int => "int".to_string(),
             Float => "float".to_string(),
             Bool => "bool".to_string(),
+            Value => "value".to_string(),
             Object(x) => {
                 if x.generics.len() == 0 {
                     return x.name.clone();
@@ -152,6 +161,7 @@ impl DataType {
             Object(_) => "ViplObject*",
             Char => "char",
             Void => "void",
+            Value => "long",
             Function { .. } => todo!(),
         }
     }
@@ -159,13 +169,8 @@ impl DataType {
     #[inline]
     pub fn toDefaultValue(&self) -> Value {
         match self {
-            Int => 0.into(),
-            Float => 0.0.into(),
-            Bool => false.into(),
-            Char => 0.into(),
-            Object(_) => 0.into(),
-            Function { .. } => 0.into(),
             Void => unreachable!(),
+            _ => Value::null()
         }
     }
 }

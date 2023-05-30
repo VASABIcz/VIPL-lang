@@ -256,6 +256,7 @@ pub enum TokenType {
     NewLine,
     QuestionMark,
     Repeat,
+    As
 }
 
 pub trait Stringable {
@@ -323,6 +324,7 @@ impl Stringable for TokenType {
             TokenType::NewLine => "\\n",
             TokenType::QuestionMark => "?",
             TokenType::Repeat => "Repeat",
+            TokenType::As => "as"
         }
     }
 }
@@ -585,6 +587,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         AlphabeticKeywordLexingUnit::new("in", TokenType::In),
         AlphabeticKeywordLexingUnit::new("null", TokenType::Null),
         AlphabeticKeywordLexingUnit::new("repeat", TokenType::Repeat),
+        AlphabeticKeywordLexingUnit::new("as", TokenType::As),
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),

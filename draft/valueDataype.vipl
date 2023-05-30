@@ -1,0 +1,3 @@
+x = 10 as value
+
+out::print(x as int)
