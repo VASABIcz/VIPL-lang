@@ -389,6 +389,7 @@ pub enum CodeGenError {
     UnexpectedVoid,
     ContinueOutsideLoop,
     BreakOutsideLoop,
+    LiteralParseError
 }
 
 #[derive(Debug, Clone)]

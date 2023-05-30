@@ -7,12 +7,13 @@ use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
 use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, SymbolType};
 use crate::fastAccess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
-use crate::lexer::{tokenizeSource, TokenType};
+use crate::lexer::{LexingUnit, tokenizeSource, TokenType};
 use crate::naughtyBox::Naughty;
-use crate::parser::parseTokens;
+use crate::parser::ParsingUnit;
 use crate::utils::{
     genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters,
 };
+use crate::viplParser::{parseTokens, VIPLParsingState};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::Void;
 use crate::vm::heap::{Allocation, Hay, HayCollector};
@@ -22,11 +23,13 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::{OpCode, VirtualMachine};
+use crate::wss::WhySoSlow;
 
 #[derive(Debug, PartialEq)]
 pub enum NamespaceState {
     Loaded,
     PartiallyLoaded,
+    FailedToLoad
 }
 
 #[derive(Debug, Clone)]
@@ -551,8 +554,10 @@ impl Namespace {
 pub fn loadSourceFile(
     src: String,
     vm: &mut VirtualMachine,
+    lexingUnits: &mut [Box<dyn LexingUnit<TokenType>>],
+    parsingUnits: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]
 ) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
-    let tokens = match tokenizeSource(&src) {
+    let tokens = match tokenizeSource(&src, lexingUnits) {
         Ok(v) => v,
         Err(e) => return Err(e.into()),
     };
@@ -561,5 +566,7 @@ pub fn loadSourceFile(
         return Ok(vec![]);
     }
 
-    Ok(parseTokens(tokens)?)
+    let ast = parseTokens(tokens, parsingUnits)?;
+
+    Ok(ast)
 }

@@ -62,7 +62,7 @@ struct JObjectParsingUnit;
 #[derive(Debug)]
 pub struct JSONParsingState;
 
-type JSONParser = Parser<JsonToken, JSON, JSONParsingState>;
+type JSONParser<'a> = Parser<'a, JsonToken, JSON, JSONParsingState>;
 
 impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JObjectParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -230,13 +230,13 @@ impl JSON {
                 col: 0,
             },
         )?;
-        let units = jsonParsingUnits();
+        let mut units = jsonParsingUnits();
 
         let mut provider = TokenProvider::new(res);
 
         let mut parser = Parser{
             tokens: provider,
-            units: units,
+            units: &mut units,
             state: JSONParsingState,
             previousBuf: vec![],
         };

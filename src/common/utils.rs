@@ -1,8 +1,8 @@
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
-use crate::lexer::{tokenizeSource, TokenType};
-use crate::parser::{parseDataType, TokenProvider};
+use crate::lexer::{LexingUnit, tokenizeSource, TokenType};
+use crate::parser::{TokenProvider};
 use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
@@ -13,6 +13,7 @@ use crate::vm::vm::{OpCode, VirtualMachine};
 use std::arch::asm;
 use std::error::Error;
 use std::{env, fs};
+use crate::viplParser::parseDataType;
 
 // same as Vec but can be unsafely modified and accessed
 pub struct FastVec<T> {
@@ -76,8 +77,8 @@ pub fn argsToString(args: &[DataType]) -> String {
 }
 
 #[inline]
-pub fn parseDataTypeFromStr(s: &str) -> Result<DataType, LoadFileError<TokenType>> {
-    let p = tokenizeSource(s)?;
+pub fn parseDataTypeFromStr(s: &str, units: &mut [Box<dyn LexingUnit<TokenType>>]) -> Result<DataType, LoadFileError<TokenType>> {
+    let p = tokenizeSource(s, units)?;
     Ok(parseDataType(&mut TokenProvider::new(p))?)
 }
 

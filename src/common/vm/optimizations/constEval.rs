@@ -200,10 +200,13 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
     for op in ops {
         match op {
             OpCode::F2I => match constStack.pop() {
-                Some(v) => constStack.push(v),
+                Some(v) => constStack.push(v.toInt()),
                 None => finaly.push(op),
             },
-            OpCode::I2F => {}
+            OpCode::I2F => match constStack.pop() {
+                Some(v) => constStack.push(v.toFloat()),
+                None => finaly.push(op),
+            }
             OpCode::PushInt(v) => constStack.push(v.into()),
             OpCode::PushFunction(_, _) => {}
             OpCode::PushFloat(v) => constStack.push(v.into()),
@@ -241,8 +244,8 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
             },
             OpCode::Add(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
-                    let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
+                    let mut a = constStack.pop().unwrap();
 
                     a.add(b);
 
@@ -256,8 +259,8 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
             },
             OpCode::Sub(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
-                    let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
+                    let mut a = constStack.pop().unwrap();
 
                     a.sub(b);
 
@@ -271,8 +274,8 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
             },
             OpCode::Div(_) if constStack.len() >= 1 => match constStack.len() {
                 2.. => {
-                    let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
+                    let mut a = constStack.pop().unwrap();
 
                     a.div(b);
 
@@ -286,8 +289,8 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
             },
             OpCode::Mul(_) => match constStack.len() {
                 2.. => {
-                    let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
+                    let mut a = constStack.pop().unwrap();
 
                     a.mul(b);
 

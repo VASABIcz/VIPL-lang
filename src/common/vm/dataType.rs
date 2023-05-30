@@ -70,6 +70,20 @@ impl DataType {
         }
     }
 
+    pub fn isInt(&self) -> bool {
+        match self {
+            Int => true,
+            _ => false
+        }
+    }
+
+    pub fn isFloat(&self) -> bool {
+        match self {
+            Float => true,
+            _ => false
+        }
+    }
+
     pub fn isFunction(&self) -> bool {
         match self {
             Function { .. } => true,

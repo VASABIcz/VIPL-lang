@@ -12,7 +12,7 @@ use crate::ast::{
     ArithmeticOp, BinaryOp, Expression, FunctionDef, ModType, Node, Statement, StructDef,
 };
 use crate::bytecodeGen::SymbolicOpcode::Op;
-use crate::errors::CodeGenError::{UnexpectedVoid, UntypedEmptyArray};
+use crate::errors::CodeGenError::{LiteralParseError, UnexpectedVoid, UntypedEmptyArray};
 use crate::errors::{
     CodeGenError, InvalidTypeException, NoValue, SymbolNotFound, SymbolType, TypeError,
     TypeNotFound,
@@ -20,18 +20,13 @@ use crate::errors::{
 use crate::lexer::*;
 use crate::parser::*;
 use crate::utils::genFunName;
-use crate::vm::dataType::DataType::{Bool, Char, Int, Object, Void};
+use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Object, Void};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{
-    Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField,
-    GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt,
-    PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength,
-    Sub, Swap,
-};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
 const DEBUG: bool = false;
@@ -227,24 +222,25 @@ pub struct ExpressionCtx<'a> {
 }
 
 impl ExpressionCtx<'_> {
+    pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
+        self.vTable.get(varName).ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::var(varName)))
+    }
+
     pub fn genExpression(mut self) -> Result<(), CodeGenError> {
         genExpression(self)
     }
 }
 
 impl PartialExprCtx<'_> {
-    pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Option<String> {
-        println!("funcs {:?}", self.functionReturns.keys());
+    pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Result<String, CodeGenError> {
         let idk = format!("{}::{}(", self.currentNamespace.get_mut().name, name);
-        println!("finding {}", idk);
 
         for (k, _) in self.functionReturns {
             if k.as_str().starts_with(&idk) {
-                println!("found {}", k);
-                return Some(k.to_string());
+                return Ok(k.to_string());
             }
         }
-        return None;
+        return Err(CodeGenError::SymbolNotFound(SymbolNotFound::fun(name)));
     }
 }
 
@@ -284,17 +280,30 @@ impl ExpressionCtx<'_> {
                 right: _,
                 op: o,
             } => {
-                match o {
+                let leftT = self.transfer(left).toDataType()?;
+                let rightT = self.transfer(left).toDataType()?;
+
+                if leftT != rightT {
+                    return Err(CodeGenError::TypeError(TypeError{
+                        expected: leftT,
+                        actual: rightT,
+                        exp: Some(self.exp.clone()),
+                    }))
+                }
+
+                let t = match o {
                     BinaryOp::Gt => return Ok(Bool),
                     BinaryOp::Less => return Ok(Bool),
                     BinaryOp::Eq => return Ok(Bool),
                     BinaryOp::And => return Ok(Bool),
                     BinaryOp::Or => return Ok(Bool),
-                    _ => {}
-                }
-                let _leftType = self.transfer(left).toDataType().unwrap();
+                    BinaryOp::Add => leftT,
+                    BinaryOp::Sub => leftT,
+                    BinaryOp::Mul => leftT,
+                    BinaryOp::Div => Float
+                };
 
-                Ok(_leftType)
+                Ok(t)
             }
             Expression::IntLiteral(_) => Ok(DataType::Int),
             Expression::LongLiteral(_) => {
@@ -307,17 +316,16 @@ impl ExpressionCtx<'_> {
                 Ok(DataType::Float)
             }
             Expression::StringLiteral(_) => Ok(DataType::str()),
-            Expression::Variable(name) => match self.vTable.get(name) {
-                None => {
+            Expression::Variable(name) => match self.getVariable(name) {
+                Err(_) => {
                     let funcName = self.lookupFunctionByBaseName(name)?;
                     let f = self
                         .currentNamespace
                         .get_mut()
-                        .findFunction(&funcName)
-                        .unwrap();
+                        .findFunction(&funcName)?;
                     return Ok(f.0.toFunctionType());
                 }
-                Some(v) => Ok(v.0.clone()),
+                Ok(v) => Ok(v.0.clone()),
             },
             Expression::BoolLiteral(_) => Ok(DataType::Bool),
             Expression::CharLiteral(_) => Ok(Char),
@@ -399,9 +407,8 @@ impl ExpressionCtx<'_> {
             Expression::Lambda(l, _, ret) => {
                 Ok(DataType::Function {
                     args: l.iter().map(|it| it.typ.clone()).collect(),
-                    ret: Box::new(ret.clone().unwrap_or(DataType::Void)),
+                    ret: Box::new(ret.clone().unwrap_or(Void)),
                 })
-                //Ok(self.typeHint.clone())
             }
             Expression::Callable(prev, args) => unsafe {
                 match &**(prev as *const Box<Expression>) {
@@ -418,7 +425,8 @@ impl ExpressionCtx<'_> {
                             return Ok(funcId.0.returnType.clone());
                         }
 
-                        let var = self.vTable.get(v).unwrap();
+
+                        let var = self.getVariable(v)?;
                         match &var.0 {
                             DataType::Function { ret, .. } => return Ok(*ret.clone()),
                             _ => panic!(),
@@ -495,9 +503,8 @@ impl ExpressionCtx<'_> {
 
                 Ok(a)
             }
-            Expression::TypeCast(_, t) => {
-                Ok(t.clone())
-            }
+            // FIXME check if cast is possible
+            Expression::TypeCast(_, t) => Ok(t.clone())
         }
     }
 }
@@ -697,12 +704,12 @@ impl StatementCtx<'_> {
     }
 
     pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) {
-        match self.vTable.get(name) {
-            None => {
+        match self.getVariable(name) {
+            Err(_) => {
                 self.vTable
                     .insert(name.to_string().into(), (t, self.vTable.len()));
             }
-            Some(v) => {
+            Ok(v) => {
                 assert_eq!(v.0, t.clone())
             }
         };
@@ -816,10 +823,8 @@ pub fn buildLocalsTable(ctx: &mut StatementCtx) -> Result<(), CodeGenError> {
                 .clone()
                 .ok_or(UntypedEmptyArray)?;
 
-            if !ctx.vTable.contains_key(var) {
-                ctx.vTable
-                    .insert(var.clone().into(), (typ.clone(), ctx.vTable.len()));
-            }
+
+            ctx.registerVariableIfNotExists(var, typ);
 
             body.buildLocalsTableC(ctx.deflate())?;
         }
@@ -1049,7 +1054,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             match dest {
                 Expression::Variable(v) => {
-                    let var = ctx.vTable.get(v).unwrap();
+                    let var = ctx.getVariable(v)?;
 
                     ctx.push(SetLocal { index: var.1 })
                 }
@@ -1091,7 +1096,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::ForLoop(var, arr, body) => {
-            let varId = ctx.vTable.get(var).unwrap().1;
+            let varId = ctx.getVariable(var)?.1;
             let endLabel = ctx.nextLabel();
 
             // BEGIN
@@ -1182,17 +1187,17 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 };
                 r.push(t);
             }
-            Expression::IntLiteral(i) => r.push(PushInt(i.parse::<isize>().unwrap())),
-            Expression::LongLiteral(i) => r.push(PushInt(i.parse::<isize>().unwrap())),
-            Expression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
-            Expression::DoubleLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().unwrap())),
-            Expression::StringLiteral(i) => unsafe {
+            Expression::IntLiteral(i) => r.push(PushInt(i.parse::<isize>().map_err(|_| LiteralParseError)?)),
+            Expression::LongLiteral(i) => r.push(PushInt(i.parse::<isize>().map_err(|_| LiteralParseError)?)),
+            Expression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),
+            Expression::DoubleLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),
+            Expression::StringLiteral(i) => {
                 r.push(StrNew(
                     (&mut *r.currentNamespace.get()).allocateOrGetString(i),
                 ));
             },
             Expression::BoolLiteral(i) => r.push(OpCode::PushBool(*i)),
-            Expression::Variable(v) => unsafe {
+            Expression::Variable(v) => {
                 if r.vTable.contains_key(v) {
                     r.push(OpCode::GetLocal {
                         index: r
@@ -1202,7 +1207,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                             .1,
                     });
                 } else {
-                    let f = r.lookupFunctionByBaseName(v).unwrap();
+                    let f = r.lookupFunctionByBaseName(v)?;
                     let a = (&mut *r.currentNamespace.get()).findFunction(&f).unwrap();
                     r.push(PushFunction(
                         (&*r.currentNamespace.get()).id as u32,
@@ -1467,14 +1472,32 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
                 r.makeLabel(endLabel);
             }
-            Expression::TypeCast(e, target) => {
-                let src = r.constructCtx(e).toDataType()?.assertNotVoid()?;
+            Expression::TypeCast(exp, target) => {
+                let src = r.constructCtx(exp).toDataType()?.assertNotVoid()?;
 
                 if target.isValue() || src.isValue() {
-                    r.constructCtx(e).genExpression()?;
+                    r.constructCtx(exp).genExpression()?;
                     return Ok(())
                 }
-                panic!();
+
+                if &src == target {
+                    r.constructCtx(exp).genExpression()?;
+                    return Ok(())
+                }
+
+                if src.isInt() && target.isFloat() {
+                    r.constructCtx(exp).genExpression()?;
+                    r.push(I2F);
+                    return Ok(())
+                }
+
+                if target.isInt() && src.isFloat() {
+                    r.constructCtx(exp).genExpression()?;
+                    r.push(F2I);
+                    return Ok(())
+                }
+
+                todo!()
             }
         }
     }

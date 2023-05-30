@@ -4,6 +4,8 @@ use std::error::Error;
 use std::io::{BufRead, Write};
 use std::process::exit;
 
+use vipl::lexer::lexingUnits;
+use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;
@@ -12,6 +14,7 @@ use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::value::Value;
 use vipl::vm::vm::OpCode::{LCall, Pop, SCall};
 use vipl::vm::vm::VirtualMachine;
+use vipl::wss::WhySoSlow;
 
 fn readInput() -> String {
     print!(">>> ");
@@ -36,6 +39,8 @@ fn main() {
     let mut vm = bootStrapVM();
     let mut mainLocals = vec![];
     let mut localValues = vec![];
+    let mut lexingUnits = lexingUnits();
+    let mut parsingUnits = parsingUnits();
 
     unsafe {
         vm.setHandleExpression(|ctx, t| {
@@ -88,25 +93,37 @@ fn main() {
 
     loop {
         let userInput = readInput();
+
+        let mut wss = WhySoSlow::new(6);
+
         // println!("locals {:?}", mainLocals);
-        let v = match loadSourceFile(userInput, &mut vm) {
+
+        let v = match loadSourceFile(userInput, &mut vm, &mut lexingUnits, &mut parsingUnits) {
             Ok(v) => v,
             Err(e) => {
-                println!("{}", e);
+                println!("parse error {}", e);
                 continue;
             }
         };
 
+        wss.record("parsing to ast");
+
+        println!("AST: {:?}", v);
+
         let n = Namespace::constructNamespace(v, "UwU", &mut vm, mainLocals.clone());
         let generatedNamespace = vm.registerNamespace(n);
+
+        wss.record("constructing namespace");
 
         match vm.link() {
             Ok(_) => {}
             Err(e) => {
-                println!("{:?}", e);
+                println!("link error {:?}", e);
                 continue;
             }
         }
+
+        wss.record("linking");
 
         let nn = vm.getNamespace(generatedNamespace);
         let fId = nn.getFunctions().len() - 1;
@@ -120,6 +137,8 @@ fn main() {
 
         mainLocals = fMeta.localsMeta.clone().into_vec();
 
+        wss.record("locals initialization 'n stuff");
+
         unsafe {
             f.as_ref().unwrap().call(
                 &mut *d,
@@ -129,8 +148,12 @@ fn main() {
                     namespaceId: nn.id,
                     functionId: fId,
                 },
-                false
+                false,
             );
         }
+
+        wss.record("execution");
+
+        wss.dump();
     }
 }

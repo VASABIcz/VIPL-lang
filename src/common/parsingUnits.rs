@@ -11,22 +11,13 @@ use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
 use crate::lexer::TokenType;
 use crate::lexer::TokenType::*;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
-use crate::parser::{parseDataType, Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider, VIPLParsingState};
+use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
+use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
-const VALID_EXPRESSION_TOKENS: [TokenType; 5] = [
-    StringLiteral,
-    IntLiteral,
-    LongLiteral,
-    Identifier,
-    CharLiteral,
-];
-
 #[derive(Debug)]
 pub struct BoolParsingUnit;
-
-type VIPLParser = Parser<TokenType, ASTNode, VIPLParsingState>;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BoolParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -697,10 +688,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.tokens.isPeekType(ORB)
-            && parser.previous().map_or(false, |it| {
-                it.asExprRef().map_or(false, |it| it.isCallable())
-            })
+        parser.tokens.isPeekType(ORB) && parser.isPrevCallable()
     }
 
     fn parse(
@@ -967,9 +955,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
             || parser.tokens.isPeekType(SubAs)
             || parser.tokens.isPeekType(DivAs)
             || parser.tokens.isPeekType(MulAs)
-                && parser.previous()
-                    .map(|it| it.asExprRef().map(|it| it.isAssignable()).unwrap_or(false))
-                    .unwrap_or(false)
+                && parser.isPrevAssignable()
     }
 
     fn parse(
@@ -1149,25 +1135,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         &self,
         parser: &VIPLParser
     ) -> bool {
-        match parser.previous() {
-            Some(v) => {
-                match v {
-                    ASTNode::Expr(e) => {
-                        if !e.isCallable() {
-                            return false
-                        }
-                    }
-                    _ => {
-                        return false
-                    }
-                }
-            },
-            None => {
-                return false
-            }
-        };
-
-        parser.tokens.isPeekTypeOf(|it| VALID_EXPRESSION_TOKENS.contains(&it))
+        parser.tokens.isPeekTypeOf(|it| VALID_EXPRESSION_TOKENS.contains(&it)) && parser.isPrevCallable()
     }
 
     fn parse(
@@ -1205,9 +1173,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.previous().map_or(false, |it| it.isExpr())
+        parser.isPrevExp()
             && parser.tokens.isPeekType(Identifier)
-            && parser.tokens.isPeekIndexOf(|it| VALID_EXPRESSION_TOKENS.contains(&it), 1)
+            && parser.tokens.isPeekTypeMany(&VALID_EXPRESSION_TOKENS)
+            && parser.tokens.isPeekOffsetOneOf(&VALID_EXPRESSION_TOKENS, 1)
     }
 
     fn parse(
@@ -1245,7 +1214,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.tokens.isPeekType(QuestionMark) && parser.previous().map_or(false, |it| it.isExpr())
+        parser.tokens.isPeekType(QuestionMark) && parser.isPrevExp()
     }
 
     fn parse(
@@ -1569,7 +1538,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType { Behind }
 
     fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
-        parser.isPrevExpr() && parser.tokens.isPeekType(As)
+        parser.isPrevExp() && parser.tokens.isPeekType(As)
     }
 
     fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
@@ -1601,6 +1570,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(ArrayIndexingParsingUnit),
         Box::new(OneArgFunctionParsintUnit),
         Box::new(ArrayLiteralParsingUnit),
+        Box::new(TypeCastParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
         Box::new(StringParsingUnit),
@@ -1609,7 +1579,6 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(NotParsingUnit),
         Box::new(ContinueParsingUnit),
         Box::new(ImportParsingUnit),
-        Box::new(TypeCastParsingUnit),
         Box::new(NullParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Mul,

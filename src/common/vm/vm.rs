@@ -21,7 +21,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
 use crate::vm::namespace::LoadedFunction::Native;
-use crate::vm::namespace::NamespaceState::Loaded;
+use crate::vm::namespace::NamespaceState::{FailedToLoad, Loaded};
 use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeObjects::{
@@ -37,7 +37,7 @@ use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
-// DEBUG is faster than default
+// FIXME DEBUG is faster than default
 const DEBUG: bool = false;
 const TRACE: bool = false;
 
@@ -302,21 +302,11 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn pop(&self) -> Value {
-        if DEBUG || TRACE {
-            unsafe {
-                (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
-                    .stack
-                    .pop()
-                    .unwrap()
-            }
-        } else {
-            unsafe {
-                let mut res = &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>);
-
-                res.size -= 1;
-
-                read_via_copy(intrinsics::offset(res.ptr, res.size as isize) as *mut Value)
-            }
+        unsafe {
+            (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
+                .stack
+                .pop()
+                .unwrap()
         }
     }
 
@@ -540,7 +530,7 @@ impl VirtualMachine {
 
             match op {
                 F2I => self.getMutTop().f2i(),
-                I2F => self.getMutTop().f2i(),
+                I2F => self.getMutTop().i2f(),
                 PushInt(v) => self.push(Value { Num: *v }),
                 PushIntOne => self.push(Value { Num: 1 }),
                 PushIntZero => self.push(Value { Num: 0 }),
@@ -829,31 +819,28 @@ impl VirtualMachine {
 
         unsafe {
             for n in &mut (&mut *warCrime.get()).namespaces.actual {
-                let nn = n as *mut Namespace;
-                if n.state == Loaded {
+                if n.state == Loaded || n.state == FailedToLoad {
                     continue;
                 }
 
-                let anotherWarCrime: &mut UnsafeCell<Namespace> = unsafe { transmute(n) };
+                let anotherWarCrime: &mut UnsafeCell<Namespace> = transmute(n);
 
-                for (index, g) in (&mut *anotherWarCrime.get())
+                for (_, g) in (&mut *anotherWarCrime.get())
                     .getGlobalsMut()
                     .iter_mut()
                     .enumerate()
                 {
-                    unsafe {
-                        let mut ctx = ExpressionCtx {
-                            ops: &mut vec![],
-                            exp: &g.0.default,
-                            functionReturns: &functionReturns,
-                            vTable: &Default::default(),
-                            typeHint: None,
-                            currentNamespace: anotherWarCrime,
-                            vm: warCrime,
-                            labelCounter: &mut 0,
-                        };
-                        g.0.typ = ctx.toDataType()?;
-                    }
+                    let mut ctx = ExpressionCtx {
+                        ops: &mut vec![],
+                        exp: &g.0.default,
+                        functionReturns: &functionReturns,
+                        vTable: &Default::default(),
+                        typeHint: None,
+                        currentNamespace: anotherWarCrime,
+                        vm: warCrime,
+                        labelCounter: &mut 0,
+                    };
+                    g.0.typ = ctx.toDataType()?;
                 }
 
                 let nId = (&*anotherWarCrime.get()).id;
@@ -863,43 +850,48 @@ impl VirtualMachine {
                     .iter_mut()
                     .enumerate()
                 {
-                    unsafe {
-                        if let FunctionTypeMeta::Runtime(_) = f.functionType {
-                            let mut ops = vec![];
-                            let mut labelCounter = 0;
+                    if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                        let mut ops = vec![];
+                        let mut labelCounter = 0;
 
-                            let ctx = SimpleCtx {
-                                ops: &mut ops,
-                                functionReturns: &functionReturns,
-                                currentNamespace: anotherWarCrime,
-                                handle: (&*warCrime.get()).handleStatementExpression,
-                                vm: warCrime,
-                                labelCounter: &mut labelCounter,
-                            };
+                        let ctx = SimpleCtx {
+                            ops: &mut ops,
+                            functionReturns: &functionReturns,
+                            currentNamespace: anotherWarCrime,
+                            handle: (&*warCrime.get()).handleStatementExpression,
+                            vm: warCrime,
+                            labelCounter: &mut labelCounter,
+                        };
 
-                            let res = genFunctionDef(f, ctx)?;
-                            f.localsMeta = res.into_boxed_slice();
+                        let res = match genFunctionDef(f, ctx) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                anotherWarCrime.get_mut().state = FailedToLoad;
 
-                            if DEBUG {
-                                println!("generated N: {}, F: {} {} {:?}", nId, index, f.name, ops);
+                                return Err(e)
                             }
+                        };
+                        f.localsMeta = res.into_boxed_slice();
 
-                            ops = transform(ops, |it| {
-                                let r = constEvaluation(it);
-                                optimizeBytecode(r)
-                            });
-
-                            if DEBUG {
-                                println!("optimized N: {}, F: {} {} {:?}", nId, index, f.name, ops);
-                            }
-
-                            let opt = emitOpcodes(ops);
-
-                            // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                            // *a = Some(Native(nf))
-
-                            *a = Some(LoadedFunction::Virtual(opt));
+                        if DEBUG {
+                            println!("[generated] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
                         }
+
+                        ops = transform(ops, |it| {
+                            // let r = constEvaluation(it);
+                            optimizeBytecode(it)
+                        });
+
+                        if DEBUG {
+                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
+                        }
+
+                        let opt = emitOpcodes(ops);
+
+                        // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
+                        // *a = Some(Native(nf))
+
+                        *a = Some(LoadedFunction::Virtual(opt));
                     }
                 }
 
