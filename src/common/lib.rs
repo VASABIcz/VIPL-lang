@@ -28,24 +28,18 @@
 extern crate core;
 
 pub mod ast;
-// pub mod bytecodeChecker;
-// pub mod cGen;
-// pub mod codegen;
 pub mod asm;
 pub mod bytecodeGen;
 pub mod errors;
 pub mod fastAccess;
 pub mod ffi;
-pub mod gccWrapper;
 pub mod lexer;
 pub mod lexingUnits;
 pub mod naughtyBox;
-pub mod optimizer;
 pub mod parser;
 pub mod parsingUnits;
 pub mod regix;
 pub mod rice;
 pub mod std;
-pub mod strCaching;
 pub mod utils;
 pub mod vm;

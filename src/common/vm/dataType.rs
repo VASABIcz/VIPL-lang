@@ -153,19 +153,6 @@ impl DataType {
         }
     }
 
-    pub fn toCString(&self) -> &str {
-        match self {
-            Int => "long",
-            Float => "float",
-            Bool => "bool",
-            Object(_) => "ViplObject*",
-            Char => "char",
-            Void => "void",
-            Value => "long",
-            Function { .. } => todo!(),
-        }
-    }
-
     #[inline]
     pub fn toDefaultValue(&self) -> Value {
         match self {

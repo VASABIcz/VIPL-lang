@@ -18,7 +18,6 @@ use crate::errors::{
     TypeNotFound,
 };
 use crate::lexer::*;
-use crate::optimizer::evalE;
 use crate::parser::*;
 use crate::utils::genFunName;
 use crate::vm::dataType::DataType::{Bool, Char, Int, Object, Void};
