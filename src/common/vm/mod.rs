@@ -6,7 +6,6 @@ pub mod objects;
 pub mod stackFrame;
 pub mod value;
 pub mod vm;
-// mod tests;
 pub mod nativeObjects;
 pub mod nativeStack;
 pub mod optimizations;

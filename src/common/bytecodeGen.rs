@@ -34,7 +34,7 @@ use crate::vm::vm::OpCode::{
 };
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug, Clone)]
 pub enum SymbolicOpcode {

@@ -38,7 +38,7 @@ use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
 // DEBUG is faster than default
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -202,6 +202,10 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
+    pub fn setHandleExpression(&mut self, f: fn(&mut StatementCtx, DataType)) {
+        self.handleStatementExpression = f;
+    }
+
     pub fn allocate<T: Allocation>(&mut self, v: T) -> Hay<T> {
         self.heap.allocate(v)
     }

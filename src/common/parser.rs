@@ -22,6 +22,8 @@ use crate::parsingUnits::{parsingUnits};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
+const DEBUG: bool = false;
+
 #[derive(Debug)]
 pub struct VIPLParsingState {
     pub symbols: HashMap<String, SymbolType>
@@ -155,7 +157,9 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
     }
 
     pub fn consume(&mut self) {
-        println!("consuming {:?}", self.tokens[self.index]);
+        if DEBUG {
+            println!("consuming {:?}", self.tokens[self.index]);
+        }
 
         self.index += 1
     }
@@ -328,7 +332,10 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<IN, 
                 continue;
             }
 
-            println!("parsing {:?}", unit);
+            if DEBUG {
+                println!("parsing {:?}", unit);
+            }
+
             match typ {
                 Around | Behind => {
                     let res = match unit.parse(s2) {
@@ -484,7 +491,6 @@ impl Parser<TokenType, ASTNode, VIPLParsingState> {
         &mut self
     ) -> Result<Expression, ParserError<TokenType>> {
         let res = self.parseOneOneLine(Ahead)?;
-        println!("wtf {:?}", res);
         res.asExpr()
     }
 

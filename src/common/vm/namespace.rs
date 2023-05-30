@@ -318,8 +318,6 @@ impl Namespace {
     ) -> Result<(&FunctionMeta, usize), CodeGenError> {
         let genName = genFunName(name, args);
 
-        println!("functions: {:?}", self.functions);
-
         let id = self
             .functions
             .getSlowStr(
@@ -558,8 +556,6 @@ pub fn loadSourceFile(
         Ok(v) => v,
         Err(e) => return Err(e.into()),
     };
-
-    println!("tokens {:?}", tokens);
 
     if tokens.is_empty() {
         return Ok(vec![]);

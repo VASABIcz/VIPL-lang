@@ -1175,7 +1175,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         let prev = parser.prevPop().unwrap().asExpr()?;
-        println!("one arg parse {:?}", prev);
 
         let arg = parser.parseExprOneLine()?;
 
