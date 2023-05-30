@@ -298,7 +298,6 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn pop(&self) -> Value {
-        println!("gona poop {:?}", self);
         if DEBUG || TRACE {
             unsafe {
                 (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
@@ -319,7 +318,6 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn popAmount(&self, amount: usize) {
-        println!("gona poop more");
         if DEBUG || TRACE {
             for _ in 0..amount {
                 unsafe {
@@ -383,7 +381,6 @@ impl VirtualMachine {
 impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
-        println!("goting frejm");
         if DEBUG || TRACE {
             self.frames.get(self.frames.len() - 1).unwrap()
         } else {
