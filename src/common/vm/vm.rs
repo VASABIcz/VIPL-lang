@@ -929,13 +929,9 @@ impl VirtualMachine {
                             let s = f.localsMeta.len();
                             let e = ctx.symbols.locals.len();
 
-                            println!("s: {} e {}", s, e);
-
                             for i in s..e {
                                 buf.push(ctx.symbols.locals[i].clone())
                             }
-
-                            println!("b{:?}", buf);
 
                             f.localsMeta = buf.into_boxed_slice();
                         }
