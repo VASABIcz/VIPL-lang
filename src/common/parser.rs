@@ -212,9 +212,13 @@ pub trait ParsingUnit<OUT: Debug, IN: PartialEq + Clone + Debug, STATE: Debug>: 
         parser: &mut Parser<IN, OUT, STATE>
     ) -> Result<OUT, ParserError<IN>>;
 
-    fn getPriority(&self) -> usize;
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
 
-    fn setPriority(&mut self, priority: usize);
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
 }
 
 #[derive(Debug)]

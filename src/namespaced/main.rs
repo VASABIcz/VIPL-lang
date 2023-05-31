@@ -3,6 +3,8 @@
 use std::{env, fs};
 use std::process::exit;
 use std::time::Instant;
+use vipl::lexer::lexingUnits;
+use vipl::parsingUnits::parsingUnits;
 
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
@@ -13,10 +15,13 @@ use vipl::vm::vm::VirtualMachine;
 fn main() {
     let mut vm = bootStrapVM();
 
+    let mut lexingUnits = lexingUnits();
+    let mut parsingUnits = parsingUnits();
+
     let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
 
-    let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm) {
+    let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm, &mut lexingUnits, &mut parsingUnits) {
         Ok(v) => v,
         Err(e) => {
             e.printUWU(&sourceFile);

@@ -163,7 +163,8 @@ pub enum Node {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
     GlobalVarDef(String, Expression),
-    Import(Vec<String>),
+    NamespaceImport(Vec<String>, Option<String>),
+    Import(Vec<String>, Vec<(String, Option<String>)>),
 }
 
 #[derive(Debug, Clone)]

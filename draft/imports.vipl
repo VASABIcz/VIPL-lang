@@ -1,0 +1,6 @@
+import out
+from out import print as p
+
+
+p "UwU"
+out::print "UwU"

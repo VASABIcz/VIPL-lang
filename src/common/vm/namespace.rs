@@ -524,8 +524,9 @@ impl Namespace {
                         Node::StructDef(v) => {
                             n.registerStruct(v.into());
                         }
-                        Node::Import(_) => todo!(),
+                        Node::Import(_, _) => todo!(),
                         // TODO default value
+                        Node::NamespaceImport(_, _) => todo!(),
                         Node::GlobalVarDef(name, default) => {
                             n.registerGlobal(GlobalMeta {
                                 name,

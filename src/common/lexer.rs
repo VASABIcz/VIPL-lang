@@ -238,6 +238,7 @@ pub enum TokenType {
     Native,
     Namespace,
     Import,
+    From,
     Global,
     In,
     Null,
@@ -342,7 +343,8 @@ impl Stringable for TokenType {
             TokenType::NewLine => "\\n",
             TokenType::QuestionMark => "?",
             TokenType::Repeat => "Repeat",
-            TokenType::As => "As"
+            TokenType::As => "As",
+            TokenType::From => "From"
         }
     }
 }
@@ -645,6 +647,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
     l.register('n', AlphabeticKeywordLexingUnit::new("null", TokenType::Null));
     l.register('r', AlphabeticKeywordLexingUnit::new("repeat", TokenType::Repeat));
     l.register('a', AlphabeticKeywordLexingUnit::new("as", TokenType::As));
+    l.register('f', AlphabeticKeywordLexingUnit::new("from", TokenType::From));
 
     l.register('&', KeywordLexingUnit::new("&&", TokenType::And));
     l.register('|', KeywordLexingUnit::new("||", TokenType::Or));

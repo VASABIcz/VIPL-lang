@@ -3,7 +3,7 @@ use crate::ast::{ASTNode, Expression};
 use crate::bytecodeGen::Body;
 use crate::errors::{NoSuchParsingUnit, ParserError, SymbolType};
 use crate::lexer::{Token, TokenType};
-use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Gt, Identifier, IntLiteral, LongLiteral, Not, ORB, StringLiteral};
+use crate::lexer::TokenType::{CCB, CharLiteral, Colon, Comma, CRB, Gt, Identifier, IntLiteral, LongLiteral, Namespace, Not, ORB, StringLiteral};
 use crate::parser::{Parser, ParsingUnit, TokenProvider};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parsingUnits::parsingUnits;
@@ -77,6 +77,21 @@ pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit
 }
 
 impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
+    pub fn parseSymbol(&mut self) -> Result<Vec<String>, ParserError<TokenType>> {
+        let mut buf = vec![];
+
+        while self.tokens.isPeekType(Identifier) {
+            let i = self.tokens.getIdentifier()?;
+            buf.push(i);
+            if !self.tokens.isPeekType(Namespace) {
+                break;
+            }
+            self.tokens.getAssert(Namespace)?;
+        }
+
+        Ok(buf)
+    }
+
     pub fn isPrevExp(&self) -> bool {
 
         match self.previousBuf.last() {

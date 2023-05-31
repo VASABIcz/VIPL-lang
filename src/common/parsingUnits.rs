@@ -592,9 +592,48 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructParsingUnit {
 }
 
 #[derive(Debug)]
-struct ImportParsingUnit;
+struct SymbolImport;
 
-impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ImportParsingUnit {
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for SymbolImport {
+    fn getType(&self) -> ParsingUnitSearchType { Ahead }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.tokens.isPeekType(From)
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.tokens.getAssert(From)?;
+
+        let namespaceName = parser.parseSymbol()?;
+
+        parser.tokens.getAssert(Import)?;
+
+        let symbol = parser.tokens.getIdentifier()?;
+
+        let rename = if parser.tokens.isPeekType(As) {
+            parser.tokens.getAssert(As)?;
+            Some(parser.tokens.getIdentifier()?)
+        }
+        else {
+            None
+        };
+
+        Ok(ASTNode::Global(Node::Import(namespaceName, vec![(symbol, rename)])))
+    }
+
+    fn getPriority(&self) -> usize {
+        todo!()
+    }
+
+    fn setPriority(&mut self, priority: usize) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+struct NamespaceImport;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NamespaceImport {
     fn getType(&self) -> ParsingUnitSearchType {
         Ahead
     }
@@ -611,17 +650,18 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ImportParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.tokens.getAssert(Import)?;
-        let mut buf = vec![];
 
-        let f = parser.tokens.getIdentifier()?;
-        buf.push(f);
+        let s = parser.parseSymbol()?;
 
-        while parser.tokens.isPeekType(Namespace) {
-            parser.tokens.getAssert(Namespace)?;
-            buf.push(parser.tokens.getIdentifier()?);
+        let rename = if parser.tokens.isPeekType(As) {
+            parser.tokens.getAssert(As)?;
+            Some(parser.tokens.getIdentifier()?)
         }
+        else {
+            None
+        };
 
-        Ok(ASTNode::Global(Node::Import(buf)))
+        Ok(ASTNode::Global(Node::NamespaceImport(s, rename)))
     }
 
     fn getPriority(&self) -> usize {
@@ -1578,7 +1618,8 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(BreakParsingUnit),
         Box::new(NotParsingUnit),
         Box::new(ContinueParsingUnit),
-        Box::new(ImportParsingUnit),
+        Box::new(NamespaceImport),
+        Box::new(SymbolImport),
         Box::new(NullParsingUnit),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Mul,
