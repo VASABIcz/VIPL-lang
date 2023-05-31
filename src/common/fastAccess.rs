@@ -26,6 +26,15 @@ impl<VALUE: Debug> FastAcess<String, VALUE> {
 
         Some((s, v))
     }
+    #[inline]
+    pub fn getSlowStrMut(&mut self, key: &str) -> Option<(&mut VALUE, usize)> {
+        let v = *self.lookupTable.get(key)?;
+
+        let s = self.actual.get_mut(v)?;
+
+        Some((s, v))
+    }
+
     pub fn ofStr(items: Vec<(&str, VALUE)>) -> FastAcess<String, VALUE> {
         let mut this = Self::default();
 

@@ -4,7 +4,7 @@ use std::mem::transmute;
 
 use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, Node, Statement, VariableModd};
 use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
-use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFound, SymbolType};
+use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 // use crate::codegen::complexBytecodeGen;
 use crate::lexer::{LexingUnit, tokenizeSource, TokenType};
@@ -22,7 +22,7 @@ use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::vm::{OpCode, VirtualMachine};
+use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};
 use crate::wss::WhySoSlow;
 
 #[derive(Debug, PartialEq)]
@@ -54,6 +54,10 @@ impl FunctionMeta {
     #[inline(always)]
     pub fn returns(&self) -> bool {
         self.returns
+    }
+
+    pub fn getArgs(&self) -> Vec<DataType> {
+        self.localsMeta[0..self.argsCount].iter().map(|it| it.typ.clone()).collect()
     }
 }
 
@@ -97,7 +101,7 @@ impl StructMeta {
     pub fn findField(&self, name: &str) -> Result<(&VariableMetadata, usize), CodeGenError> {
         self.fields
             .getSlowStr(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::obj(name)))
+            .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))
     }
 
     #[inline]
@@ -269,6 +273,8 @@ pub struct Namespace {
     types: FastAcess<DataType, DataType>,
 
     enums: FastAcess<String, EnumMeta>,
+
+    importHints: Vec<ImportHints>
 }
 
 impl Allocation for Namespace {
@@ -284,6 +290,10 @@ impl Allocation for Namespace {
 }
 
 impl Namespace {
+    pub fn getImportHints(&self) -> &Vec<ImportHints> {
+        &self.importHints
+    }
+
     pub fn getString(&self, id: usize) -> Value {
         Value::from(*self.strings.getFast(id).unwrap() as usize)
     }
@@ -303,15 +313,40 @@ impl Namespace {
     }
 
     pub fn findFunction(&self, name: &str) -> Result<(&FunctionMeta, usize), CodeGenError> {
+        let lookName = name.strip_prefix(&format!("{}::", self.name)).unwrap_or(name);
+
         let id = self
             .functions
-            .getSlowStr(
-                name.strip_prefix(&format!("{}::", self.name))
-                    .unwrap_or(name),
-            )
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::fun(name)))?;
+            .getSlowStr(lookName)
+            .ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?;
 
         Ok((&id.0 .0, id.1))
+    }
+
+    pub fn findFunctionsByName(&self, name: &str) -> Vec<(FunctionMeta, usize)> {
+        self.functions.actual
+            .iter()
+            .filter(|it| it.0.name == name)
+            .enumerate()
+            .map(|(id, it)| (it.0.clone(), id))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn findFunctionMut(&mut self, name: &str) -> Result<(&mut FunctionMeta, usize), CodeGenError> {
+        println!("{} {:?}", name, self.functions.lookupTable.keys());
+
+        let id = self
+            .functions
+            .getSlowStrMut(name);
+
+        let d = match id {
+            None => {
+                Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?
+            }
+            Some(v) => v
+        };
+
+        Ok((&mut d.0.0, d.1))
     }
 
     pub fn lookupFunction(
@@ -328,7 +363,7 @@ impl Namespace {
                     .strip_prefix(&format!("{}::", self.name))
                     .unwrap_or(&genName),
             )
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::fun(&genName)))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(&genName)))?;
 
         Ok((&id.0 .0, id.1))
     }
@@ -337,7 +372,7 @@ impl Namespace {
         let gId = self
             .globals
             .getSlowStr(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::global(name)))?;
+            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::global(name)))?;
 
         Ok((&gId.0 .0, gId.1))
     }
@@ -362,6 +397,10 @@ impl Namespace {
         &self.functions.actual
     }
 
+    pub fn getStructs(&self) -> &Vec<StructMeta> {
+        &self.structs.actual
+    }
+
     pub fn getFunctionsMut(&mut self) -> &mut Vec<(FunctionMeta, Option<LoadedFunction>)> {
         &mut self.functions.actual
     }
@@ -375,12 +414,10 @@ impl Namespace {
     }
 
     pub fn findStruct(&self, name: &str) -> Result<(&StructMeta, usize), CodeGenError> {
-        panic!();
-
         let strc = self
             .structs
             .getSlowStr(name)
-            .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::obj(name)))?;
+            .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))?;
 
         Ok(strc)
     }
@@ -399,6 +436,10 @@ impl Namespace {
 
     pub fn getFunction(&self, id: usize) -> &(FunctionMeta, Option<LoadedFunction>) {
         self.functions.getFast(id).unwrap()
+    }
+
+    pub fn getFunctionMut(&mut self, id: usize) -> &mut (FunctionMeta, Option<LoadedFunction>) {
+        self.functions.getFastMut(id).unwrap()
     }
 
     pub fn getFunctionMeta(&self, id: usize) -> Option<&FunctionMeta> {
@@ -494,6 +535,38 @@ impl Namespace {
             strings: Default::default(),
             types: Default::default(),
             enums: Default::default(),
+            importHints: vec![],
+        }
+    }
+
+    pub fn extendFunctionality(&mut self, src: Vec<ASTNode>) {
+        for s in src {
+            match s {
+                ASTNode::Global(g) => {
+                    match g {
+                        Node::FunctionDef(d) => {
+                            self.registerFunctionDef(d.into());
+                        }
+                        Node::StructDef(v) => {
+                            self.registerStruct(v.into());
+                        }
+                        Node::Import(nam, syms) => {
+                            self.importHints.push(ImportHints::Symbols(nam, syms))
+                        },
+                        Node::NamespaceImport(nam, ren) => {
+                            self.importHints.push(ImportHints::Namespace(nam, ren))
+                        },
+                        Node::GlobalVarDef(name, default) => {
+                            self.registerGlobal(GlobalMeta {
+                                name,
+                                default,
+                                typ: Void,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -524,9 +597,13 @@ impl Namespace {
                         Node::StructDef(v) => {
                             n.registerStruct(v.into());
                         }
-                        Node::Import(_, _) => todo!(),
+                        Node::Import(na, s) => {
+                            n.importHints.push(ImportHints::Symbols(na, s))
+                        },
                         // TODO default value
-                        Node::NamespaceImport(_, _) => todo!(),
+                        Node::NamespaceImport(na, r) => {
+                            n.importHints.push(ImportHints::Namespace(na, r))
+                        },
                         Node::GlobalVarDef(name, default) => {
                             n.registerGlobal(GlobalMeta {
                                 name,

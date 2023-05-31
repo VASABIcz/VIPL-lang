@@ -337,12 +337,12 @@ pub enum SymbolType {
 }
 
 #[derive(Debug, Clone)]
-pub struct SymbolNotFound {
+pub struct SymbolNotFoundE {
     name: String,
     typ: SymbolType,
 }
 
-impl SymbolNotFound {
+impl SymbolNotFoundE {
     pub fn obj(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -351,6 +351,7 @@ impl SymbolNotFound {
     }
 
     pub fn fun(name: &str) -> Self {
+        panic!();
         Self {
             name: name.to_string(),
             typ: SymbolType::Function,
@@ -383,7 +384,7 @@ impl SymbolNotFound {
 pub enum CodeGenError {
     CannotAssignVoid,
     TypeError(TypeError),
-    SymbolNotFound(SymbolNotFound),
+    SymbolNotFound(SymbolNotFoundE),
     UntypedEmptyArray,
     ArrayWithoutGenericParameter,
     UnexpectedVoid,

@@ -4,12 +4,15 @@ use std::error::Error;
 use std::io::{BufRead, Write};
 use std::process::exit;
 
+use vipl::ast::{ASTNode, Statement};
+use vipl::bytecodeGen::Body;
 use vipl::lexer::lexingUnits;
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::DataType;
-use vipl::vm::namespace::{loadSourceFile, Namespace};
+use vipl::vm::namespace::{loadSourceFile, Namespace, NamespaceState};
+use vipl::vm::namespace::FunctionTypeMeta::Runtime;
 use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::value::Value;
 use vipl::vm::vm::OpCode::{LCall, Pop, SCall};
@@ -41,6 +44,9 @@ fn main() {
     let mut localValues = vec![];
     let mut lexingUnits = lexingUnits();
     let mut parsingUnits = parsingUnits();
+
+    let n = Namespace::constructNamespace(vec![], "UwU", &mut vm, mainLocals.clone());
+    let generatedNamespace = vm.registerNamespace(n);
 
     unsafe {
         vm.setHandleExpression(|ctx, t| {
@@ -94,10 +100,6 @@ fn main() {
     loop {
         let userInput = readInput();
 
-        let mut wss = WhySoSlow::new(6);
-
-        // println!("locals {:?}", mainLocals);
-
         let v = match loadSourceFile(userInput, &mut vm, &mut lexingUnits, &mut parsingUnits) {
             Ok(v) => v,
             Err(e) => {
@@ -105,29 +107,35 @@ fn main() {
                 continue;
             }
         };
+        let nn = vm.getNamespaceMut(generatedNamespace);
 
-        wss.record("parsing to ast");
+        nn.state = NamespaceState::PartiallyLoaded;
 
-        println!("AST: {:?}", v);
+        let mut buf = vec![];
 
-        let n = Namespace::constructNamespace(v, "UwU", &mut vm, mainLocals.clone());
-        let generatedNamespace = vm.registerNamespace(n);
-
-        wss.record("constructing namespace");
-
-        match vm.link() {
-            Ok(_) => {}
-            Err(e) => {
-                println!("link error {:?}", e);
-                continue;
+        for i in &v {
+            match i {
+                ASTNode::Statement(s) => buf.push(s.clone()),
+                ASTNode::Expr(e) => buf.push(Statement::StatementExpression(e.clone())),
+                _ => {}
             }
         }
 
-        wss.record("linking");
+        nn.extendFunctionality(v);
 
-        let nn = vm.getNamespace(generatedNamespace);
-        let fId = nn.getFunctions().len() - 1;
-        let (fMeta, f) = nn.getFunctions().last().unwrap();
+        let (fMeta, f) = nn.getFunctionMut(0);
+
+        fMeta.functionType = Runtime(Body::new(buf));
+
+        unsafe {
+            match (&mut *d).link() {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("link error {:?}", e);
+                    continue;
+                }
+            }
+        }
 
         if fMeta.localsMeta.len() > localValues.len() {
             for _ in 0..(fMeta.localsMeta.len() - localValues.len()) {
@@ -137,23 +145,21 @@ fn main() {
 
         mainLocals = fMeta.localsMeta.clone().into_vec();
 
-        wss.record("locals initialization 'n stuff");
-
         unsafe {
             f.as_ref().unwrap().call(
                 &mut *d,
                 StackFrame {
                     localVariables: localValues.as_mut_ptr(),
                     programCounter: 0,
-                    namespaceId: nn.id,
-                    functionId: fId,
+                    namespaceId: generatedNamespace,
+                    functionId: 0,
                 },
                 false,
             );
         }
 
-        wss.record("execution");
-
-        wss.dump();
+        if vm.stackSize() != 0 {
+            panic!("something horrible went wrong :( stack size is {} {:?}", vm.stackSize(), vm.pop());
+        }
     }
 }

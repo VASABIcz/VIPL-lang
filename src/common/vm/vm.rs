@@ -13,10 +13,11 @@ use crate::ast::FunctionDef;
 use crate::bytecodeGen::{
     emitOpcodes, genFunctionDef, ExpressionCtx, SimpleCtx, StatementCtx, SymbolicOpcode,
 };
-use crate::errors::{CodeGenError, Errorable, SymbolNotFound, SymbolType};
+use crate::errors::{CodeGenError, Errorable, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 use crate::ffi::NativeWrapper;
-use crate::utils::{readNeighbours, transform, FastVec};
+use crate::symbolManager::SymbolManager;
+use crate::utils::{readNeighbours, transform, FastVec, genFunName};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
@@ -37,8 +38,14 @@ use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::FuncType::{Builtin, Extern, Runtime};
 use crate::vm::vm::OpCode::*;
 
+#[derive(Debug, Clone)]
+pub enum ImportHints {
+    Namespace(Vec<String>, Option<String>),
+    Symbols(Vec<String>, Vec<(String, Option<String>)>)
+}
+
 // FIXME DEBUG is faster than default
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -240,7 +247,7 @@ impl VirtualMachine {
         let (namespace, namespaceId) =
             self.namespaces
                 .getSlowStr(name)
-                .ok_or(CodeGenError::SymbolNotFound(SymbolNotFound::namespace(
+                .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::namespace(
                     name,
                 )))?;
 
@@ -263,20 +270,57 @@ impl VirtualMachine {
     }
 
     #[inline]
-    pub fn buildFunctionReturn(&self) -> HashMap<String, Option<DataType>> {
-        let mut x = HashMap::new();
+    pub fn buildSymbolTable(&self, hints: &[ImportHints]) -> Result<SymbolManager, CodeGenError> {
+        let mut table = SymbolManager::new();
 
-        for n in &self.namespaces.actual {
-            for (f, _) in n.getFunctions() {
-                let mut buf = String::new();
-                buf += &n.name;
-                buf += "::";
-                buf += &f.genName();
-                x.insert(buf.into(), Some(f.returnType.clone()));
+        for hint in hints {
+            match hint {
+                ImportHints::Namespace(namespace, rename) => {
+                    let n = self.findNamespaceParts(&namespace)?;
+
+                    let name = match rename {
+                        None => n.0.name.clone(),
+                        Some(v) => v.clone()
+                    };
+
+                    for (fId, f) in n.0.getFunctions().iter().enumerate() {
+                        table.registerFunction(format!("{}::{}", name, f.0.genName()), n.1, fId, f.0.getArgs(), f.0.returnType.clone());
+                    }
+
+                    for (sId, s) in n.0.getStructs().iter().enumerate() {
+                        table.registerStruct(format!("{}::{}", name, s.name), n.1, sId, s.clone());
+                    }
+
+                    for (gId, s) in n.0.getGlobals().iter().enumerate() {
+                        table.registerGlobal(format!("{}::{}", name, s.0.name), n.1, gId, s.0.typ.clone());
+                    }
+                }
+                ImportHints::Symbols(namespace, syms) => {
+                    let (n, nId) = self.findNamespaceParts(&namespace)?;
+
+                    for (symName, symRename) in syms {
+                        let name = match symRename {
+                            None => symName,
+                            Some(v) => v
+                        };
+
+                        if let Ok(v) = n.findStruct(symName) {
+                            table.registerStruct(name.clone(), nId, v.1, v.0.clone());
+                        }
+                        if let Ok(v) = n.findGlobal(symName) {
+                            table.registerGlobal(name.clone(), nId, v.1, v.0.typ.clone())
+                        }
+
+                        for f in n.findFunctionsByName(symName) {
+                            let argz = f.0.getArgs();
+                            table.registerFunction(genFunName(&name, &argz), nId, f.1, argz, f.0.returnType)
+                        }
+                    }
+                }
             }
         }
 
-        x
+        Ok(table)
     }
 
     #[inline]
@@ -800,10 +844,10 @@ impl VirtualMachine {
                 }
                 GetLocalZero => self.push(*self.getLocal(0)),
                 o => {
-                    if !DEBUG && !TRACE {
-                        unsafe { unreachable_unchecked() }
-                    } else {
+                    if DEBUG || TRACE {
                         panic!("unimplemented opcode {:?}", o)
+                    } else {
+                        unsafe { unreachable_unchecked() }
                     }
                 }
             }
@@ -813,8 +857,6 @@ impl VirtualMachine {
 
 impl VirtualMachine {
     pub fn link(&mut self) -> Result<(), CodeGenError> {
-        let functionReturns = self.buildFunctionReturn();
-
         let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
 
         unsafe {
@@ -822,6 +864,8 @@ impl VirtualMachine {
                 if n.state == Loaded || n.state == FailedToLoad {
                     continue;
                 }
+
+                let mut symbols = warCrime.get_mut().buildSymbolTable(n.getImportHints())?;
 
                 let anotherWarCrime: &mut UnsafeCell<Namespace> = transmute(n);
 
@@ -833,12 +877,11 @@ impl VirtualMachine {
                     let mut ctx = ExpressionCtx {
                         ops: &mut vec![],
                         exp: &g.0.default,
-                        functionReturns: &functionReturns,
-                        vTable: &Default::default(),
                         typeHint: None,
                         currentNamespace: anotherWarCrime,
                         vm: warCrime,
                         labelCounter: &mut 0,
+                        symbols: &mut symbols,
                     };
                     g.0.typ = ctx.toDataType()?;
                 }
@@ -851,30 +894,56 @@ impl VirtualMachine {
                     .enumerate()
                 {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
+                        symbols.enterScope();
+
+                        println!("locals {:?}", f.localsMeta);
+
+                        for local in f.localsMeta.iter() {
+                            symbols.registerLocal(&local.name, local.typ.clone())
+                        }
+
                         let mut ops = vec![];
                         let mut labelCounter = 0;
 
-                        let ctx = SimpleCtx {
+                        let mut ctx = SimpleCtx {
                             ops: &mut ops,
-                            functionReturns: &functionReturns,
                             currentNamespace: anotherWarCrime,
                             handle: (&*warCrime.get()).handleStatementExpression,
                             vm: warCrime,
                             labelCounter: &mut labelCounter,
+                            symbols: &mut symbols,
                         };
 
-                        let res = match genFunctionDef(f, ctx) {
-                            Ok(v) => v,
+
+                        match genFunctionDef(f, &mut ctx) {
+                            Ok(v) => {},
                             Err(e) => {
                                 anotherWarCrime.get_mut().state = FailedToLoad;
 
                                 return Err(e)
                             }
                         };
-                        f.localsMeta = res.into_boxed_slice();
+
+
+                        if ctx.symbols.locals.len() > f.localsMeta.len() {
+                            let mut buf = f.localsMeta.clone().into_vec();
+
+                            let s = f.localsMeta.len();
+                            let e = ctx.symbols.locals.len();
+
+                            println!("s: {} e {}", s, e);
+
+                            for i in s..e {
+                                buf.push(ctx.symbols.locals[i].clone())
+                            }
+
+                            println!("b{:?}", buf);
+
+                            f.localsMeta = buf.into_boxed_slice();
+                        }
 
                         if DEBUG {
-                            println!("[generated] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
+                            println!("[generated] N: {}, F: {} {} {:?} {:?}", nId, index, f.name, ops, f);
                         }
 
                         ops = transform(ops, |it| {
@@ -892,6 +961,8 @@ impl VirtualMachine {
                         // *a = Some(Native(nf))
 
                         *a = Some(LoadedFunction::Virtual(opt));
+
+                        symbols.exitScope();
                     }
                 }
 

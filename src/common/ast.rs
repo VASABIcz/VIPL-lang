@@ -105,7 +105,6 @@ pub enum Statement {
     Continue,
     Break,
     Loop(Body),
-    NamespaceFunction(Vec<String>, FunctionCall),
     StatementExpression(Expression),
     Assignable(Expression, Expression, Option<ArithmeticOp>),
     ForLoop(String, Expression, Body),
@@ -236,13 +235,10 @@ impl ASTNode {
     pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
         match self {
             ASTNode::Expr(e) => Ok(e),
-            _ => {
-                panic!();
-                Err(ParserError::Unknown(Box::new(InvalidOperation {
-                    operation: self.clone(),
-                    expected: "Expression".to_string(),
-                })))
-            },
+            _ => Err(ParserError::Unknown(Box::new(InvalidOperation {
+                operation: self.clone(),
+                expected: "Expression".to_string(),
+            }))),
         }
     }
 

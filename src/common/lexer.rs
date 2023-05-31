@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use std::collections::HashMap;
 use crate::errors::{LexerError, UnknownToken};
 use crate::lexer;
 use crate::lexer::TokenType::Identifier;
@@ -583,109 +582,71 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for Keywor
     }
 }
 
-#[derive(Debug, Default)]
-pub struct LookupLexingUnit<T: Debug + PartialEq> {
-    pub lookup: HashMap<char, Vec<Box<dyn LexingUnit<T>>>>
-}
-
-impl<T: Clone + Debug + PartialEq> LookupLexingUnit<T> {
-    pub fn register(&mut self, c: char, unit: Box<dyn LexingUnit<T>>) {
-        match self.lookup.get_mut(&c) {
-            None => {
-                self.lookup.insert(c, vec![unit]);
-            }
-            Some(v) => {
-                v.push(unit)
-            }
-        }
-    }
-}
-
-impl<T: PartialEq + Debug + Clone> LexingUnit<T> for LookupLexingUnit<T> {
-    fn canParse(&self, lexer: &SourceProvider) -> bool {
-        lexer.isPeekChar(|it| {
-            self.lookup.contains_key(&it)
-        })
-    }
-
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
-        let c = lexer.peekChar().unwrap();
-
-        let a = self.lookup.get_mut(&c).unwrap();
-
-        for unit in a.iter_mut() {
-            if !unit.canParse(lexer) {
-                continue
-            }
-
-            let b = unit.parse(lexer);
-
-            return b;
-        }
-        Err(LexerError::UnknownToken(UnknownToken { source: lexer.getRemaing(), location: lexer.getLocation() }))
-    }
-}
-
 pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
-    let mut l = LookupLexingUnit{ lookup: Default::default() };
-
-    l.register('f', AlphabeticKeywordLexingUnit::new("fn", TokenType::Fn));
-    l.register('w', AlphabeticKeywordLexingUnit::new("while", TokenType::While));
-    l.register('i', AlphabeticKeywordLexingUnit::new("if", TokenType::If));
-    l.register('e', AlphabeticKeywordLexingUnit::new("else", TokenType::Else));
-    l.register('f', AlphabeticKeywordLexingUnit::new("for", TokenType::For));
-    l.register('l', AlphabeticKeywordLexingUnit::new("loop", TokenType::Loop));
-    l.register('r', AlphabeticKeywordLexingUnit::new("return", TokenType::Return));
-    l.register('b', AlphabeticKeywordLexingUnit::new("break", TokenType::Break));
-    l.register('c', AlphabeticKeywordLexingUnit::new("continue", TokenType::Continue));
-    l.register('f', AlphabeticKeywordLexingUnit::new("false", TokenType::False));
-    l.register('t', AlphabeticKeywordLexingUnit::new("true", TokenType::True));
-    l.register('s', AlphabeticKeywordLexingUnit::new("struct", TokenType::Struct));
-    l.register('i', AlphabeticKeywordLexingUnit::new("import", TokenType::Import));
-    l.register('g', AlphabeticKeywordLexingUnit::new("global", TokenType::Global));
-    l.register('i', AlphabeticKeywordLexingUnit::new("in", TokenType::In));
-    l.register('n', AlphabeticKeywordLexingUnit::new("null", TokenType::Null));
-    l.register('r', AlphabeticKeywordLexingUnit::new("repeat", TokenType::Repeat));
-    l.register('a', AlphabeticKeywordLexingUnit::new("as", TokenType::As));
-    l.register('f', AlphabeticKeywordLexingUnit::new("from", TokenType::From));
-
-    l.register('&', KeywordLexingUnit::new("&&", TokenType::And));
-    l.register('|', KeywordLexingUnit::new("||", TokenType::Or));
-    l.register('+', KeywordLexingUnit::new("+=", TokenType::AddAs));
-    l.register('-', KeywordLexingUnit::new("-=", TokenType::SubAs));
-    l.register('*', KeywordLexingUnit::new("*=", TokenType::MulAs));
-    l.register('/', KeywordLexingUnit::new("/=", TokenType::DivAs));
-    l.register('=', KeywordLexingUnit::new("==", TokenType::Eq));
-    l.register('>', KeywordLexingUnit::new(">", TokenType::Gt));
-    l.register('<', KeywordLexingUnit::new("<", TokenType::Less));
-    l.register('!', KeywordLexingUnit::new("!", TokenType::Not));
-    l.register(':', KeywordLexingUnit::new("::", TokenType::Namespace));
-    l.register('.', KeywordLexingUnit::new(".", TokenType::Dot));
-    l.register(';', KeywordLexingUnit::new(";", TokenType::Semicolon));
-    l.register('=', KeywordLexingUnit::new("=", TokenType::Equals));
-    l.register(':', KeywordLexingUnit::new(":", TokenType::Colon));
-    l.register(',', KeywordLexingUnit::new(",", TokenType::Comma));
-    l.register('?', KeywordLexingUnit::new("?", TokenType::QuestionMark));
-    l.register('+', KeywordLexingUnit::new("+", TokenType::Plus));
-    l.register('-', KeywordLexingUnit::new("-", TokenType::Minus));
-    l.register('*', KeywordLexingUnit::new("*", TokenType::Mul));
-    l.register('/', KeywordLexingUnit::new("/", TokenType::Div));
-    l.register('(', KeywordLexingUnit::new("(", TokenType::ORB));
-    l.register(')', KeywordLexingUnit::new(")", TokenType::CRB));
-    l.register('[', KeywordLexingUnit::new("[", TokenType::OSB));
-    l.register(']', KeywordLexingUnit::new("]", TokenType::CSB));
-    l.register('{', KeywordLexingUnit::new("{", TokenType::OCB));
-    l.register('}', KeywordLexingUnit::new("}", TokenType::CCB));
-
-
     vec![
         WhitespaceLexingUnit::new(),
         NumericLexingUnit::new(),
-        Box::new(l),
-        RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
-        RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
+        AlphabeticKeywordLexingUnit::new("fn", TokenType::Fn),
+        AlphabeticKeywordLexingUnit::new("var", TokenType::Var),
+        AlphabeticKeywordLexingUnit::new("while", TokenType::While),
+        AlphabeticKeywordLexingUnit::new("if", TokenType::If),
+        AlphabeticKeywordLexingUnit::new("else", TokenType::Else),
+        AlphabeticKeywordLexingUnit::new("for", TokenType::For),
+        AlphabeticKeywordLexingUnit::new("loop", TokenType::Loop),
+        AlphabeticKeywordLexingUnit::new("return", TokenType::Return),
+        AlphabeticKeywordLexingUnit::new("break", TokenType::Break),
+        AlphabeticKeywordLexingUnit::new("continue", TokenType::Continue),
+        AlphabeticKeywordLexingUnit::new("false", TokenType::False),
+        AlphabeticKeywordLexingUnit::new("true", TokenType::True),
+        AlphabeticKeywordLexingUnit::new("new", TokenType::New),
+        AlphabeticKeywordLexingUnit::new("struct", TokenType::Struct),
+        AlphabeticKeywordLexingUnit::new("native", TokenType::Native),
+        AlphabeticKeywordLexingUnit::new("import", TokenType::Import),
+        AlphabeticKeywordLexingUnit::new("global", TokenType::Global),
+        AlphabeticKeywordLexingUnit::new("in", TokenType::In),
+        AlphabeticKeywordLexingUnit::new("null", TokenType::Null),
+        AlphabeticKeywordLexingUnit::new("repeat", TokenType::Repeat),
+        AlphabeticKeywordLexingUnit::new("as", TokenType::As),
+        AlphabeticKeywordLexingUnit::new("from", TokenType::From),
+
+        KeywordLexingUnit::new("&&", TokenType::And),
+        KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
         RangeLexingUnit::new("/*", "*/", None),
+        //
+        KeywordLexingUnit::new("+=", TokenType::AddAs),
+        KeywordLexingUnit::new("-=", TokenType::SubAs),
+        KeywordLexingUnit::new("*=", TokenType::MulAs),
+        KeywordLexingUnit::new("/=", TokenType::DivAs),
+        KeywordLexingUnit::new("==", TokenType::Eq),
+        KeywordLexingUnit::new(">", TokenType::Less),
+        KeywordLexingUnit::new("<", TokenType::Gt),
+        KeywordLexingUnit::new("!", TokenType::Not),
+        KeywordLexingUnit::new("::", TokenType::Namespace),
+        KeywordLexingUnit::new(".", TokenType::Dot),
+        KeywordLexingUnit::new("->", TokenType::LambdaBegin),
+        KeywordLexingUnit::new("++", TokenType::Inc),
+        KeywordLexingUnit::new("--", TokenType::Dec),
+        //
+        KeywordLexingUnit::new(";", TokenType::Semicolon),
+        KeywordLexingUnit::new("=", TokenType::Equals),
+        KeywordLexingUnit::new(":", TokenType::Colon),
+        KeywordLexingUnit::new(",", TokenType::Comma),
+        KeywordLexingUnit::new("?", TokenType::QuestionMark),
+        // ops
+        KeywordLexingUnit::new("+", TokenType::Plus),
+        KeywordLexingUnit::new("-", TokenType::Minus),
+        KeywordLexingUnit::new("*", TokenType::Mul),
+        KeywordLexingUnit::new("/", TokenType::Div),
+        // brackets
+        KeywordLexingUnit::new("(", TokenType::ORB),
+        KeywordLexingUnit::new(")", TokenType::CRB),
+        KeywordLexingUnit::new("[", TokenType::OSB),
+        KeywordLexingUnit::new("]", TokenType::CSB),
+        KeywordLexingUnit::new("{", TokenType::OCB),
+        KeywordLexingUnit::new("}", TokenType::CCB),
+        RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
+        RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
         IdentifierLexingUnit::new(TokenType::Identifier),
     ]
 }

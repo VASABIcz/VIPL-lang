@@ -9,5 +9,4 @@ pub mod vm;
 pub mod nativeObjects;
 pub mod nativeStack;
 pub mod optimizations;
-pub mod symbolManager;
 pub mod variableMetadata;
