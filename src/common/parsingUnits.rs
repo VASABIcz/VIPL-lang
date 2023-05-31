@@ -1215,7 +1215,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
     ) -> bool {
         parser.isPrevExp()
             && parser.tokens.isPeekType(Identifier)
-            && parser.tokens.isPeekTypeMany(&VALID_EXPRESSION_TOKENS)
             && parser.tokens.isPeekOffsetOneOf(&VALID_EXPRESSION_TOKENS, 1)
     }
 

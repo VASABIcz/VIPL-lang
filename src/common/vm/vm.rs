@@ -867,6 +867,11 @@ impl VirtualMachine {
 
                 let mut symbols = warCrime.get_mut().buildSymbolTable(n.getImportHints())?;
 
+                for (fId, (fMeta, _)) in n.getFunctions().iter().enumerate() {
+                    let argz = fMeta.getArgs();
+                    symbols.registerFunction(fMeta.genName(), n.id, fId, argz, fMeta.returnType.clone())
+                }
+
                 let anotherWarCrime: &mut UnsafeCell<Namespace> = transmute(n);
 
                 for (_, g) in (&mut *anotherWarCrime.get())

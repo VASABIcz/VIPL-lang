@@ -142,6 +142,7 @@ impl FunctionMeta {
             &self
                 .localsMeta
                 .iter()
+                .take(self.argsCount)
                 .map(|it| it.typ.clone())
                 .collect::<Vec<_>>(),
         )

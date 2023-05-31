@@ -107,6 +107,9 @@ fn main() {
                 continue;
             }
         };
+
+        println!("AST: {:?}", v);
+
         let nn = vm.getNamespaceMut(generatedNamespace);
 
         nn.state = NamespaceState::PartiallyLoaded;
