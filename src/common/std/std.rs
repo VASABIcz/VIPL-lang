@@ -1,4 +1,5 @@
 use crate::std::json::registerJson;
+use crate::std::os::registerOs;
 use crate::std::out::registerOut;
 use crate::std::regex::registerRegex;
 use crate::std::vm::registerVm;
@@ -175,6 +176,7 @@ pub fn bootStrapVM() -> VirtualMachine {
     let mut vm = VirtualMachine::new();
 
     registerOut(&mut vm);
+    registerOs(&mut vm);
     registerVm(&mut vm);
     registerRegex(&mut vm);
     registerJson(&mut vm);

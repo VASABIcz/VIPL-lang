@@ -45,7 +45,7 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -527,7 +527,7 @@ impl VirtualMachine {
         }
 
         if TRACE {
-            println!("[call] args count {}", fMeta.argsCount);
+            println!("[call] {} {:?} args count {}", fMeta.name, fMeta.localsMeta, fMeta.argsCount);
         }
 
         let res = if vm.stack.len() > 0 {
@@ -895,8 +895,6 @@ impl VirtualMachine {
                 {
                     if let FunctionTypeMeta::Runtime(_) = f.functionType {
                         symbols.enterScope();
-
-                        println!("locals {:?}", f.localsMeta);
 
                         for local in f.localsMeta.iter() {
                             symbols.registerLocal(&local.name, local.typ.clone())

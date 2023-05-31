@@ -242,7 +242,7 @@ impl Value {
     pub fn div(&mut self, value: &Value, typ: &DataType) {
         match typ {
             Int => {
-                *self.getRefNum() /= value.getNumRef();
+                *self.getRefFlo() = *self.getRefNum() as f64 / value.getNumRef() as f64;
             }
             Float => {
                 *self.getRefFlo() /= value.getFlo();
@@ -424,7 +424,9 @@ impl Value {
 
     #[inline(always)]
     pub fn getRefNum(&mut self) -> &mut isize {
-        unsafe { &mut self.Num }
+        unsafe {
+            &mut self.Num
+        }
     }
 
     #[inline(always)]

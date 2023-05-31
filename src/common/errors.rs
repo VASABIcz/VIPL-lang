@@ -351,7 +351,6 @@ impl SymbolNotFoundE {
     }
 
     pub fn fun(name: &str) -> Self {
-        panic!();
         Self {
             name: name.to_string(),
             typ: SymbolType::Function,
