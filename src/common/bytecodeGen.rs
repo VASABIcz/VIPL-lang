@@ -88,23 +88,16 @@ impl Body {
         Self { statements: b }
     }
 
-    pub fn generateS(&self, mut ctx: StatementCtx) -> Result<(), CodeGenError> {
-        for statement in &self.statements {
-            let y = ctx.transfer(statement);
-            genStatement(y)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn generateC(
+    pub fn generate(
         &self,
-        mut a: SimpleCtx,
+        mut ctx: SimpleCtx,
     ) -> Result<(), CodeGenError> {
+        ctx.symbols.enterScope();
         for statement in &self.statements {
-            let y = a.inflate(statement, None);
+            let y = ctx.inflate(statement, None);
             genStatement(y)?;
         }
+        ctx.symbols.exitScope();
 
         Ok(())
     }
@@ -294,15 +287,7 @@ impl ExpressionCtx<'_> {
                 Ok(t)
             }
             Expression::IntLiteral(_) => Ok(DataType::Int),
-            Expression::LongLiteral(_) => {
-                // FIXME
-                Ok(DataType::Int)
-            }
             Expression::FloatLiteral(_) => Ok(DataType::Float),
-            Expression::DoubleLiteral(_) => {
-                // FIXME
-                Ok(DataType::Float)
-            }
             Expression::StringLiteral(_) => Ok(DataType::str()),
             Expression::Variable(name) => match self.getVariable(name) {
                 Err(_) => {
@@ -639,10 +624,12 @@ impl StatementCtx<'_> {
     }
 
     pub fn beginLoop(&mut self) {
+        self.symbols.enterScope();
         self.ops.push(SymbolicOpcode::LoopBegin)
     }
 
     pub fn endLoop(&mut self) {
+        self.symbols.exitScope();
         self.ops.push(SymbolicOpcode::LoopEnd)
     }
 
@@ -786,7 +773,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             ctx.opJmp(loopEnd, False);
 
-            w.body.generateC(ctx.deflate())?;
+            w.body.generate(ctx.deflate())?;
 
             ctx.opContinue();
 
@@ -817,7 +804,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 ctx.opJmp(endLabel, False)
             }
 
-            flow.body.generateC(ctx.deflate())?;
+            flow.body.generate(ctx.deflate())?;
 
             ctx.opJmp(endLabel, JmpType::Jmp);
 
@@ -835,13 +822,13 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                     ctx.opJmp(endLabel, False);
                 }
 
-                els.1.generateC(ctx.deflate())?;
+                els.1.generate(ctx.deflate())?;
                 ctx.opJmp(endLabel, JmpType::Jmp);
             }
 
             if let Some(els) = &flow.elseBody {
                 ctx.makeLabel(*ifLabels.last().unwrap());
-                els.generateC(ctx.deflate())?;
+                els.generate(ctx.deflate())?;
             }
             ctx.makeLabel(endLabel);
         }
@@ -854,7 +841,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         Statement::Loop(body) => {
             ctx.beginLoop();
 
-            body.generateC(ctx.deflate())?;
+            body.generate(ctx.deflate())?;
 
             ctx.opContinue();
             ctx.endLoop();
@@ -987,7 +974,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.push(ArrayLoad);
             ctx.push(SetLocal { index: varId });
 
-            body.generateC(ctx.deflate())?;
+            body.generate(ctx.deflate())?;
 
             ctx.opJmp(endLabel, True);
 
@@ -1011,7 +998,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.push(Greater(Int));
             ctx.opJmp(endLoop, False);
 
-            body.generateC(ctx.deflate())?;
+            body.generate(ctx.deflate())?;
 
             ctx.push(OpCode::Inc {
                 typ: Int,
@@ -1049,9 +1036,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 r.push(t);
             }
             Expression::IntLiteral(i) => r.push(PushInt(i.parse::<isize>().map_err(|_| LiteralParseError)?)),
-            Expression::LongLiteral(i) => r.push(PushInt(i.parse::<isize>().map_err(|_| LiteralParseError)?)),
             Expression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),
-            Expression::DoubleLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),
             Expression::StringLiteral(i) => {
                 r.push(StrNew(
                     (&mut *r.currentNamespace.get()).allocateOrGetString(i),

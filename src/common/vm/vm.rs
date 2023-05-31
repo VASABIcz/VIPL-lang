@@ -276,29 +276,44 @@ impl VirtualMachine {
         for hint in hints {
             match hint {
                 ImportHints::Namespace(namespace, rename) => {
-                    let n = self.findNamespaceParts(&namespace)?;
+                    let (n, nId) = self.findNamespaceParts(&namespace)?;
 
                     let name = match rename {
-                        None => n.0.name.clone(),
+                        None => n.name.clone(),
                         Some(v) => v.clone()
                     };
 
-                    for (fId, f) in n.0.getFunctions().iter().enumerate() {
-                        table.registerFunction(format!("{}::{}", name, f.0.genName()), n.1, fId, f.0.getArgs(), f.0.returnType.clone());
+                    for (fId, f) in n.getFunctions().iter().enumerate() {
+                        table.registerFunction(format!("{}::{}", name, f.0.genName()), nId, fId, f.0.getArgs(), f.0.returnType.clone());
                     }
 
-                    for (sId, s) in n.0.getStructs().iter().enumerate() {
-                        table.registerStruct(format!("{}::{}", name, s.name), n.1, sId, s.clone());
+                    for (sId, s) in n.getStructs().iter().enumerate() {
+                        table.registerStruct(format!("{}::{}", name, s.name), nId, sId, s.clone());
                     }
 
-                    for (gId, s) in n.0.getGlobals().iter().enumerate() {
-                        table.registerGlobal(format!("{}::{}", name, s.0.name), n.1, gId, s.0.typ.clone());
+                    for (gId, s) in n.getGlobals().iter().enumerate() {
+                        table.registerGlobal(format!("{}::{}", name, s.0.name), nId, gId, s.0.typ.clone());
                     }
                 }
                 ImportHints::Symbols(namespace, syms) => {
                     let (n, nId) = self.findNamespaceParts(&namespace)?;
 
                     for (symName, symRename) in syms {
+                        if symName == "*" {
+                            for (fId, f) in n.getFunctions().iter().enumerate() {
+                                table.registerFunction(f.0.genName(), nId, fId, f.0.getArgs(), f.0.returnType.clone());
+                            }
+
+                            for (sId, s) in n.getStructs().iter().enumerate() {
+                                table.registerStruct(s.name.clone(), nId, sId, s.clone());
+                            }
+
+                            for (gId, s) in n.getGlobals().iter().enumerate() {
+                                table.registerGlobal(s.0.name.clone(), nId, gId, s.0.typ.clone());
+                            }
+                            continue
+                        }
+
                         let name = match symRename {
                             None => symName,
                             Some(v) => v

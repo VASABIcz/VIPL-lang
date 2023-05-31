@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::From;
 
 use crate::ast;
 use crate::ast::Expression::NamespaceAccess;
@@ -607,6 +608,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for SymbolImport {
         let namespaceName = parser.parseSymbol()?;
 
         parser.tokens.getAssert(Import)?;
+
+        if parser.tokens.isPeekType(Mul) {
+            parser.tokens.getAssert(Mul)?;
+
+            return Ok(ASTNode::Global(Node::Import(namespaceName, vec![(String::from('*'), None)])))
+        }
 
         let symbol = parser.tokens.getIdentifier()?;
 
@@ -1542,7 +1549,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
             }
             TokenType::LongLiteral => {
                 buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::LongLiteral(buf))
+                ASTNode::Expr(Expression::IntLiteral(buf))
             }
             TokenType::FloatLiteral => {
                 buf.push_str(&peek.str);
@@ -1550,7 +1557,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
             }
             TokenType::DoubleLiteral => {
                 buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::DoubleLiteral(buf))
+                ASTNode::Expr(Expression::FloatLiteral(buf))
             }
             _ => {
                 return Err(ParserError::InvalidToken(InvalidToken {
