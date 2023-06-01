@@ -1,5 +1,7 @@
 #!/bin/python3
 
+import time
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -39,10 +41,13 @@ for folder in TEST_FOLDERS:
             continue
 
         for name, executable in EXECUTABLES.items():
+            start = time.time()
             res = os.system(f"RUST_BACKTRACE=1 ./{executable} {folder}/{file}")
+            end = time.time()
+            duration = (end - start)*1000
 
             if res != 0:
-                print(f"{bcolors.FAIL}[ERR] {name} ./{executable} {folder}/{file} exited with {res} {bcolors.ENDC}")
+                print(f"{bcolors.FAIL}[ERR] {name} ./{executable} {folder}/{file} exited with {res}, took {duration:.2f}ms {bcolors.ENDC}")
                 exit(-1)
             else:
-                print(f"{bcolors.OKGREEN}[OK] {name} ./{executable} {folder}/{file} {res} {bcolors.ENDC}")
+                print(f"{bcolors.OKGREEN}[OK] {name} ./{executable} {folder}/{file}, took {duration:.2f}ms {bcolors.ENDC}")
