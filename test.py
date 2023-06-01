@@ -15,8 +15,8 @@ if bRes != 0:
     exit(-1)
 
 EXECUTABLES = {
-    "release": "target/release/namespaced",
-    "debug": "target/debug/namespaced"
+    "release": "target/release/compiler",
+    "debug": "target/debug/compiler"
 }
 TEST_FOLDERS = ["examples"]
 
