@@ -1,5 +1,17 @@
 #!/bin/python3
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
 import os
 
 bRes = os.system("cargo build --package vipl --release --bin compiler")
@@ -30,7 +42,7 @@ for folder in TEST_FOLDERS:
             res = os.system(f"RUST_BACKTRACE=1 ./{executable} {folder}/{file}")
 
             if res != 0:
-                print(f"[ERR] {name} ./{executable} {folder}/{file} exited with {res}")
+                print(f"{bcolors.FAIL}[ERR] {name} ./{executable} {folder}/{file} exited with {res} {bcolors.ENDC}")
                 exit(-1)
             else:
-                print(f"[OK] {name} ./{executable} {folder}/{file} {res}")
+                print(f"{bcolors.OKGREEN}[OK] {name} ./{executable} {folder}/{file} {res} {bcolors.ENDC}")
