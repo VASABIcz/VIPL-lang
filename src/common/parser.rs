@@ -86,7 +86,7 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
             }
         }
 
-        return true;
+        true
     }
 
     pub fn isPeekOneOf(&self, types: &[T]) -> bool {

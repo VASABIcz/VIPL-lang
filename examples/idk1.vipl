@@ -5,7 +5,7 @@ fn callMany(ff: (int, int): int, count: int) {
     while (i < count) {
         c = ff(i, i)
         out::print(c)
-        i++
+        i += 1
     }
 }
 

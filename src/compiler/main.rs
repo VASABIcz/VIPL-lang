@@ -26,7 +26,7 @@ fn main() {
         Ok(v) => v,
         Err(e) => {
             e.printUWU(&sourceFile);
-            exit(0);
+            exit(-1);
         }
     };
 
