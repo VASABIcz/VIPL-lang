@@ -9,7 +9,7 @@ use crate::ast::{
 use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
 use crate::lexingUnits::TokenType;
-use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, Fn, For, From, Global, Identifier, If, Import, In, Loop, Minus, Mul, MulAs, Namespace, Native, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, Fn, For, From, Global, Identifier, If, Import, In, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
@@ -848,56 +848,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
 }
 
 #[derive(Debug)]
-struct IncParsingUnit;
-
-impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IncParsingUnit {
-    fn getType(&self) -> ParsingUnitSearchType {
-        Behind
-    }
-
-    fn canParse(
-        &self,
-        parser: &VIPLParser
-    ) -> bool {
-        parser.tokens.isPeekType(TokenType::Inc) || parser.tokens.isPeekType(TokenType::Dec)
-    }
-
-    fn parse(
-        &self,
-        parser: &mut VIPLParser
-    ) -> Result<ASTNode, ParserError<TokenType>> {
-        // FIXME
-        let prev = parser.prevPop()?.asExpr()?;
-
-        if parser.tokens.isPeekType(TokenType::Inc) {
-            parser.tokens.getAssert(TokenType::Inc)?;
-
-            Ok(ASTNode::Statement(Assignable(
-                prev,
-                Expression::IntLiteral("1".to_string()),
-                Some(ArithmeticOp::Add),
-            )))
-        } else {
-            parser.tokens.getAssert(TokenType::Dec)?;
-
-            Ok(ASTNode::Statement(Assignable(
-                prev,
-                Expression::IntLiteral("1".to_string()),
-                Some(ArithmeticOp::Sub),
-            )))
-        }
-    }
-
-    fn getPriority(&self) -> usize {
-        todo!()
-    }
-
-    fn setPriority(&mut self, priority: usize) {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
 struct StructInitParsingUnit;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit {
@@ -1357,12 +1307,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
 
         parser.tokens.getAssert(TokenType::Fn)?;
 
-        if parser.tokens.isPeekType(Native) {
-            parser.tokens.getAssert(Native)?;
-
-            isNative = true;
-        }
-
         let name = parser.tokens.getIdentifier()?;
         let mut args = vec![];
         let mut argCount = 0;
@@ -1688,7 +1632,6 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(BoolParsingUnit),
         Box::new(ReturnParsingUnit),
         Box::new(StructParsingUnit),
-        Box::new(IncParsingUnit),
         Box::new(FieldAccessParsingUnit),
         Box::new(GlobalParsingUnit),
         Box::new(ForParsingUnit),

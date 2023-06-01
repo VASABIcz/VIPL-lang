@@ -15,6 +15,7 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 bRes = os.system("cargo build --package vipl --release --bin compiler")
+bRes = os.system("cargo build --package vipl --bin compiler")
 
 if bRes != 0:
     print("build failed")

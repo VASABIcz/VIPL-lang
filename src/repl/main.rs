@@ -108,7 +108,7 @@ fn main() {
             }
         };
 
-        println!("AST: {:?}", v);
+        // println!("AST: {:?}", v);
 
         let nn = vm.getNamespaceMut(generatedNamespace);
 

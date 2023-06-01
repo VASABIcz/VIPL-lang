@@ -186,6 +186,7 @@ pub enum ParserError<T: PartialEq + Clone + Debug> {
     NoSuchParsingUnit(NoSuchParsingUnit<T>),
     InvalidCharLiteral(InvalidCharLiteral<T>),
     InvalidOperation(InvalidOperation),
+    NoToken,
     Unknown(Box<dyn Error>),
 }
 
@@ -197,6 +198,7 @@ impl<T: PartialEq + Clone + Debug> Display for ParserError<T> {
             ParserError::InvalidCharLiteral(v) => write!(f, "{}", v),
             ParserError::Unknown(v) => write!(f, "{}", v),
             ParserError::InvalidOperation(v) => write!(f, "{}", v),
+            ParserError::NoToken => write!(f, "NoToken")
         }
     }
 }
@@ -232,6 +234,7 @@ impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
                 ParserError::InvalidCharLiteral(_) => "InvalidCharLiteral",
                 ParserError::Unknown(_) => "Unknown",
                 ParserError::InvalidOperation(_) => "InvalidOperation",
+                ParserError::NoToken => "NoToken"
             },
             LoadFileError::LexerError(v) => match v {
                 LexerError::UnknownToken(_) => "UnknownToken",
@@ -251,6 +254,7 @@ impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
                 ParserError::InvalidCharLiteral(t) => Some(t.token.location),
                 ParserError::Unknown(e) => None,
                 ParserError::InvalidOperation(v) => None,
+                ParserError::NoToken => None
             },
             LoadFileError::LexerError(v) => match v {
                 LexerError::UnknownToken(t) => Some(t.location),
@@ -392,7 +396,14 @@ pub enum CodeGenError {
     UnexpectedVoid,
     ContinueOutsideLoop,
     BreakOutsideLoop,
-    LiteralParseError
+    LiteralParseError,
+    ExpressionIsNotAssignable,
+    ExpectedReference,
+    UnexpectedAny,
+    ExpectedLambda,
+    ExpectedCallable,
+    VeryBadState,
+    ExpectedRawType
 }
 
 #[derive(Debug, Clone)]

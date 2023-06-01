@@ -119,7 +119,7 @@ impl SymbolicOpcode {
     }
 }
 
-pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
+pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenError> {
     let mut buf = vec![];
     let mut loopBegins = vec![];
     let mut labelLookup = HashMap::new();
@@ -142,7 +142,7 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
         match sym {
             SymbolicOpcode::Op(op) => buf.push(op.clone()),
             SymbolicOpcode::Continue => {
-                let i = *loopBegins.last().unwrap();
+                let i = *loopBegins.last().ok_or_else(||CodeGenError::VeryBadState)?;
                 buf.push(OpCode::Jmp {
                     offset: i as i32 - (buf.len() + 1) as i32,
                     jmpType: JmpType::Jmp,
@@ -186,7 +186,7 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Vec<OpCode> {
         }
     }
 
-    buf
+    Ok(buf)
 }
 
 #[derive(Debug)]
@@ -342,11 +342,7 @@ impl ExpressionCtx<'_> {
                 }
             }
             Expression::ArrayIndexing(i) => {
-                let e = self.transfer(&i.expr).toDataType()?;
-
-                if e.isVoid() {
-                    return Err(UnexpectedVoid);
-                }
+                let e = self.transfer(&i.expr).toDataType()?.assertNotVoid()?;
 
                 match e {
                     Object(o) => {
@@ -359,7 +355,10 @@ impl ExpressionCtx<'_> {
                             .clone()
                             .ok_or(CodeGenError::UntypedEmptyArray)?)
                     }
-                    _ => panic!(),
+                    _ => {
+                        panic!();
+                        Err(CodeGenError::ExpectedReference)
+                    },
                 }
             }
             Expression::NotExpression(i, _) => {
@@ -371,7 +370,7 @@ impl ExpressionCtx<'_> {
                 let (namespace, _) =
                     self.vm.get_mut().findNamespaceParts(&n[..n.len() - 1])?;
 
-                let global = namespace.findGlobal(n.last().unwrap())?;
+                let global = namespace.findGlobal(n.last().ok_or_else(||CodeGenError::VeryBadState)?)?;
 
                 Ok(global.0.typ.clone())
             }
@@ -400,8 +399,8 @@ impl ExpressionCtx<'_> {
 
                         let var = self.getVariable(v)?;
                         match &var.0 {
-                            DataType::Function { ret, .. } => return Ok(*ret.clone()),
-                            _ => panic!(),
+                            DataType::Function { ret, .. } => Ok(*ret.clone()),
+                            _ => Err(CodeGenError::ExpectedLambda),
                         }
                     }
                     Expression::NamespaceAccess(v) => {
@@ -432,7 +431,10 @@ impl ExpressionCtx<'_> {
                             }
                         }
                     }
-                    _ => panic!(),
+                    _ => {
+                        panic!();
+                        return Err(CodeGenError::ExpectedCallable)
+                    },
                 }
             },
             Expression::StructInit(name, _) => Ok(DataType::Object(ObjectMeta {
@@ -452,10 +454,13 @@ impl ExpressionCtx<'_> {
                             .currentNamespace
                             .get_mut()
                             .findStruct(o.name.as_str())?;
-                        let (t, _) = structMeta.findField(fieldName).unwrap();
+                        let (t, _) = structMeta.findField(fieldName)?;
                         Ok(t.typ.clone())
                     }
-                    _ => panic!(),
+                    _ => {
+                        panic!();
+                        Err(CodeGenError::ExpectedReference)
+                    },
                 }
             }
             Expression::Null => Ok(self.typeHint.clone().unwrap_or(Int)),
@@ -752,7 +757,8 @@ pub fn genFunctionDef(
         Ok(())
     }
     else {
-        panic!()
+        println!("this should never get called :3");
+        Err(CodeGenError::VeryBadState)
     }
 }
 
@@ -807,7 +813,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.opJmp(endLabel, JmpType::Jmp);
 
             for (i, els) in flow.elseIfs.iter().enumerate() {
-                ctx.makeLabel(*ifLabels.get(i).unwrap());
+                ctx.makeLabel(*ifLabels.get(i).ok_or_else(||CodeGenError::VeryBadState)?);
 
                 ctx.makeExpressionCtx(&els.0, None)
                     .toDataType()?
@@ -825,7 +831,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
 
             if let Some(els) = &flow.elseBody {
-                ctx.makeLabel(*ifLabels.last().unwrap());
+                ctx.makeLabel(*ifLabels.last().ok_or_else(||CodeGenError::VeryBadState)?);
                 els.generate(ctx.deflate())?;
             }
             ctx.makeLabel(endLabel);
@@ -872,11 +878,11 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 }
                 Expression::NamespaceAccess(_) => {}
                 Expression::FieldAccess(obj, _) => {
-                    let mut cd = ctx.makeExpressionCtx(obj, None);
-
-                    cd.genExpression()?;
+                    ctx.makeExpressionCtx(obj, None).genExpression()?;
                 }
-                _ => panic!(),
+                _ => {
+                    return Err(CodeGenError::ExpressionIsNotAssignable)
+                },
             }
 
             match t {
@@ -911,7 +917,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 }
                 Expression::NamespaceAccess(v) => unsafe {
                     let namespace = (&mut *ctx.vm.get()).findNamespaceParts(&v[..v.len() - 1])?;
-                    let global = namespace.0.findGlobal(v.last().unwrap())?;
+                    let global = namespace.0.findGlobal(v.last().ok_or_else(||CodeGenError::VeryBadState)?)?;
 
                     ctx.push(SetGlobal {
                         namespaceID: namespace.1 as u32,
@@ -920,10 +926,8 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 },
                 Expression::FieldAccess(obj, field) => {
                     let mut cd = ctx.makeExpressionCtx(obj, None);
-                    let class = match cd.toDataType()? {
-                        Object(v) => v,
-                        _ => panic!(),
-                    };
+
+                    let class = cd.toDataType()?.getRef()?;
 
                     let (_, structID, _, fieldID) = cd
                         .currentNamespace
@@ -934,7 +938,9 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                         fieldID,
                     })
                 }
-                _ => panic!(),
+                _ => {
+                    return Err(CodeGenError::ExpressionIsNotAssignable)
+                },
             }
         }
         Statement::ForLoop(var, arr, body) => {
@@ -1045,7 +1051,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     }
                     Err(_) => {
                         let f = r.lookupFunctionByBaseName(v)?;
-                        let a = (&mut *r.currentNamespace.get()).findFunction(&f).unwrap();
+                        let a = (&mut *r.currentNamespace.get()).findFunction(&f)?;
                         r.push(PushFunction(
                             (&*r.currentNamespace.get()).id as u32,
                             a.1 as u32,
@@ -1083,30 +1089,24 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 }
             }
             Expression::ArrayIndexing(i) => {
-                // println!("{:?}", i.expr);
                 let d = r.constructCtx(&i.expr).toDataType()?.assertNotVoid()?;
-                match d {
-                    DataType::Object(o) => {
-                        // println!("{:?}", o);
-                        if o.name.as_str() == "String" {
-                            genExpression(r.constructCtx(&i.expr))?;
-                            genExpression(r.constructCtx(&i.index))?;
-                            r.push(GetChar);
-                            return Ok(());
-                        }
 
-                        match o.generics.first().unwrap() {
-                            Generic::Type(v) => {
-                                genExpression(r.constructCtx(&i.expr))?;
-                                genExpression(r.constructCtx(&i.index))?;
-
-                                r.push(OpCode::ArrayLoad);
-                            }
-                            Generic::Any => panic!(),
-                        }
-                    }
-                    v => panic!("{v:?}"),
+                if d.isString() {
+                    genExpression(r.constructCtx(&i.expr))?;
+                    genExpression(r.constructCtx(&i.index))?;
+                    r.push(GetChar);
+                    return Ok(())
                 }
+                else if d.isArray() {
+                    genExpression(r.constructCtx(&i.expr))?;
+                    genExpression(r.constructCtx(&i.index))?;
+
+                    r.push(ArrayLoad);
+
+                    return Ok(())
+                }
+
+                return Err(CodeGenError::ExpectedReference)
             }
             Expression::NotExpression(e, _) => {
                 genExpression(r.constructCtx(e))?;
@@ -1115,7 +1115,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             Expression::NamespaceAccess(parts) => {
                 let namespace = (&*r.vm.get()).findNamespaceParts(&parts[..parts.len() - 1])?;
 
-                let global = namespace.0.findGlobal(parts.last().unwrap())?;
+                let global = namespace.0.findGlobal(parts.last().ok_or_else(||CodeGenError::VeryBadState)?)?;
 
                 r.push(OpCode::GetGlobal {
                     namespaceID: namespace.1 as u32,
@@ -1255,28 +1255,26 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 genExpression(ctx)?;
 
                 let e = r.constructCtx(prev).toDataType()?.assertNotVoid()?;
-                match e {
-                    Object(ref o) => {
-                        if fieldName == "size" || fieldName == "length" {
-                            if e.isArray() {
-                                r.push(ArrayLength);
-                                return Ok(());
-                            } else if e.isString() {
-                                r.push(StringLength);
-                                return Ok(());
-                            }
-                        }
 
-                        let (structMeta, structID, field, fieldID) =
-                            (&*r.currentNamespace.get())
-                                .findStructField(o.name.as_str(), fieldName)?;
 
-                        r.push(GetField {
-                            fieldID,
-                        });
+                if fieldName == "size" || fieldName == "length" {
+                    if e.isArray() {
+                        r.push(ArrayLength);
+                        return Ok(());
+                    } else if e.isString() {
+                        r.push(StringLength);
+                        return Ok(());
                     }
-                    _ => panic!(),
-                };
+                }
+                let o = e.getRef()?;
+
+                let (_, _, _, fieldID) =
+                    (*r.currentNamespace.get())
+                        .findStructField(o.name.as_str(), fieldName)?;
+
+                r.push(GetField {
+                    fieldID,
+                });
             }
             Expression::Null => ctx.push(OpCode::PushIntZero),
             Expression::TernaryOperator(cond, tr, fal) => {

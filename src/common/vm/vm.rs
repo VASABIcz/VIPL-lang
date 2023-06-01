@@ -969,7 +969,7 @@ impl VirtualMachine {
                             println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
                         }
 
-                        let opt = emitOpcodes(ops);
+                        let opt = emitOpcodes(ops)?;
 
                         // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
                         // *a = Some(Native(nf))

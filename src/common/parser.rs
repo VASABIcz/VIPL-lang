@@ -39,7 +39,7 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
     }
 
     pub fn peekOneRes(&self) -> Result<&Token<T>, ParserError<T>> {
-        Ok(self.tokens.get(self.index).unwrap())
+        Ok(self.tokens.get(self.index).ok_or_else(||ParserError::NoToken)?)
     }
 
     pub fn isPeekRow(&self, row: usize) -> bool {

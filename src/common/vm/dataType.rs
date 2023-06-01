@@ -50,7 +50,7 @@ impl DataType {
             // FIXME this is stupid check if ref is null workaround
             // maybe introduce isnull opcode? idk
             Object(_) => RawDataType::Int,
-            _ => panic!()
+            _ => Err(CodeGenError::ExpectedRawType)?
         })
     }
 
@@ -58,6 +58,16 @@ impl DataType {
     pub fn getArrayType(&self) -> Result<DataType, CodeGenError> {
         let a = self.asArray()?;
         a.generics.first().unwrap().clone().ok_or(CodeGenError::UntypedEmptyArray)
+    }
+
+    pub fn getRef(self) -> Result<ObjectMeta, CodeGenError> {
+        match self {
+            Object(v) => Ok(v),
+            _ => {
+                panic!();
+                Err(CodeGenError::ExpectedReference)
+            }
+        }
     }
 
     pub fn assertType(&self, t: DataType) -> Result<DataType, CodeGenError> {
@@ -95,38 +105,23 @@ impl DataType {
     }
 
     pub fn isValue(&self) -> bool {
-        match self {
-            Value => true,
-            _ => false
-        }
+        matches!(self, Value)
     }
 
     pub fn isVoid(&self) -> bool {
-        match self {
-            Void => true,
-            _ => false,
-        }
+        matches!(self, Void)
     }
 
     pub fn isInt(&self) -> bool {
-        match self {
-            Int => true,
-            _ => false
-        }
+        matches!(self, Int)
     }
 
     pub fn isFloat(&self) -> bool {
-        match self {
-            Float => true,
-            _ => false
-        }
+        matches!(self, Float)
     }
 
     pub fn isFunction(&self) -> bool {
-        match self {
-            Function { .. } => true,
-            _ => false,
-        }
+        matches!(self, Function { .. })
     }
 
     pub fn asArray(&self) -> Result<&ObjectMeta, CodeGenError> {
