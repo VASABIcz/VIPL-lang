@@ -910,7 +910,7 @@ impl VirtualMachine {
 
                 let nId = (*anotherWarCrime.get()).id;
 
-                for (index, (f, a)) in (&mut *anotherWarCrime.get())
+                for (index, (f, a)) in (*anotherWarCrime.get())
                     .getFunctionsMut()
                     .iter_mut()
                     .enumerate()
@@ -934,12 +934,10 @@ impl VirtualMachine {
                             symbols: &mut symbols,
                         };
 
-
                         match genFunctionDef(f, &mut ctx) {
                             Ok(v) => {},
                             Err(e) => {
                                 anotherWarCrime.get_mut().state = FailedToLoad;
-
                                 return Err(e)
                             }
                         };

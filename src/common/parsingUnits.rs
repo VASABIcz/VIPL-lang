@@ -392,7 +392,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
         Ok(ASTNode::Expr(Expression::ArrayIndexing(Box::new(
             ArrayAccess {
                 // FIXME
-                expr: parser.prevPop().unwrap().asExpr()?,
+                expr: parser.prevPop()?.asExpr()?,
                 index: expr,
             },
         ))))
@@ -766,7 +766,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
 
         // FIXME
         Ok(ASTNode::Expr(Expression::Callable(
-            Box::new(parser.prevPop().unwrap().asExpr()?),
+            Box::new(parser.prevPop()?.asExpr()?),
             args,
         )))
     }
@@ -867,7 +867,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IncParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         // FIXME
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
 
         if parser.tokens.isPeekType(TokenType::Inc) {
             parser.tokens.getAssert(TokenType::Inc)?;
@@ -970,7 +970,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FieldAccessParsingUni
         let fieldName = parser.tokens.getIdentifier()?;
 
         Ok(ASTNode::Expr(Expression::FieldAccess(
-            Box::new(parser.prevPop().unwrap().asExpr()?),
+            Box::new(parser.prevPop()?.asExpr()?),
             fieldName,
         )))
     }
@@ -1008,7 +1008,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
 
         let mut typ = None;
 
@@ -1190,7 +1190,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
 
         let arg = parser.parseExprOneLine()?;
 
@@ -1231,7 +1231,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
         let name = parser.tokens.getIdentifier()?;
         let arg = parser.parseExprOneLine()?;
 
@@ -1269,7 +1269,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
         parser.tokens.getAssert(QuestionMark)?;
 
         let a = parser.parseExpr()?;
@@ -1318,8 +1318,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for RepeatParsingUnit {
         let count = parser.tokens
             .getAssert(TokenType::IntLiteral)?
             .str
-            .parse::<usize>()
-            .unwrap();
+            .parse::<usize>().map_err(|_|ParserError::Unknown("".into()))?;
 
         let body = parser.parseBody()?;
 
@@ -1443,8 +1442,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        println!("wtf");
-        let prev = parser.prevPop().unwrap().asExpr()?;
+        let prev = parser.prevPop()?.asExpr()?;
         parser.tokens.consume();
         let res = parser.parseOneJust(Ahead)?;
 
@@ -1454,7 +1452,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
 
         match par {
             None => {
-                let res = parser.previousBuf.pop().unwrap();
+                let res = parser.prevPop()?;
                 Ok(ASTNode::Expr(Expression::BinaryOperation {
                     // FIXME
                     left: Box::new(prev),
@@ -1466,7 +1464,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
                if self.priority < p.getPriority() {
                    let xd = &mut *(parser as *const VIPLParser as *mut VIPLParser);
 
-                   let res = xd.previousBuf.pop().unwrap();
+                   let res = xd.prevPop()?;
 
                    xd.previousBuf.push(
                        ASTNode::Expr(Expression::BinaryOperation {
@@ -1544,14 +1542,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        let mut peek = parser.tokens.peekOne().unwrap();
+        let mut peek = parser.tokens.peekOneRes()?;
 
         let mut buf = String::new();
 
         if peek.typ == Minus {
             buf.push('-');
             parser.tokens.consume();
-            peek = parser.tokens.peekOne().unwrap()
+            peek = parser.tokens.peekOneRes()?
         }
 
         let res = match peek.typ {
@@ -1600,7 +1598,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
     }
 
     fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
-        let e = parser.prevPop().unwrap().asExpr()?;
+        let e = parser.prevPop()?.asExpr()?;
         parser.tokens.getAssert(As)?;
 
         let t = parser.parseDataType()?;

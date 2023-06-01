@@ -18,10 +18,11 @@ use crate::errors::{
     TypeNotFound,
 };
 use crate::lexer::*;
+use crate::lexingUnits::TokenType::In;
 use crate::parser::*;
 use crate::symbolManager::SymbolManager;
 use crate::utils::genFunName;
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Object, Void};
+use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Object, Value, Void};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
@@ -457,7 +458,7 @@ impl ExpressionCtx<'_> {
                     _ => panic!(),
                 }
             }
-            Expression::Null => Ok(self.typeHint.clone().unwrap_or(Void)),
+            Expression::Null => Ok(self.typeHint.clone().unwrap_or(Int)),
             Expression::TernaryOperator(cond, tr, fal) => {
                 let a = self.transfer(&tr).toDataType()?;
                 let b = self.transfer(&fal).toDataType()?;

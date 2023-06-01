@@ -7,7 +7,7 @@ use crate::vm::dataType::DataType;
 use crate::vm::namespace::{FunctionMeta, GlobalMeta, StructMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SymbolManager {
     pub functions: HashMap<String, (Vec<DataType>, DataType, usize, usize)>,
     pub structs: HashMap<String, (StructMeta, usize, usize)>,

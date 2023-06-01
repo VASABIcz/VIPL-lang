@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 #![feature(type_name_of_val)]

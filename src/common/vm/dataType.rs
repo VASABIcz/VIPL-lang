@@ -47,6 +47,9 @@ impl DataType {
             Float => RawDataType::Float,
             Bool => RawDataType::Bool,
             Char => RawDataType::Char,
+            // FIXME this is stupid check if ref is null workaround
+            // maybe introduce isnull opcode? idk
+            Object(_) => RawDataType::Int,
             _ => panic!()
         })
     }
