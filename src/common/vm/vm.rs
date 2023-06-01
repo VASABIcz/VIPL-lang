@@ -30,6 +30,7 @@ use crate::vm::nativeObjects::{
 };
 use crate::vm::nativeStack::StackManager;
 use crate::vm::objects::{Array, Str};
+use crate::vm::optimizations::branchOmit::branchOmit;
 use crate::vm::optimizations::bytecodeOptimizer::optimizeBytecode;
 use crate::vm::optimizations::constEval::constEvaluation;
 use crate::vm::stackFrame::StackFrame;
@@ -45,7 +46,7 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -961,15 +962,18 @@ impl VirtualMachine {
                         }
 
                         ops = transform(ops, |it| {
-                            // let r = constEvaluation(it);
-                            optimizeBytecode(it)
+                            let r = constEvaluation(it);
+                            optimizeBytecode(r)
                         });
 
+                        println!("w {:?}", ops);
+                        let opz = branchOmit(ops).0;
+
                         if DEBUG {
-                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
+                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opz);
                         }
 
-                        let opt = emitOpcodes(ops)?;
+                        let opt = emitOpcodes(opz)?;
 
                         // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
                         // *a = Some(Native(nf))

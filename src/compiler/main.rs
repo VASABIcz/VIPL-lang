@@ -13,7 +13,7 @@ use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::vm::{OpCode, VirtualMachine};
 
-fn main() {
+fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
 
     let mut lexingUnits = lexingUnits();
@@ -26,7 +26,7 @@ fn main() {
         Ok(v) => v,
         Err(e) => {
             e.printUWU(&sourceFile);
-            exit(-1);
+            return Err(())
         }
     };
 
@@ -70,4 +70,6 @@ fn main() {
     if vm.stackSize() != 0 {
         panic!("something went wrong :(")
     }
+
+    Ok(())
 }
