@@ -38,7 +38,6 @@ pub mod lexingUnits;
 pub mod naughtyBox;
 pub mod parser;
 pub mod parsingUnits;
-pub mod regix;
 pub mod rice;
 pub mod std;
 pub mod utils;

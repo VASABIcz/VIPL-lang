@@ -5,9 +5,8 @@ use std::fmt::{Debug, Formatter};
 use std::mem::forget;
 use std::ptr;
 use std::time::Duration;
-
-use crate::lexer::{lexingUnits, SourceProvider};
 use crate::std::std::bootStrapVM;
+
 use crate::vm::heap::Hay;
 use crate::vm::namespace::{callNative, LoadedFunction, Namespace};
 use crate::vm::nativeObjects::ViplObject;

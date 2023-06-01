@@ -99,7 +99,7 @@ impl Heap {
             count += 1;
 
             let obj = *u as *mut UntypedObject;
-            unsafe { (&mut *obj).free() }
+            unsafe { (*obj).free() }
 
             unsafe { drop(Box::from_raw(*u as *mut ())) };
         }

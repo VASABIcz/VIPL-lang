@@ -2,7 +2,7 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::errors::{Errorable, LoadFileError, ParserError};
+use crate::errors::{LoadFileError, ParserError};
 use crate::fastAccess::FastAcess;
 use crate::lexer::{
     tokenize, AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit,

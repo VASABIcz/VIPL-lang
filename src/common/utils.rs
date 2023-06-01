@@ -1,7 +1,6 @@
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
-use crate::lexer::{LexingUnit, tokenizeSource, TokenType};
 use crate::parser::{TokenProvider};
 use crate::vm;
 use crate::vm::dataType::DataType;
@@ -13,6 +12,8 @@ use crate::vm::vm::{OpCode, VirtualMachine};
 use std::arch::asm;
 use std::error::Error;
 use std::{env, fs};
+use crate::lexer::{LexingUnit, tokenizeSource};
+use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;
 
 // same as Vec but can be unsafely modified and accessed
@@ -299,7 +300,7 @@ fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
                 return f.0.isPure;
             }
             LCall { namespace, id } => {
-                let f = vm.getNamespace(*namespace).getFunction(*id);
+                let f = vm.getNamespace(*namespace as usize).getFunction(*id as usize);
 
                 return f.0.isPure;
             }

@@ -1,8 +1,8 @@
-use crate::errors::{Errorable, LexerError};
+use crate::errors::{LexerError};
 use crate::lexer::SourceProvider;
-use crate::regix::Regix::{Char, Not};
 use libc::isdigit;
 use std::collections::HashSet;
+use crate::std::regix::Regix::{Char, Not};
 
 #[derive(Debug)]
 pub enum Regix {
@@ -59,14 +59,14 @@ impl Regix {
         l: &mut SourceProvider,
         regixes: &mut Vec<Regix>,
         captures: &mut usize,
-    ) -> Errorable<()> {
+    ) -> Result<(), LexerError> {
         if l.isPeek("(") {
             l.consumeOne();
 
             let mut buf = vec![];
 
             while !l.isPeek(")") {
-                Self::parseRaw(l, &mut buf, captures);
+                Self::parseRaw(l, &mut buf, captures)?;
             }
             l.assertConsume(")")?;
 
@@ -90,7 +90,7 @@ impl Regix {
             l.consumeOne();
             let prev = regixes.pop().ok_or("expected previous regix for or")?;
             let mut buf = vec![];
-            Self::parseRaw(l, &mut buf, captures);
+            Self::parseRaw(l, &mut buf, captures)?;
             if buf.len() != 1 {
                 None.ok_or("or missing right side")?;
             }
@@ -136,14 +136,14 @@ impl Regix {
             l.consumeOne();
 
             let mut buf = vec![];
-            Self::parseRaw(l, &mut buf, captures);
+            Self::parseRaw(l, &mut buf, captures)?;
             if buf.len() != 1 {
                 None.ok_or("not missing right side")?;
             }
 
             regixes.push(Not(Box::new(buf.pop().unwrap())))
         } else {
-            Self::parseSimpleRaw(l, regixes, captures);
+            Self::parseSimpleRaw(l, regixes, captures)?;
         }
         Ok(())
     }

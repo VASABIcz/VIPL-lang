@@ -5,6 +5,25 @@ use crate::vm::objects::Str;
 use crate::vm::value::Value;
 use std::error::Error;
 
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub enum RawDataType {
+    Int,
+    Float,
+    Bool,
+    Char,
+}
+
+impl RawDataType {
+    pub fn toType(&self) -> DataType {
+        match self {
+            RawDataType::Int => DataType::Int,
+            RawDataType::Float => DataType::Float,
+            RawDataType::Bool => DataType::Bool,
+            RawDataType::Char => DataType::Char
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub enum DataType {
@@ -22,6 +41,16 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn toRawType(self) -> Result<RawDataType, CodeGenError> {
+        Ok(match self {
+            Int => RawDataType::Int,
+            Float => RawDataType::Float,
+            Bool => RawDataType::Bool,
+            Char => RawDataType::Char,
+            _ => panic!()
+        })
+    }
+
     // FIXME
     pub fn getArrayType(&self) -> Result<DataType, CodeGenError> {
         let a = self.asArray()?;

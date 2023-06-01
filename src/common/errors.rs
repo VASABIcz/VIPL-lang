@@ -1,5 +1,5 @@
 use crate::ast::{ASTNode, Expression};
-use crate::lexer::{Location, Stringable, Token, TokenType};
+use crate::lexer::{Location, Token};
 use crate::parser::ParsingUnitSearchType;
 use crate::vm::dataType::DataType;
 use std::convert::Infallible;
@@ -7,8 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::FromResidual;
-
-pub type Errorable<T> = Result<T, Box<dyn Error>>;
+use crate::lexingUnits::{Stringable, TokenType};
 
 #[derive(Debug)]
 pub struct NoValue {
@@ -159,6 +158,7 @@ pub enum LexerError {
     UnknownToken(UnknownToken),
     NotEnoughCharacters(usize, Location),
     ReachedEOF(Location),
+    ExpectedChar(String, Location),
     Unknown(Box<dyn Error>, Option<Location>),
 }
 
@@ -175,6 +175,7 @@ impl Display for LexerError {
             LexerError::NotEnoughCharacters(s, v) => todo!(),
             LexerError::ReachedEOF(v) => todo!(),
             LexerError::Unknown(v, _) => write!(f, "{}", v),
+            LexerError::ExpectedChar(v, loc) => write!(f, "{}", v)
         }
     }
 }
@@ -237,6 +238,7 @@ impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
                 LexerError::NotEnoughCharacters(_, _) => "NotEnoughCharacters",
                 LexerError::ReachedEOF(_) => "ReachedEOF",
                 LexerError::Unknown(_, _) => "Unknown",
+                LexerError::ExpectedChar(_, _) => "ExpectedChar"
             },
         }
     }
@@ -255,6 +257,7 @@ impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
                 LexerError::NotEnoughCharacters(_, l) => Some(*l),
                 LexerError::ReachedEOF(e) => Some(*e),
                 LexerError::Unknown(e, l) => *l,
+                LexerError::ExpectedChar(_, l) => Some(*l)
             },
         }
     }

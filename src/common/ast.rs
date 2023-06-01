@@ -7,7 +7,8 @@ use std::ops::Index;
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
 use crate::fastAccess::FastAcess;
-use crate::lexer::{Location, Token, TokenType};
+use crate::lexer::{Location, Token};
+use crate::lexingUnits::TokenType;
 use crate::utils::genFunName;
 use crate::vm::dataType::DataType::{Bool, Char, Object};
 use crate::vm::dataType::Generic::Any;
@@ -234,19 +235,18 @@ impl ASTNode {
         match self {
             ASTNode::Expr(e) => Ok(e),
             _ => {
-                panic!();
-                Err(ParserError::Unknown(Box::new(InvalidOperation {
+                Err(ParserError::InvalidOperation(InvalidOperation {
                     operation: self.clone(),
                     expected: "Expression".to_string(),
-                })))
+                }))
             },
         }
     }
 
-    pub fn asExprRef(&self) -> Result<&Expression, Box<dyn Error>> {
+    pub fn asExprRef(&self) -> Result<&Expression, ParserError<TokenType>> {
         match self {
             ASTNode::Expr(e) => Ok(e),
-            _ => Err(Box::new(InvalidOperation {
+            _ => Err(ParserError::InvalidOperation(InvalidOperation {
                 operation: self.clone(),
                 expected: "Expression".to_string(),
             })),

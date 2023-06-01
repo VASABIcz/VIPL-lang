@@ -84,10 +84,7 @@ pub enum AsmValue {
 impl AsmValue {
     pub fn tryGetAmount(&self) -> Option<usize> {
         match self {
-            AsmValue::Concrete(c) => match c {
-                Concrete::Number(v) => Some(*v),
-                _ => None,
-            },
+            AsmValue::Concrete(Concrete::Number(v)) => Some(*v),
             _ => None,
         }
     }
@@ -174,9 +171,10 @@ impl Into<AsmValue> for isize {
     }
 }
 
-impl Into<AsmValue> for usize {
-    fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize));
+
+impl From<usize> for AsmValue {
+    fn from(value: usize) -> Self {
+        AsmValue::Concrete(Concrete::Number(value as usize))
     }
 }
 

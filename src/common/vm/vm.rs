@@ -1,3 +1,4 @@
+use std::{intrinsics, ptr};
 use std::alloc::{alloc, dealloc, Layout};
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
@@ -6,24 +7,23 @@ use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
 use std::intrinsics::{read_via_copy, unlikely};
 use std::mem::{size_of, transmute};
-use std::{intrinsics, ptr};
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
 use crate::bytecodeGen::{
-    emitOpcodes, genFunctionDef, ExpressionCtx, SimpleCtx, StatementCtx, SymbolicOpcode,
+    emitOpcodes, ExpressionCtx, genFunctionDef, SimpleCtx, StatementCtx, SymbolicOpcode,
 };
-use crate::errors::{CodeGenError, Errorable, SymbolNotFoundE, SymbolType};
+use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 use crate::ffi::NativeWrapper;
 use crate::symbolManager::SymbolManager;
-use crate::utils::{readNeighbours, transform, FastVec, genFunName};
-use crate::vm::dataType::DataType;
+use crate::utils::{FastVec, genFunName, readNeighbours, transform};
+use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
+use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespace::LoadedFunction::Native;
 use crate::vm::namespace::NamespaceState::{FailedToLoad, Loaded};
-use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
 use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeObjects::{
     ObjectType, SimpleObjectWrapper, UntypedObject, ViplObject, ViplObjectMeta,
@@ -80,46 +80,42 @@ pub enum OpCode {
         index: usize,
     },
     Jmp {
-        offset: isize,
+        offset: i32,
         jmpType: JmpType,
     },
     SCall {
         id: usize,
     },
     LCall {
-        namespace: usize,
-        id: usize,
+        namespace: u32,
+        id: u32,
     },
     DynamicCall,
     Return,
 
-    Add(DataType),
-    Sub(DataType),
-    Div(DataType),
-    Mul(DataType),
+    Add(RawDataType),
+    Sub(RawDataType),
+    Div(RawDataType),
+    Mul(RawDataType),
 
-    Equals(DataType),
-    Greater(DataType),
-    Less(DataType),
+    Equals(RawDataType),
+    Greater(RawDataType),
+    Less(RawDataType),
 
     Or,
     And,
     Not,
     New {
-        namespaceID: usize,
-        structID: usize,
+        namespaceID: u32,
+        structID: u32,
     },
     GetField {
-        namespaceID: usize,
-        structID: usize,
         fieldID: usize,
     },
     SetField {
-        namespaceID: usize,
-        structID: usize,
         fieldID: usize,
     },
-    ArrayNew(DataType),
+    ArrayNew,
     ArrayStore,
     ArrayLoad,
     ArrayLength,
@@ -127,20 +123,20 @@ pub enum OpCode {
     StrNew(usize),
     GetChar,
     Inc {
-        typ: DataType,
-        index: usize,
+        typ: RawDataType,
+        index: u32,
     },
     Dec {
-        typ: DataType,
-        index: usize,
+        typ: RawDataType,
+        index: u32,
     },
     SetGlobal {
-        namespaceID: usize,
-        globalID: usize,
+        namespaceID: u32,
+        globalID: u32,
     },
     GetGlobal {
-        namespaceID: usize,
-        globalID: usize,
+        namespaceID: u32,
+        globalID: u32,
     },
     ConstStr(usize),
     MulInt,
@@ -236,8 +232,7 @@ impl VirtualMachine {
     #[inline]
     pub fn allocateArray(&mut self, vec: Vec<Value>, t: DataType) -> Hay<ViplObject<Array>> {
         let arr = Array {
-            internal: vec,
-            typ: t,
+            internal: vec
         };
         self.heap.allocate(ViplObject::<Array>::arr(arr))
     }
@@ -247,7 +242,7 @@ impl VirtualMachine {
         let (namespace, namespaceId) =
             self.namespaces
                 .getSlowStr(name)
-                .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::namespace(
+                .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::namespace(
                     name,
                 )))?;
 
@@ -362,7 +357,7 @@ impl VirtualMachine {
     #[inline(always)]
     pub fn pop(&self) -> Value {
         unsafe {
-            (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
+            (*(self as *const VirtualMachine as *mut VirtualMachine))
                 .stack
                 .pop()
                 .unwrap()
@@ -374,7 +369,7 @@ impl VirtualMachine {
         if DEBUG || TRACE {
             for _ in 0..amount {
                 unsafe {
-                    (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
+                    (*(self as *const VirtualMachine as *mut VirtualMachine))
                         .stack
                         .pop()
                 };
@@ -425,7 +420,7 @@ impl VirtualMachine {
         }
 
         unsafe {
-            (&mut *(&self.stack as *const Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
+            (*(&self.stack as *const Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
         }
     }
 
@@ -440,7 +435,7 @@ impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
         if DEBUG || TRACE {
-            self.frames.get(self.frames.len() - 1).unwrap()
+            self.frames.last().unwrap()
         } else {
             unsafe {
                 self.frames
@@ -459,7 +454,7 @@ impl VirtualMachine {
     #[inline(always)]
     pub fn getMutFrame(&self) -> &mut StackFrame {
         unsafe {
-            (&mut *(self as *const VirtualMachine as *mut VirtualMachine))
+            (*(self as *const VirtualMachine as *mut VirtualMachine))
                 .frames
                 .get_unchecked_mut(self.frames.len().unchecked_sub(1))
         }
@@ -500,7 +495,7 @@ impl VirtualMachine {
     pub fn getMutLocal(&self, usize: usize) -> &mut Value {
         let i = self.frames.len() - 1;
         unsafe {
-            (&mut *(&self.frames as *const Vec<StackFrame> as *mut Vec<StackFrame>))
+            (*(&self.frames as *const Vec<StackFrame> as *mut Vec<StackFrame>))
                 .get_unchecked_mut(i)
                 .getRefMut(usize)
         }
@@ -594,7 +589,7 @@ impl VirtualMachine {
                         println!("evaluating {:?} {}", op, self.currentNamespace().getFunction(*id).0.genName());
                     }
                     LCall { namespace, id } => {
-                        println!("evaluating {:?} {}", op, self.getNamespace(*namespace).getFunction(*id).0.genName());
+                        println!("evaluating {:?} {}", op, self.getNamespace(*namespace as usize).getFunction(*id as usize).0.genName());
                     }
                     _ => println!("evaluating {:?}", op),
                 }
@@ -629,14 +624,14 @@ impl VirtualMachine {
                     JmpType::Zero => {}
                     JmpType::Jmp => {
                         let x = *offset;
-                        self.seek(x);
+                        self.seek(x as isize);
                     }
                     JmpType::Gt => {
                         let a = self.pop();
                         let b = self.pop();
                         if a.gt(&b, &DataType::Float) {
                             let x = *offset;
-                            self.seek(x)
+                            self.seek(x as isize)
                         }
                     }
                     JmpType::Less => {
@@ -644,20 +639,20 @@ impl VirtualMachine {
                         let b = self.pop();
                         if a.less(&b, &DataType::Float) {
                             let x = *offset;
-                            self.seek(x)
+                            self.seek(x as isize)
                         }
                     }
                     JmpType::True => {
                         let a = self.pop();
                         if a.getBool() {
                             let x = *offset;
-                            self.seek(x)
+                            self.seek(x as isize)
                         }
                     }
                     JmpType::False => {
                         let a = self.pop();
                         if !a.getBool() {
-                            self.seek(*offset)
+                            self.seek(*offset as isize)
                         }
                     }
                 },
@@ -666,33 +661,33 @@ impl VirtualMachine {
                     let a = self.pop();
                     self.getMutTop().add(
                         a,
-                        v,
+                        &v.toType(),
                         &mut *(self as *const VirtualMachine as *mut VirtualMachine),
                     );
                 },
                 Sub(v) => {
                     let a = self.pop();
-                    self.getMutTop().sub(&a, v);
+                    self.getMutTop().sub(&a, &v.toType());
                 }
                 Div(v) => {
                     let a = self.pop();
-                    self.getMutTop().div(&a, v);
+                    self.getMutTop().div(&a, &v.toType());
                 }
                 Mul(v) => {
                     let a = self.pop();
-                    self.getMutTop().mul(&a, v);
+                    self.getMutTop().mul(&a, &v.toType());
                 }
                 Equals(v) => {
                     let a = self.pop();
-                    self.getMutTop().refEq(&a, v);
+                    self.getMutTop().refEq(&a, &v.toType());
                 }
                 Greater(v) => {
                     let a = self.pop();
-                    self.getMutTop().refGt(&a, v);
+                    self.getMutTop().refGt(&a, &v.toType());
                 }
                 Less(v) => {
                     let a = self.pop();
-                    self.getMutTop().refLess(&a, v);
+                    self.getMutTop().refLess(&a, &v.toType());
                 }
                 Or => {
                     let a = self.pop();
@@ -705,9 +700,9 @@ impl VirtualMachine {
                 Not => {
                     self.getMutTop().not();
                 }
-                ArrayNew(d) => {
+                ArrayNew => {
                     let _size = self.pop();
-                    let a = Value::makeArray(vec![], d.clone(), self);
+                    let a = Value::makeArray(vec![], self);
                     self.push(a)
                 }
                 ArrayStore => {
@@ -736,8 +731,8 @@ impl VirtualMachine {
                     });
                 }
                 // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal
-                Inc { typ, index } => unsafe { self.getMutLocal(*index).inc(typ) },
-                Dec { typ, index } => unsafe { self.getMutLocal(*index).dec(typ) },
+                Inc { typ, index } => unsafe { self.getMutLocal(*index as usize).inc(&typ.toType()) },
+                Dec { typ, index } => unsafe { self.getMutLocal(*index as usize).dec(&typ.toType()) },
                 PushChar(c) => self.push((*c).into()),
                 StrNew(sId) => {
                     let s = self.currentNamespace();
@@ -756,7 +751,7 @@ impl VirtualMachine {
                 SCall { id } => {
                     let frame = self.getFrame();
 
-                    (&mut *vm).call(frame.namespaceId, *id)
+                    (*vm).call(frame.namespaceId, *id)
                 }
                 DynamicCall => {
                     let (namespaceRaw, idRaw) = self.pop().asFunction();
@@ -765,7 +760,7 @@ impl VirtualMachine {
 
                     vm.call(namespace, id)
                 }
-                LCall { namespace, id } => vm.call(*namespace, *id),
+                LCall { namespace, id } => vm.call(*namespace as usize, *id as usize),
                 PushFunction(namespaceID, functionID) => {
                     self.push(Value::makeFunction(*namespaceID, *functionID));
                 }
@@ -773,8 +768,8 @@ impl VirtualMachine {
                     namespaceID,
                     structID,
                 } => unsafe {
-                    let n = self.getNamespace(*namespaceID);
-                    let s = n.getStruct(*structID);
+                    let n = self.getNamespace(*namespaceID as usize);
+                    let s = n.getStruct(*structID as usize);
 
                     let mut l = Layout::new::<()>();
 
@@ -790,14 +785,12 @@ impl VirtualMachine {
                     let alloc = alloc(l) as *mut UntypedObject;
 
                     (*alloc).objectType = ObjectType::Simple(s.fieldCount());
-                    (*alloc).structId = *structID;
-                    (*alloc).namespaceId = *namespaceID;
+                    (*alloc).structId = *structID as usize;
+                    (*alloc).namespaceId = *namespaceID as usize;
 
                     self.push(Value::from(alloc as usize))
                 },
                 SetField {
-                    namespaceID,
-                    structID,
                     fieldID,
                 } => unsafe {
                     let value = self.pop();
@@ -809,8 +802,6 @@ impl VirtualMachine {
                     *p = value;
                 },
                 GetField {
-                    namespaceID,
-                    structID,
                     fieldID,
                 } => unsafe {
                     let ptr = self.pop().asRefMeta() as *const UntypedObject;
@@ -837,8 +828,8 @@ impl VirtualMachine {
                     globalID,
                 } => {
                     let v = self.pop();
-                    let n = self.getNamespaceMut(*namespaceID);
-                    let g = n.getGlobalMut(*globalID);
+                    let n = self.getNamespaceMut(*namespaceID as usize);
+                    let g = n.getGlobalMut(*globalID as usize);
 
                     g.1 = v;
                 }
@@ -846,9 +837,9 @@ impl VirtualMachine {
                     namespaceID,
                     globalID,
                 } => {
-                    let n = self.getNamespace(*namespaceID);
+                    let n = self.getNamespace(*namespaceID as usize);
 
-                    self.push(n.getGlobal(*globalID).1)
+                    self.push(n.getGlobal(*globalID as usize).1)
                 }
                 MulInt => {
                     let a = self.pop();
@@ -881,14 +872,12 @@ impl VirtualMachine {
             }
         }
     }
-}
 
-impl VirtualMachine {
     pub fn link(&mut self) -> Result<(), CodeGenError> {
         let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
 
         unsafe {
-            for n in &mut (&mut *warCrime.get()).namespaces.actual {
+            for n in &mut (*warCrime.get()).namespaces.actual {
                 if n.state == Loaded || n.state == FailedToLoad {
                     continue;
                 }
@@ -902,7 +891,7 @@ impl VirtualMachine {
 
                 let anotherWarCrime: &mut UnsafeCell<Namespace> = transmute(n);
 
-                for (_, g) in (&mut *anotherWarCrime.get())
+                for (_, g) in (*anotherWarCrime.get())
                     .getGlobalsMut()
                     .iter_mut()
                     .enumerate()
@@ -919,7 +908,7 @@ impl VirtualMachine {
                     g.0.typ = ctx.toDataType()?;
                 }
 
-                let nId = (&*anotherWarCrime.get()).id;
+                let nId = (*anotherWarCrime.get()).id;
 
                 for (index, (f, a)) in (&mut *anotherWarCrime.get())
                     .getFunctionsMut()
@@ -939,7 +928,7 @@ impl VirtualMachine {
                         let mut ctx = SimpleCtx {
                             ops: &mut ops,
                             currentNamespace: anotherWarCrime,
-                            handle: (&*warCrime.get()).handleStatementExpression,
+                            handle: (*warCrime.get()).handleStatementExpression,
                             vm: warCrime,
                             labelCounter: &mut labelCounter,
                             symbols: &mut symbols,
@@ -993,13 +982,33 @@ impl VirtualMachine {
                     }
                 }
 
-                (&mut *anotherWarCrime.get()).state = Loaded;
+                (*anotherWarCrime.get()).state = Loaded;
             }
         }
         Ok(())
     }
 
     pub fn new() -> Self {
+        Self {
+            stack: Vec::with_capacity(128),
+            nativeWrapper: NativeWrapper::new(),
+            heap: Default::default(),
+            stackManager: StackManager::new(),
+            frames: vec![],
+            namespaces: Default::default(),
+            namespaceLoader: NamespaceLoader::new(),
+            jitCompiler: JITCompiler {},
+            handleStatementExpression: |it, t| {
+                if t != Void {
+                    it.push(Pop)
+                }
+            },
+        }
+    }
+}
+
+impl Default for VirtualMachine {
+    fn default() -> Self {
         Self {
             stack: Vec::with_capacity(128),
             nativeWrapper: NativeWrapper::new(),

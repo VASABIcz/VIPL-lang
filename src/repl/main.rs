@@ -6,7 +6,7 @@ use std::process::exit;
 
 use vipl::ast::{ASTNode, Statement};
 use vipl::bytecodeGen::Body;
-use vipl::lexer::lexingUnits;
+use vipl::lexingUnits::lexingUnits;
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
@@ -62,26 +62,26 @@ fn main() {
 
             match t {
                 DataType::Int => ctx.push(LCall {
-                    namespace: outNamespaceID,
-                    id: printInt.1,
+                    namespace: outNamespaceID as u32,
+                    id: printInt.1 as u32,
                 }),
                 DataType::Float => ctx.push(LCall {
-                    namespace: outNamespaceID,
-                    id: printFloat.1,
+                    namespace: outNamespaceID as u32,
+                    id: printFloat.1 as u32,
                 }),
                 DataType::Bool => ctx.push(LCall {
-                    namespace: outNamespaceID,
-                    id: printBool.1,
+                    namespace: outNamespaceID as u32,
+                    id: printBool.1 as u32,
                 }),
                 DataType::Char => ctx.push(LCall {
-                    namespace: outNamespaceID,
-                    id: printChar.1,
+                    namespace: outNamespaceID as u32,
+                    id: printChar.1 as u32,
                 }),
                 DataType::Object(o) => {
                     if o.name == "String" {
                         ctx.push(LCall {
-                            namespace: outNamespaceID,
-                            id: printString.1,
+                            namespace: outNamespaceID as u32,
+                            id: printString.1 as u32,
                         })
                     }
                     else {

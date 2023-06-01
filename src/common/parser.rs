@@ -15,8 +15,7 @@ use crate::bytecodeGen::Body;
 
 use crate::errors::{InvalidToken, NoSuchParsingUnit, ParserError, SymbolType};
 
-use crate::lexer::{SourceProvider, Token, TokenType};
-use crate::lexer::TokenType::{CCB, Colon, Comma, CRB, Gt, Identifier, Not, ORB};
+use crate::lexer::{SourceProvider, Token};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parsingUnits::{parsingUnits};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
@@ -341,6 +340,28 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
 
         // FIXME just a quick workaround
         while let Some(v) = self.getParsingUnit(Around) {
+            self.previousBuf.push(v.parse(s2)?);
+        }
+
+        Ok(s2.prevPop().unwrap())
+    }
+
+    pub fn parseOneJust(
+        &mut self,
+        typ: ParsingUnitSearchType
+    ) -> Result<OUT, ParserError<IN>> {
+        let s2 = unsafe { &mut *(self as *mut Parser<_, _, _>) };
+
+        let u = self.getParsingUnit(typ).ok_or(
+            ParserError::NoSuchParsingUnit(NoSuchParsingUnit {
+                typ,
+                token: self.tokens.peekOne().cloned(),
+            }),
+        )?;
+
+        self.previousBuf.push(u.parse(s2)?);
+
+        while let Some(v) = self.getParsingUnit(Behind) {
             self.previousBuf.push(v.parse(s2)?);
         }
 

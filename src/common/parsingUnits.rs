@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::From;
 
 use crate::ast;
 use crate::ast::Expression::NamespaceAccess;
@@ -9,8 +8,8 @@ use crate::ast::{
 };
 use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
-use crate::lexer::TokenType;
-use crate::lexer::TokenType::*;
+use crate::lexingUnits::TokenType;
+use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, Fn, For, From, Global, Identifier, If, Import, In, Loop, Minus, Mul, MulAs, Namespace, Native, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
@@ -1444,37 +1443,47 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        println!("wtf");
         let prev = parser.prevPop().unwrap().asExpr()?;
         parser.tokens.consume();
-        let res = parser.parseOne(Ahead)?;
+        let res = parser.parseOneJust(Ahead)?;
+
+        parser.previousBuf.push(res);
+
         let par = parser.getParsingUnit(Around);
 
         match par {
-            None => Ok(ASTNode::Expr(Expression::BinaryOperation {
-                // FIXME
-                left: Box::new(prev),
-                right: Box::new(res.asExpr()?),
-                op: self.op.clone(),
-            })),
-            Some(p) => {
-                todo!();
-/*                if self.priority < p.getPriority() {
-                    Ok(p.parse(
-                        tokens,
-                        Some(ASTNode::Expr(Expression::BinaryOperation {
-                            left: Box::new(previous.unwrap().asExpr()?),
-                            right: Box::new(res.asExpr()?),
-                            op: self.op.clone(),
-                        })),
-                        parser,
-                    )?)
+            None => {
+                let res = parser.previousBuf.pop().unwrap();
+                Ok(ASTNode::Expr(Expression::BinaryOperation {
+                    // FIXME
+                    left: Box::new(prev),
+                    right: Box::new(res.asExpr()?),
+                    op: self.op.clone(),
+                }))
+            },
+            Some(p) => unsafe {
+               if self.priority < p.getPriority() {
+                   let xd = &mut *(parser as *const VIPLParser as *mut VIPLParser);
+
+                   let res = xd.previousBuf.pop().unwrap();
+
+                   xd.previousBuf.push(
+                       ASTNode::Expr(Expression::BinaryOperation {
+                           left: Box::new(prev),
+                           right: Box::new(res.asExpr()?),
+                           op: self.op.clone(),
+                       }
+                   ));
+
+                   Ok(p.parse(xd)?)
                 } else {
-                    Ok(ASTNode::Expr(Expression::BinaryOperation {
-                        left: Box::new(previous.unwrap().asExpr()?),
-                        right: Box::new(p.parse(tokens, Some(res), parser)?.asExpr()?),
-                        op: self.op.clone(),
-                    }))
-                }*/
+                   Ok(ASTNode::Expr(Expression::BinaryOperation {
+                       left: Box::new(prev),
+                       right: Box::new(p.parse(&mut *(parser as *const VIPLParser as *mut VIPLParser))?.asExpr()?),
+                       op: self.op.clone(),
+                   }))
+                }
             }
         }
     }

@@ -1,16 +1,17 @@
 #![feature(slice_ptr_get)]
 
 use std::{env, fs};
+use std::mem::size_of;
 use std::process::exit;
 use std::time::Instant;
 
-use vipl::lexer::lexingUnits;
+use vipl::lexingUnits::lexingUnits;
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;
-use vipl::vm::vm::VirtualMachine;
+use vipl::vm::vm::{OpCode, VirtualMachine};
 
 fn main() {
     let mut vm = bootStrapVM();

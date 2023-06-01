@@ -4,10 +4,11 @@ use std::mem::transmute;
 
 use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, Node, Statement, VariableModd};
 use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
-use crate::errors::{CodeGenError, Errorable, LoadFileError, SymbolNotFoundE, SymbolType};
+use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
+use crate::lexer::{LexingUnit, tokenizeSource};
+use crate::lexingUnits::TokenType;
 // use crate::codegen::complexBytecodeGen;
-use crate::lexer::{LexingUnit, tokenizeSource, TokenType};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnit;
 use crate::utils::{

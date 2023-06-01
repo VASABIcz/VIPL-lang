@@ -1,6 +1,6 @@
 use crate::ast::FunctionDef;
 use crate::ffi::stringNew;
-use crate::regix::Regix;
+use crate::std::regix::Regix;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};

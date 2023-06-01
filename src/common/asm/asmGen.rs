@@ -5,7 +5,7 @@ use crate::asm::asmLib::{AsmGen, AsmLocation, AsmValue, Concrete, Register};
 use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
 use crate::viplDbg;
-use crate::vm::dataType::DataType;
+use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use libc::THOUSEP;
@@ -351,7 +351,7 @@ impl<T: AsmGen> Jitter<T> {
         for (i, op) in opCodes.iter().enumerate() {
             if let OpCode::Jmp { offset, jmpType } = op {
                 let o = *offset + 1;
-                let xd = (i as isize + o) as usize;
+                let xd = (i as i32 + o) as usize;
                 let label = match makeLabelsGreatAgain.get(&xd) {
                     None => {
                         let a = format!("JMP{}", jmpCounter);
@@ -462,7 +462,7 @@ impl<T: AsmGen> Jitter<T> {
                     self.gen.ret()
                 }
                 OpCode::Add(t) => match t {
-                    DataType::Int => {
+                    RawDataType::Int => {
                         let r2 = self.stack.pop().unwrap();
                         let r1 = self.stack.pop().unwrap();
                         self.gen.add(r1.into(), r2.into());
@@ -472,7 +472,7 @@ impl<T: AsmGen> Jitter<T> {
                     _ => todo!(),
                 },
                 OpCode::Sub(t) => match t {
-                    DataType::Int => {
+                    RawDataType::Int => {
                         let r2 = self.stack.pop().unwrap();
                         let r1 = self.stack.pop().unwrap();
                         self.gen.sub(r1.into(), r2.into());
@@ -483,7 +483,7 @@ impl<T: AsmGen> Jitter<T> {
                 },
                 OpCode::Div(_) => todo!(),
                 OpCode::Mul(t) => match t {
-                    DataType::Int => {
+                    RawDataType::Int => {
                         let r2 = self.stack.pop().unwrap();
                         let r1 = self.stack.pop().unwrap();
                         self.gen.imul(r1.into(), r2.into());
@@ -496,7 +496,7 @@ impl<T: AsmGen> Jitter<T> {
                     todo!()
                 }
                 OpCode::Greater(t) => match t {
-                    DataType::Int | DataType::Bool | DataType::Char => {
+                    RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
                         let r2 = self.stack.pop().unwrap();
                         let r1 = self.stack.pop().unwrap();
 
@@ -514,7 +514,7 @@ impl<T: AsmGen> Jitter<T> {
                     _ => todo!(),
                 },
                 OpCode::Less(t) => match t {
-                    DataType::Int | DataType::Bool | DataType::Char => {
+                    RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
                         let r2 = self.stack.pop().unwrap();
                         let r1 = self.stack.pop().unwrap();
 
@@ -562,11 +562,11 @@ impl<T: AsmGen> Jitter<T> {
                     self.genCall(namespace.id, *id, returns, argsCount, f.localsMeta.len())
                 }
                 OpCode::LCall { namespace, id } => {
-                    let f = &vm.getNamespace(*namespace).getFunction(*id).0;
+                    let f = &vm.getNamespace(*namespace as usize).getFunction(*id as usize).0;
                     let returns = f.returns();
                     let argsCount = f.argsCount;
 
-                    self.genCall(*namespace, *id, returns, argsCount, f.localsMeta.len())
+                    self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
                 }
                 OpCode::GetLocalZero => {
                     let r = aqireReg();
@@ -616,7 +616,7 @@ impl<T: AsmGen> Jitter<T> {
                     self.releaseRegister(r2);
                     self.stack.push(r1)
                 }
-                OpCode::ArrayNew(t) => {
+                OpCode::ArrayNew => {
                     todo!()
                 }
                 e => todo!("{:?}", e),

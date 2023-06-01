@@ -149,15 +149,13 @@ impl Object for Str {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Array {
-    pub internal: Vec<Value>,
-    pub typ: DataType,
+    pub internal: Vec<Value>
 }
 
 impl Array {
-    pub fn new(typ: DataType) -> Self {
+    pub fn new() -> Self {
         Self {
-            internal: vec![],
-            typ,
+            internal: vec![]
         }
     }
 }
@@ -165,14 +163,18 @@ impl Array {
 impl Allocation for Array {
     fn collectAllocations(&self, allocations: &mut HayCollector) {
         allocations.visit(self as *const Self as usize);
-        if let DataType::Object(_a) = &self.typ {
+
+        // FIXME
+        println!("FIXME visit all children")
+
+/*        if let DataType::Object(_a) = &self.typ {
             for obj in &self.internal {
                 match obj.asRef::<Xd>().meta.objectType {
                     ObjectType::Simple(_) => todo!(),
                     ObjectType::Native(_) => todo!(),
                 }
             }
-        }
+        }*/
     }
 }
 

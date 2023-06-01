@@ -123,7 +123,7 @@ impl Value {
     pub fn asHay<T: Allocation + Debug>(&self) -> Hay<ViplObject<T>> {
         let casted = self.asHayUntyped().inner as *mut ViplObject<T>;
 
-        return Hay::new(casted);
+        Hay::new(casted)
     }
 
     #[inline(always)]
@@ -480,10 +480,10 @@ impl Value {
     }
 
     #[inline]
-    pub fn makeArray(arr: Vec<Value>, typ: DataType, vm: &mut VirtualMachine) -> Value {
+    pub fn makeArray(arr: Vec<Value>, vm: &mut VirtualMachine) -> Value {
         Value {
             Reference: vm
-                .allocate(ViplObject::<Array>::arr(Array { internal: arr, typ }))
+                .allocate(ViplObject::<Array>::arr(Array { internal: arr }))
                 .into(),
         }
     }

@@ -1,4 +1,4 @@
-use crate::vm::dataType::DataType::*;
+use crate::vm::dataType::RawDataType;
 use crate::vm::vm::OpCode;
 use crate::vm::vm::OpCode::*;
 
@@ -9,9 +9,9 @@ pub fn optimizeBytecode(b: Vec<OpCode>) -> Vec<OpCode> {
             PushInt(1) => PushIntOne,
             GetLocal { index: 0 } => GetLocalZero,
             SetLocal { index: 0 } => SetLocalZero,
-            Mul(Int) => MulInt,
-            Sub(Int) => SubInt,
-            Less(Int) => LessInt,
+            Mul(RawDataType::Int) => MulInt,
+            Sub(RawDataType::Int) => SubInt,
+            Less(RawDataType::Int) => LessInt,
             v => v,
         })
         .collect::<Vec<_>>()
