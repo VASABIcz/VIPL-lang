@@ -1,12 +1,7 @@
+import out
+
 x = 10
-x
-x
-x
-x
-x
-x
-x
-x
+
 x
 
 out::print("hello there")

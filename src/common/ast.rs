@@ -233,10 +233,13 @@ impl ASTNode {
     pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
         match self {
             ASTNode::Expr(e) => Ok(e),
-            _ => Err(ParserError::Unknown(Box::new(InvalidOperation {
-                operation: self.clone(),
-                expected: "Expression".to_string(),
-            }))),
+            _ => {
+                panic!();
+                Err(ParserError::Unknown(Box::new(InvalidOperation {
+                    operation: self.clone(),
+                    expected: "Expression".to_string(),
+                })))
+            },
         }
     }
 

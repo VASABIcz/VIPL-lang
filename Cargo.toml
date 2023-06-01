@@ -9,12 +9,12 @@ rustflags = ["-C target-cpu=native"]
 [profile.release]
 lto = true
 codegen-units = 1
-panic = "abort"
+# panic = "abort"
 opt-level = 3
-strip = true
-debug = false
-overflow-checks = false
-debug-assertions = false
+strip = false
+debug = true
+overflow-checks = true
+debug-assertions = true
 
 [[bin]]
 name = "repl"
@@ -24,18 +24,6 @@ path = "src/repl/main.rs"
 name = "compiler"
 path = "src/compiler/main.rs"
 
-[[bin]]
-name = "native"
-path = "src/native/main.rs"
-
-[[bin]]
-name = "testing"
-path = "src/testing/main.rs"
-
-[[bin]]
-name = "namespaced"
-path = "src/namespaced/main.rs"
-
 [lib]
 mame = "common"
 path = "src/common/lib.rs"
@@ -43,7 +31,5 @@ path = "src/common/lib.rs"
 
 
 [dependencies]
-# libloading = "0.7.4"
-# lazy_static = "*"
 libc = "0.2"
 offset = "0.1.4"

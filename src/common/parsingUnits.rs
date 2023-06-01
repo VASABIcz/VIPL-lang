@@ -728,7 +728,7 @@ struct CallableParsingUnit;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
-        Around
+        Behind
     }
 
     fn canParse(
@@ -1182,7 +1182,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.tokens.isPeekTypeOf(|it| VALID_EXPRESSION_TOKENS.contains(&it)) && parser.isPrevCallable()
+        parser.tokens.isPeekTypeOf(|it| VALID_EXPRESSION_TOKENS.contains(&it))
+            && parser.isPrevCallable()
+            && parser.tokens.isPeekSameRow()
     }
 
     fn parse(
@@ -1221,6 +1223,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         parser: &VIPLParser
     ) -> bool {
         parser.isPrevExp()
+            && parser.tokens.isPeekSameRow()
             && parser.tokens.isPeekType(Identifier)
             && parser.tokens.isPeekOffsetOneOf(&VALID_EXPRESSION_TOKENS, 1)
     }

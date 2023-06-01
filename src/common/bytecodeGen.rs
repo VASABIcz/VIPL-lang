@@ -212,15 +212,12 @@ impl ExpressionCtx<'_> {
 
 impl PartialExprCtx<'_> {
     pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Result<String, CodeGenError> {
-        todo!()
-/*        let idk = format!("{}::{}(", self.currentNamespace.get_mut().name, name);
-
-        for (k, _) in self.functionReturns {
-            if k.as_str().starts_with(&idk) {
+        for (k, v) in &self.symbols.functions {
+            if k.as_str().starts_with(&name) {
                 return Ok(k.to_string());
             }
         }
-        return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)));*/
+        return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)));
     }
 
     pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
@@ -944,15 +941,16 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::ForLoop(var, arr, body) => {
-            let varId = ctx.specify().getVariable(var)?.1;
             let endLabel = ctx.nextLabel();
-
-            // BEGIN
+            let t = ctx.makeExpressionCtx(arr, None).toDataType()?.assertNotVoid()?.getArrayType()?;
 
             // iteration counter
             ctx.push(PushIntZero);
 
             ctx.beginLoop();
+
+            ctx.registerVariable(var, t);
+            let varId = ctx.specify().getVariable(var)?.1;
 
             ctx.push(Dup);
 
@@ -975,8 +973,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.push(SetLocal { index: varId });
 
             body.generate(ctx.deflate())?;
-
-            ctx.opJmp(endLabel, True);
 
             ctx.push(PushIntOne);
             ctx.push(Add(DataType::Int));

@@ -1,3 +1,4 @@
+import out
 
 fn calc(max: int): int {
     x = 1

@@ -1,105 +1,72 @@
-extern crate rust_vm;
+#![feature(slice_ptr_get)]
 
-use std::collections::HashMap;
-use std::error::Error;
-use std::rc::Rc;
+use std::{env, fs};
+use std::process::exit;
 use std::time::Instant;
 
-use rust_vm::codegen::bytecodeGen2;
-use rust_vm::fs::setupFs;
-use rust_vm::lexer::tokenizeSource;
-use rust_vm::parser::parseTokens;
-use rust_vm::std::bootStrapVM;
-use rust_vm::vm::{evaluateBytecode2, StackFrame};
-
-fn handleError(err: Box<dyn Error>) {
-    eprintln!("ERROR: {err}");
-    eprintln!("ERROR: {err:?}");
-}
+use vipl::lexer::lexingUnits;
+use vipl::parsingUnits::parsingUnits;
+use vipl::std::std::bootStrapVM;
+use vipl::utils::namespacePath;
+use vipl::vm::namespace::{loadSourceFile, Namespace};
+use vipl::vm::stackFrame::StackFrame;
+use vipl::vm::vm::VirtualMachine;
 
 fn main() {
-    let now = Instant::now();
-    let sourceFile = std::env::args().nth(1).expect("expected source field");
-
-    let src = std::fs::read_to_string(sourceFile).expect("failed to read source");
-
     let mut vm = bootStrapVM();
-    // let mut localTypes = vec![];
-    setupFs(&mut vm);
 
-    let tokens = match tokenizeSource(&src) {
+    let mut lexingUnits = lexingUnits();
+    let mut parsingUnits = parsingUnits();
+
+    let sourceFile = env::args().nth(1).expect("expected source field");
+    let name = namespacePath(&sourceFile);
+
+    let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm, &mut lexingUnits, &mut parsingUnits) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("tokenizer");
-            handleError(e);
-            return;
+            e.printUWU(&sourceFile);
+            exit(0);
         }
     };
 
-    if tokens.is_empty() {
-        return;
+    // println!("AST: {:?}", res);
+
+    let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
+    let id = vm.registerNamespace(n);
+
+
+    vm.link().unwrap();
+
+    let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;
+
+    let nn = vm.getNamespace(id);
+
+    let (fMeta, f) = nn.getFunctions().last().unwrap();
+    let xd = fMeta
+        .localsMeta
+        .iter()
+        .map(|it| it.typ.toDefaultValue())
+        .collect::<Vec<_>>();
+    let now = Instant::now();
+
+    let ptr = Box::into_raw(xd.into_boxed_slice());
+
+    unsafe {
+        f.as_ref().unwrap().call(
+            &mut *vm1,
+            StackFrame {
+                localVariables: ptr.as_mut_ptr(),
+                programCounter: 0,
+                namespaceId: nn.id,
+                functionId: nn.getFunctions().len() - 1,
+            },
+            false,
+        );
     }
-
-    // println!("tokens {:?}", &tokens);
-
-    let ast = match parseTokens(tokens) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("parser");
-            handleError(e);
-            return;
-        }
-    };
-
-    // println!("{:?}", &vm.functions.keys());
-
-    let mut rets = HashMap::new();
-
-    for f in &vm.functions {
-        rets.insert(f.0.clone(), f.1.returnType.clone());
+    let elapsed = now.elapsed();
+    unsafe { Box::from_raw(ptr) };
+    println!("Elapsed: {:.2?}", elapsed);
+    if vm.stackSize() != 0 {
+        panic!("something went wrong :(")
     }
-
-    let mut bs = match bytecodeGen2(ast, &mut rets) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("codegen");
-            handleError(e);
-            return;
-        }
-    };
-
-    println!("{:?}", &bs.0);
-
-    /*
-    match checkBytecode(&mut SeekableOpcodes {
-        index: 0,
-        opCodes: &bs.0,
-        start: None,
-        end: None,
-    }, &mut bs.1, &mut AbstractStack { stack: vec![] }, &mut vm, &mut HashSet::new()) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("bytecode check");
-            handleError(e);
-            return;
-        }
-    }
-
-     */
-    vm.addOpcodes(bs.0);
-    let mut res =
-        bs.1.iter()
-            .map(|it| it.toDefaultValue())
-            .collect::<Vec<_>>();
-    vm.pushFrame(StackFrame::new(&mut res));
-
-    let e = now.elapsed();
-    println!("compiled in: {e:.2?}");
-
-    let a = Instant::now();
-
-    vm.execute();
-
-    let elapsed = a.elapsed();
-    println!("finished in: {elapsed:.2?}");
 }

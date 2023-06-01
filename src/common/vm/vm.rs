@@ -419,6 +419,11 @@ impl VirtualMachine {
     #[inline(always)]
     pub fn getMutTop(&self) -> &mut Value {
         let s = self.stack.len();
+
+        if s == 0 {
+            panic!()
+        }
+
         unsafe {
             (&mut *(&self.stack as *const Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
         }
@@ -584,7 +589,15 @@ impl VirtualMachine {
             };
 
             if TRACE {
-                println!("evaluating {:?}", op);
+                match op {
+                    SCall{ id } => {
+                        println!("evaluating {:?} {}", op, self.currentNamespace().getFunction(*id).0.genName());
+                    }
+                    LCall { namespace, id } => {
+                        println!("evaluating {:?} {}", op, self.getNamespace(*namespace).getFunction(*id).0.genName());
+                    }
+                    _ => println!("evaluating {:?}", op),
+                }
             }
 
             match op {

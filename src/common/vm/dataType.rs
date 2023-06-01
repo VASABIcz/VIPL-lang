@@ -22,6 +22,12 @@ pub enum DataType {
 }
 
 impl DataType {
+    // FIXME
+    pub fn getArrayType(&self) -> Result<DataType, CodeGenError> {
+        let a = self.asArray()?;
+        a.generics.first().unwrap().clone().ok_or(CodeGenError::UntypedEmptyArray)
+    }
+
     pub fn assertType(&self, t: DataType) -> Result<DataType, CodeGenError> {
         if self == &t {
             Ok(t)

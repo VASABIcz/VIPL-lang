@@ -50,6 +50,17 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
+    pub fn isPeekSameRow(&self) -> bool {
+        if self.index == 0 {
+            return true
+        }
+
+        match self.peekOne() {
+            None => false,
+            Some(v) => v.location.row == self.tokens.get(self.index-1).unwrap().location.row,
+        }
+    }
+
     pub fn isPeekIndexRow(&self, index: usize, row: usize) -> bool {
         match self.peekIndex(index) {
             None => false,
@@ -328,7 +339,8 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
             self.previousBuf.push(v.parse(s2)?);
         }
 
-        if let Some(v) = self.getParsingUnit(Around) {
+        // FIXME just a quick workaround
+        while let Some(v) = self.getParsingUnit(Around) {
             self.previousBuf.push(v.parse(s2)?);
         }
 
