@@ -2,13 +2,13 @@
 
 import os
 
-bRes = os.system("cargo build --package vipl --release --bin namespaced")
+bRes = os.system("cargo build --package vipl --release --bin compiler")
 
 if bRes != 0:
     print("build failed")
     exit(-1)
 
-bRes = os.system("cargo build --package vipl --bin namespaced")
+bRes = os.system("cargo build --package vipl --bin compiler")
 
 if bRes != 0:
     print("build failed")
