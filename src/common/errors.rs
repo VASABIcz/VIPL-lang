@@ -6,8 +6,72 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::FromResidual;
+use strum_macros::{Display, IntoStaticStr};
 use crate::lexingUnits::{Stringable, TokenType};
+
+impl VIPLError for CodeGenError {
+    fn getDomain(&self) -> String {
+        String::from("Codegen")
+    }
+
+    fn getType(&self) -> String {
+        self.to_string()
+    }
+
+    fn getLocation(&self) -> Option<Location> {
+        None
+    }
+
+    fn getSource(&self) -> Option<String> {
+        None
+    }
+
+    fn getMessage(&self) -> Option<String> {
+        Some(match self {
+            CodeGenError::TypeError(a) => format!("expected {} got {}", a.expected.toString(), a.actual.toString()),
+            CodeGenError::SymbolNotFound(b) => format!("symbol \"{}\" of type {} not found", b.name, b.typ),
+            _ => {
+                return None;
+            }
+        })
+    }
+}
+
+pub trait VIPLError: Debug {
+    fn getDomain(&self) -> String;
+    fn getType(&self) -> String;
+    fn getLocation(&self) -> Option<Location>;
+    fn getSource(&self) -> Option<String>;
+    fn getMessage(&self) -> Option<String>;
+
+    fn printUWU(&self) {
+        let domain = self.getDomain();
+        let typ = self.getType();
+        let location = self.getLocation();
+        let src = self.getSource();
+
+        let message = match self.getMessage() {
+            None => format!("{:?}", self),
+            Some(v) => v
+        };
+
+        eprintln!(
+            "\x1b[31merror\x1b[0m[\x1b[35m{}\x1b[0m:\x1b[36m{}\x1b[0m]\x1b[0m: {}",
+            domain, typ, message
+        );
+
+        match src {
+            None => {}
+            Some(filePath) => {
+                if let Some(l) = location {
+                    eprintln!("  -> {}:{}:{}", filePath, l.row + 1, l.col + 1)
+                } else {
+                    eprintln!("  -> {}", filePath)
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct NoValue {
@@ -76,11 +140,11 @@ pub struct UnknownToken {
 }
 
 impl Display for UnknownToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "failed to parse remaining source: \"{}\"",
-            self.source.replace("\n", "").escape_debug()
+            self.source.replace('\n', "").escape_debug()
         )
     }
 }
@@ -180,7 +244,7 @@ impl Display for LexerError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum ParserError<T: PartialEq + Clone + Debug> {
     InvalidToken(InvalidToken<T>),
     NoSuchParsingUnit(NoSuchParsingUnit<T>),
@@ -188,19 +252,6 @@ pub enum ParserError<T: PartialEq + Clone + Debug> {
     InvalidOperation(InvalidOperation),
     NoToken,
     Unknown(Box<dyn Error>),
-}
-
-impl<T: PartialEq + Clone + Debug> Display for ParserError<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParserError::InvalidToken(v) => write!(f, "{}", v),
-            ParserError::NoSuchParsingUnit(v) => write!(f, "{}", v),
-            ParserError::InvalidCharLiteral(v) => write!(f, "{}", v),
-            ParserError::Unknown(v) => write!(f, "{}", v),
-            ParserError::InvalidOperation(v) => write!(f, "{}", v),
-            ParserError::NoToken => write!(f, "NoToken")
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -218,99 +269,73 @@ impl<T: PartialEq + Clone + Debug> Display for LoadFileError<T> {
     }
 }
 
-impl<T: Clone + Debug + PartialEq> LoadFileError<T> {
-    pub fn getDomain(&self) -> &'static str {
+impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
+    fn getDomain(&self) -> String {
+        String::from("Parser")
+    }
+
+    fn getType(&self) -> String {
+        self.to_string()
+    }
+
+    fn getLocation(&self) -> Option<Location> {
         match self {
-            LoadFileError::ParserError(_) => "Parser",
-            LoadFileError::LexerError(_) => "Lexer",
+            ParserError::InvalidToken(a) => a.actual.clone().map(|it| it.location),
+            _ => None
         }
     }
 
-    pub fn getType(&self) -> &'static str {
-        match self {
-            LoadFileError::ParserError(v) => match v {
-                ParserError::InvalidToken(_) => "InvalidToken",
-                ParserError::NoSuchParsingUnit(_) => "NoSuchParsingUnit",
-                ParserError::InvalidCharLiteral(_) => "InvalidCharLiteral",
-                ParserError::Unknown(_) => "Unknown",
-                ParserError::InvalidOperation(_) => "InvalidOperation",
-                ParserError::NoToken => "NoToken"
-            },
-            LoadFileError::LexerError(v) => match v {
-                LexerError::UnknownToken(_) => "UnknownToken",
-                LexerError::NotEnoughCharacters(_, _) => "NotEnoughCharacters",
-                LexerError::ReachedEOF(_) => "ReachedEOF",
-                LexerError::Unknown(_, _) => "Unknown",
-                LexerError::ExpectedChar(_, _) => "ExpectedChar"
-            },
-        }
+    fn getSource(&self) -> Option<String> {
+        None
     }
 
-    pub fn getLocation(&self) -> Option<Location> {
-        match self {
-            LoadFileError::ParserError(v) => match v {
-                ParserError::InvalidToken(t) => t.actual.as_ref().map(|it| it.location),
-                ParserError::NoSuchParsingUnit(t) => t.token.as_ref().map(|it| it.location),
-                ParserError::InvalidCharLiteral(t) => Some(t.token.location),
-                ParserError::Unknown(e) => None,
-                ParserError::InvalidOperation(v) => None,
-                ParserError::NoToken => None
-            },
-            LoadFileError::LexerError(v) => match v {
-                LexerError::UnknownToken(t) => Some(t.location),
-                LexerError::NotEnoughCharacters(_, l) => Some(*l),
-                LexerError::ReachedEOF(e) => Some(*e),
-                LexerError::Unknown(e, l) => *l,
-                LexerError::ExpectedChar(_, l) => Some(*l)
-            },
-        }
+    fn getMessage(&self) -> Option<String> {
+        let a = match self {
+            ParserError::InvalidToken(a) => format!("invalid token, expected {:?} to be {:?}",a.actual, a.expected),
+            ParserError::NoSuchParsingUnit(v) => format!("no such {:?} parsing unit to parse token {:?}", v.typ, v.token),
+            ParserError::InvalidCharLiteral(l) => format!("\'{}\' is invalid char literal", l.token.str),
+            ParserError::InvalidOperation(v) => format!("expected {:?} to be {}", v.operation, v.expected),
+            ParserError::NoToken => format!(""),
+            ParserError::Unknown(_) => format!("")
+        };
+
+        Some(a)
     }
 }
 
-impl LoadFileError<TokenType> {
-    pub fn betterMessage(&self) -> Option<String> {
+impl VIPLError for LexerError {
+    fn getDomain(&self) -> String {
+        String::from("Lexer")
+    }
+
+    fn getType(&self) -> String {
+        self.to_string()
+    }
+
+    fn getLocation(&self) -> Option<Location> {
         match self {
-            LoadFileError::ParserError(v) => match v {
-                ParserError::InvalidToken(e) => match &e.actual {
-                    None => Some(format!(
-                        "expected {:?} `{}`, got None",
-                        e.expected,
-                        e.expected.toStr()
-                    )),
-                    Some(v) => Some(format!(
-                        "expected {:?} `{}`, got {:?} `{}`",
-                        e.expected,
-                        e.expected.toStr(),
-                        v.typ,
-                        v.typ.toStr()
-                    )),
-                },
-                _ => None,
-            },
-            _ => None,
+            LexerError::UnknownToken(a) => Some(a.location),
+            LexerError::NotEnoughCharacters(a, b) => Some(*b),
+            LexerError::ReachedEOF(a) => Some(*a),
+            LexerError::ExpectedChar(a, b) => Some(*b),
+            LexerError::Unknown(a, b) => *b
         }
     }
 
-    pub fn printUWU(&self, filePath: &str) {
-        let domain = self.getDomain();
-        let typ = self.getType();
-        let location = self.getLocation();
+    fn getSource(&self) -> Option<String> {
+        None
+    }
 
-        let message = match self.betterMessage() {
-            Some(v) => v,
-            None => format!("{}", self),
+    fn getMessage(&self) -> Option<String> {
+        let a = match self {
+            LexerError::UnknownToken(v) => format!("failed to parse remaining source: \"{}\"", v),
+            LexerError::NotEnoughCharacters(a, b) => "not enough characters to parse next token".to_string(),
+            LexerError::ReachedEOF(_) => "unexpectedly reached end of line".to_string(),
+            LexerError::ExpectedChar(c, a) => format!("expected \"{}\"", c),
+            LexerError::Unknown(a, b) => format!("{}", a)
         };
 
-        eprintln!();
-        eprintln!(
-            "\x1b[31merror\x1b[0m[\x1b[35m{}\x1b[0m:\x1b[36m{}\x1b[0m]\x1b[0m: {}",
-            domain, typ, message
-        );
-        if let Some(l) = location {
-            eprintln!("  -> {}:{}:{}", filePath, l.row + 1, l.col + 1)
-        } else {
-            eprintln!("  -> {}", filePath)
-        }
+        Some(a)
     }
 }
 
@@ -333,7 +358,7 @@ pub struct TypeError {
     pub exp: Option<Expression>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Display)]
 pub enum SymbolType {
     Function,
     Variable,
@@ -386,7 +411,7 @@ impl SymbolNotFoundE {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum CodeGenError {
     CannotAssignVoid,
     TypeError(TypeError),

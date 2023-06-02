@@ -13,7 +13,8 @@ pub struct SymbolManager {
     pub structs: HashMap<String, (StructMeta, usize, usize)>,
     pub globals: HashMap<String, (DataType, usize, usize)>,
     pub locals: Vec<VariableMetadata>,
-    pub frames: Vec<HashMap<String, (DataType, usize)>>
+    pub frames: Vec<HashMap<String, (DataType, usize)>>,
+    usedLocals: usize
 }
 
 impl SymbolManager {
@@ -24,6 +25,7 @@ impl SymbolManager {
             globals: Default::default(),
             locals: vec![],
             frames: vec![],
+            usedLocals: 0,
         }
     }
 
@@ -34,9 +36,7 @@ impl SymbolManager {
     pub fn exitScope(&mut self) {
         let f = self.frames.pop().unwrap();
 
-        for _ in 0..f.len() {
-            self.locals.pop();
-        }
+        self.usedLocals -= f.len();
     }
     
     pub fn getFunctionsByName(&self, name: &str) -> Vec<(&String, &(Vec<DataType>, DataType, usize, usize))> {
@@ -79,8 +79,12 @@ impl SymbolManager {
     }
 
     pub fn registerLocal(&mut self, name: &str, typ: DataType) {
-        self.locals.push(VariableMetadata::n(name, typ.clone()));
-        self.frames.last_mut().unwrap().insert(name.to_string(), (typ, self.locals.len()-1));
+        if self.usedLocals >= self.locals.len() {
+            self.locals.push(VariableMetadata::n(name, typ.clone()));
+        }
+
+        self.frames.last_mut().unwrap().insert(name.to_string(), (typ, self.usedLocals));
+        self.usedLocals += 1;
     }
 
     pub fn registerFunction(&mut self, name: String, namespaceId: usize, functionId: usize, args: Vec<DataType>, ret: DataType) {

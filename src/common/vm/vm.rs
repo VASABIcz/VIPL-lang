@@ -17,7 +17,7 @@ use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 use crate::ffi::NativeWrapper;
 use crate::symbolManager::SymbolManager;
-use crate::utils::{FastVec, genFunName, readNeighbours, transform};
+use crate::utils::{FastVec, genFunName, printOps, readNeighbours, transform};
 use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
@@ -47,7 +47,7 @@ pub enum ImportHints {
 
 // FIXME DEBUG is faster than default
 const DEBUG: bool = true;
-const TRACE: bool = false;
+const TRACE: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -966,14 +966,15 @@ impl VirtualMachine {
                             optimizeBytecode(r)
                         });
 
-                        println!("w {:?}", ops);
                         let opz = branchOmit(ops).0;
 
-                        if DEBUG {
-                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opz);
-                        }
 
                         let opt = emitOpcodes(opz)?;
+
+                        if DEBUG {
+                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opt);
+                            println!("{:?}", f.localsMeta);
+                        }
 
                         // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
                         // *a = Some(Native(nf))

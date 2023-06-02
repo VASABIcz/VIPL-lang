@@ -370,3 +370,9 @@ pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(
 
     buf
 }
+
+pub fn printOps(ops: &[OpCode]) {
+    for op in ops {
+        println!("{:?}", op)
+    }
+}

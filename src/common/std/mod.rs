@@ -6,3 +6,4 @@ pub mod vm;
 pub mod os;
 pub mod regix;
 pub mod std;
+pub mod test;

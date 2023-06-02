@@ -114,12 +114,13 @@ impl StructMeta {
 impl FunctionMeta {
     pub fn toFunctionType(&self) -> DataType {
         DataType::Function {
+            ret: Box::new(self.returnType.clone()),
             args: self
                 .localsMeta
                 .iter()
+                .take(self.argsCount)
                 .map(|it| it.typ.clone())
                 .collect::<Vec<_>>(),
-            ret: Box::new(self.returnType.clone()),
         }
     }
 }

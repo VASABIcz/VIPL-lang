@@ -33,3 +33,5 @@ path = "src/common/lib.rs"
 [dependencies]
 libc = "0.2"
 offset = "0.1.4"
+strum = "0.24"
+strum_macros = "0.24"

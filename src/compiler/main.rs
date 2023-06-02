@@ -5,7 +5,8 @@ use std::mem::size_of;
 use std::process::exit;
 use std::time::Instant;
 
-use vipl::lexingUnits::lexingUnits;
+use vipl::errors::{LoadFileError, VIPLError};
+use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
@@ -25,7 +26,10 @@ fn main() -> Result<(), ()> {
     let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm, &mut lexingUnits, &mut parsingUnits) {
         Ok(v) => v,
         Err(e) => {
-            e.printUWU(&sourceFile);
+            match e {
+                LoadFileError::ParserError(a) => a.printUWU(),
+                LoadFileError::LexerError(a) => a.printUWU()
+            }
             return Err(())
         }
     };

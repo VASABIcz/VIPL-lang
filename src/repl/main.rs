@@ -6,7 +6,8 @@ use std::process::exit;
 
 use vipl::ast::{ASTNode, Statement};
 use vipl::bytecodeGen::Body;
-use vipl::lexingUnits::lexingUnits;
+use vipl::errors::{LoadFileError, VIPLError};
+use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
@@ -31,11 +32,6 @@ fn readInput() -> String {
     }
 
     buf
-}
-
-fn handleError(err: Box<dyn Error>) {
-    eprintln!("ERROR: {err}");
-    eprintln!("ERROR: {err:?}");
 }
 
 fn main() {
@@ -103,7 +99,10 @@ fn main() {
         let v = match loadSourceFile(userInput, &mut vm, &mut lexingUnits, &mut parsingUnits) {
             Ok(v) => v,
             Err(e) => {
-                println!("parse error {}", e);
+                match e {
+                    LoadFileError::ParserError(a) => a.printUWU(),
+                    LoadFileError::LexerError(a) => a.printUWU()
+                }
                 continue;
             }
         };
@@ -134,7 +133,7 @@ fn main() {
             match (&mut *d).link() {
                 Ok(_) => {}
                 Err(e) => {
-                    println!("link error {:?}", e);
+                    e.printUWU();
                     continue;
                 }
             }
