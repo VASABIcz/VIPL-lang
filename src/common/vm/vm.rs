@@ -378,7 +378,7 @@ impl VirtualMachine {
             }
         } else {
             let mut res =
-                unsafe { &mut *(&self.stack as *const Vec<Value> as *mut FastVec<Value>) };
+                unsafe { &mut *(&mut self.stack as *mut Vec<Value> as *mut FastVec<Value>) };
 
             unsafe { res.size = res.size.unchecked_sub(amount) };
         }
@@ -414,7 +414,7 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn getMutTop(&self) -> &mut Value {
+    pub fn getMutTop(&mut self) -> &mut Value {
         let s = self.stack.len();
 
         if s == 0 {
@@ -422,7 +422,7 @@ impl VirtualMachine {
         }
 
         unsafe {
-            (*(&self.stack as *const Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
+            (*(&mut self.stack as *mut Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
         }
     }
 
@@ -454,16 +454,17 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn getMutFrame(&self) -> &mut StackFrame {
+    pub fn getMutFrame(&mut self) -> &mut StackFrame {
+        let l = self.frames.len();
         unsafe {
-            (*(self as *const VirtualMachine as *mut VirtualMachine))
+            self
                 .frames
-                .get_unchecked_mut(self.frames.len().unchecked_sub(1))
+                .get_unchecked_mut(l.unchecked_sub(1))
         }
     }
 
     #[inline(always)]
-    pub fn nextOpcode2<'a>(&'a self, ops: &'a [OpCode]) -> (Option<&OpCode>, usize) {
+    pub fn nextOpcode2<'a>(&'a mut self, ops: &'a [OpCode]) -> (Option<&OpCode>, usize) {
         let x = self.getMutFrame();
         let a = x.programCounter;
         unsafe {
@@ -494,10 +495,10 @@ impl VirtualMachine {
     }
 
     #[inline]
-    pub fn getMutLocal(&self, usize: usize) -> &mut Value {
+    pub fn getMutLocal(&mut self, usize: usize) -> &mut Value {
         let i = self.frames.len() - 1;
         unsafe {
-            (*(&self.frames as *const Vec<StackFrame> as *mut Vec<StackFrame>))
+            self.frames
                 .get_unchecked_mut(i)
                 .getRefMut(usize)
         }
@@ -535,13 +536,11 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn call(&mut self, namespaceId: usize, functionId: usize) {
-        let mother = self as *mut VirtualMachine;
-        let self1 = unsafe { &mut *mother };
+        let mut mother = self.getNaughty();
+        let vm = mother.getMut();
 
         let namespace = self.getNamespace(namespaceId);
         let (fMeta, f) = namespace.getFunction(functionId);
-        let vm = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
-
         for _ in 0..fMeta.localsMeta.len() - fMeta.argsCount {
             vm.push(Value::null());
         }
@@ -568,7 +567,7 @@ impl VirtualMachine {
 
         let ret = x.call(vm, fs, fMeta.returns());
 
-        self1.popAmount(fMeta.localsMeta.len());
+        vm.popAmount(fMeta.localsMeta.len());
 
         if fMeta.returns {
             self.push(ret)
