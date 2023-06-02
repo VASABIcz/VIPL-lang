@@ -208,7 +208,6 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 None => finaly.push(op),
             }
             OpCode::PushInt(v) => constStack.push(v.into()),
-            OpCode::PushFunction(_, _) => {}
             OpCode::PushFloat(v) => constStack.push(v.into()),
             OpCode::PushBool(v) => constStack.push(v.into()),
             OpCode::PushChar(v) => constStack.push((v as isize).into()),
@@ -216,7 +215,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 None => finaly.push(op),
                 Some(_) => {}
             },
-            OpCode::Dup if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Dup if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -242,7 +241,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 None => finaly.push(op),
             },
-            OpCode::Add(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Add(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let b = constStack.pop().unwrap();
                     let mut a = constStack.pop().unwrap();
@@ -257,7 +256,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Sub(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Sub(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let b = constStack.pop().unwrap();
                     let mut a = constStack.pop().unwrap();
@@ -272,7 +271,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Div(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Div(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let b = constStack.pop().unwrap();
                     let mut a = constStack.pop().unwrap();
@@ -302,7 +301,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => finaly.push(op),
             },
-            OpCode::Equals(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Equals(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -317,7 +316,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Greater(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Greater(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -332,7 +331,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Less(_) if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Less(_) if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -347,7 +346,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Or if constStack.len() >= 1 => match constStack.len() {
+            OpCode::Or if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -362,7 +361,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::And if constStack.len() >= 1 => match constStack.len() {
+            OpCode::And if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let mut a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -377,7 +376,7 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 }
                 _ => unreachable!(),
             },
-            OpCode::Not if constStack.len() >= 1 => match constStack.pop() {
+            OpCode::Not if !constStack.is_empty() => match constStack.pop() {
                 Some(mut v) => {
                     v.logNot();
 
