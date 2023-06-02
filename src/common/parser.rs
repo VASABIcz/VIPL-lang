@@ -16,6 +16,7 @@ use crate::bytecodeGen::Body;
 use crate::errors::{InvalidToken, NoSuchParsingUnit, ParserError, SymbolType};
 
 use crate::lexer::{SourceProvider, Token};
+use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parsingUnits::{parsingUnits};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};

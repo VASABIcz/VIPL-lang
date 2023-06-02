@@ -10,6 +10,7 @@ use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
 use crate::lexingUnits::TokenType;
 use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, Fn, For, From, Global, Identifier, If, Import, In, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
@@ -1386,6 +1387,8 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        let mut xd = Naughty::new(parser);
+
         let prev = parser.prevPop()?.asExpr()?;
         parser.tokens.consume();
         let res = parser.parseOneJust(Ahead)?;
@@ -1406,11 +1409,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
             },
             Some(p) => unsafe {
                if self.priority < p.getPriority() {
-                   let xd = &mut *(parser as *const VIPLParser as *mut VIPLParser);
+                   let res = xd.getMut().prevPop()?;
 
-                   let res = xd.prevPop()?;
-
-                   xd.previousBuf.push(
+                   xd.getMut().previousBuf.push(
                        ASTNode::Expr(Expression::BinaryOperation {
                            left: Box::new(prev),
                            right: Box::new(res.asExpr()?),
@@ -1418,11 +1419,11 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
                        }
                    ));
 
-                   Ok(p.parse(xd)?)
+                   Ok(p.parse(xd.getMut())?)
                 } else {
                    Ok(ASTNode::Expr(Expression::BinaryOperation {
                        left: Box::new(prev),
-                       right: Box::new(p.parse(&mut *(parser as *const VIPLParser as *mut VIPLParser))?.asExpr()?),
+                       right: Box::new(p.parse(xd.getMut())?.asExpr()?),
                        op: self.op.clone(),
                    }))
                 }
