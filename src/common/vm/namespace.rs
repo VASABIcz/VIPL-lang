@@ -240,15 +240,15 @@ pub fn callNative(
 impl LoadedFunction {
     #[inline]
     pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) -> Value {
-        let vm2 = unsafe { &mut *vm.rawPtr() };
+        let mut vm2 = vm.getNaughty();
 
         vm.pushFrame(frame);
 
         let a = vm.getMutFrame();
 
         let x = match self {
-            LoadedFunction::BuiltIn(b) => b(vm2, a),
-            LoadedFunction::Native(n) => callNative(n, vm2, a),
+            LoadedFunction::BuiltIn(b) => b(vm2.getMut(), a),
+            LoadedFunction::Native(n) => callNative(n, vm2.getMut(), a),
             LoadedFunction::Virtual(v) => vm.execute(v, returns),
         };
 

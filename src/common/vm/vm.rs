@@ -16,6 +16,7 @@ use crate::bytecodeGen::{
 use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 use crate::ffi::NativeWrapper;
+use crate::naughtyBox::Naughty;
 use crate::symbolManager::SymbolManager;
 use crate::utils::{FastVec, genFunName, printOps, readNeighbours, transform};
 use crate::vm::dataType::{DataType, RawDataType};
@@ -261,8 +262,8 @@ impl VirtualMachine {
     }
 
     #[inline]
-    pub fn rawPtr(&self) -> *mut VirtualMachine {
-        self as *const VirtualMachine as *mut VirtualMachine
+    pub fn getNaughty(&mut self) -> Naughty<Self> {
+        Naughty::new(self as *mut VirtualMachine)
     }
 
     #[inline]
@@ -356,9 +357,9 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn pop(&self) -> Value {
+    pub fn pop(&mut self) -> Value {
         unsafe {
-            (*(self as *const VirtualMachine as *mut VirtualMachine))
+            self
                 .stack
                 .pop()
                 .unwrap()
@@ -366,11 +367,11 @@ impl VirtualMachine {
     }
 
     #[inline(always)]
-    pub fn popAmount(&self, amount: usize) {
+    pub fn popAmount(&mut self, amount: usize) {
         if DEBUG || TRACE {
             for _ in 0..amount {
                 unsafe {
-                    (*(self as *const VirtualMachine as *mut VirtualMachine))
+                    self
                         .stack
                         .pop()
                 };
@@ -534,6 +535,9 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn call(&mut self, namespaceId: usize, functionId: usize) {
+        let mother = self as *mut VirtualMachine;
+        let self1 = unsafe { &mut *mother };
+
         let namespace = self.getNamespace(namespaceId);
         let (fMeta, f) = namespace.getFunction(functionId);
         let vm = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
@@ -564,7 +568,7 @@ impl VirtualMachine {
 
         let ret = x.call(vm, fs, fMeta.returns());
 
-        self.popAmount(fMeta.localsMeta.len());
+        self1.popAmount(fMeta.localsMeta.len());
 
         if fMeta.returns {
             self.push(ret)
@@ -573,11 +577,13 @@ impl VirtualMachine {
 
     #[inline]
     pub fn execute(&mut self, opCodes: &[OpCode], returns: bool) -> Value {
-        let vm = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
-        let vm1 = unsafe { &mut *(self as *const VirtualMachine as *mut VirtualMachine) };
+        let mother = self as *mut VirtualMachine;
+
+        let vm = unsafe { &mut *mother };
+        let vm1 = unsafe { &mut *mother };
 
         loop {
-            let (op1, _) = (&mut *vm1).nextOpcode2(opCodes);
+            let (op1, _) = (*vm1).nextOpcode2(opCodes);
 
             let op = match op1 {
                 None => panic!("F"),
@@ -663,7 +669,7 @@ impl VirtualMachine {
                     self.getMutTop().add(
                         a,
                         &v.toType(),
-                        &mut *(self as *const VirtualMachine as *mut VirtualMachine),
+                        vm1,
                     );
                 },
                 Sub(v) => {
@@ -728,7 +734,7 @@ impl VirtualMachine {
                 }
                 ArrayLength => {
                     self.push(Value {
-                        Num: self.pop().getReference::<Array>().data.internal.len() as isize,
+                        Num: vm.pop().getReference::<Array>().data.internal.len() as isize,
                     });
                 }
                 // FIXME inc is slower than executing: pushLocal, PushOne, Add, SetLocal

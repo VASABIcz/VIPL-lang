@@ -166,6 +166,8 @@ pub extern "C" fn lCall(
     namespaceID: usize,
     rsp: *mut Value,
 ) -> Value {
+    let mut naughty = vm.getNaughty();
+
     if DEBUG {
         println!(
             "[ffi] LCall {:?} {} {} {:?}",
@@ -190,9 +192,7 @@ pub extern "C" fn lCall(
         functionId: functionID,
     };
 
-    let vm2 = unsafe { &mut *vm.rawPtr() };
-
-    let ret = callable.call(vm2, frame, returns);
+    let ret = callable.call(naughty.getMut(), frame, returns);
 
     if DEBUG {
         println!(
