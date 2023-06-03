@@ -5,7 +5,7 @@ use std::io::{BufRead, Write};
 use std::process::exit;
 
 use vipl::ast::{ASTNode, Statement};
-use vipl::bytecodeGen::Body;
+use vipl::bytecodeGen::{Body, ExpressionCtx, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
@@ -34,6 +34,50 @@ fn readInput() -> String {
     buf
 }
 
+fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
+    let mut vm = unsafe { &mut *ctx.vm.get() };
+    let (n, outNamespaceID) = vm.findNamespace("out").unwrap();
+
+    let printInt = n.findFunction("print(int)").unwrap();
+    let printBool = n.findFunction("print(bool)").unwrap();
+    let printFloat = n.findFunction("print(float)").unwrap();
+    let printChar = n.findFunction("print(char)").unwrap();
+    let printString = n.findFunction("print(String)").unwrap();
+    // let printArray = n.findFunction("print(Array)").unwrap();
+
+    match t {
+        DataType::Int => ctx.push(LCall {
+            namespace: outNamespaceID as u32,
+            id: printInt.1 as u32,
+        }),
+        DataType::Float => ctx.push(LCall {
+            namespace: outNamespaceID as u32,
+            id: printFloat.1 as u32,
+        }),
+        DataType::Bool => ctx.push(LCall {
+            namespace: outNamespaceID as u32,
+            id: printBool.1 as u32,
+        }),
+        DataType::Char => ctx.push(LCall {
+            namespace: outNamespaceID as u32,
+            id: printChar.1 as u32,
+        }),
+        DataType::Object(o) => {
+            if o.name == "String" {
+                ctx.push(LCall {
+                    namespace: outNamespaceID as u32,
+                    id: printString.1 as u32,
+                })
+            } else {
+                ctx.push(Pop)
+            }
+        },
+        DataType::Function { .. } => ctx.push(Pop),
+        DataType::Void => {}
+        DataType::Value => ctx.push(Pop)
+    }
+}
+
 fn main() {
     let mut vm = bootStrapVM();
     let mut mainLocals = vec![];
@@ -43,53 +87,6 @@ fn main() {
 
     let n = Namespace::constructNamespace(vec![], "UwU", &mut vm, mainLocals.clone());
     let generatedNamespace = vm.registerNamespace(n);
-
-    unsafe {
-        vm.setHandleExpression(|ctx, t| {
-            let mut vm = &mut *ctx.vm.get();
-            let (n, outNamespaceID) = vm.findNamespace("out").unwrap();
-
-            let printInt = n.findFunction("print(int)").unwrap();
-            let printBool = n.findFunction("print(bool)").unwrap();
-            let printFloat = n.findFunction("print(float)").unwrap();
-            let printChar = n.findFunction("print(char)").unwrap();
-            let printString = n.findFunction("print(String)").unwrap();
-            // let printArray = n.findFunction("print(Array)").unwrap();
-
-            match t {
-                DataType::Int => ctx.push(LCall {
-                    namespace: outNamespaceID as u32,
-                    id: printInt.1 as u32,
-                }),
-                DataType::Float => ctx.push(LCall {
-                    namespace: outNamespaceID as u32,
-                    id: printFloat.1 as u32,
-                }),
-                DataType::Bool => ctx.push(LCall {
-                    namespace: outNamespaceID as u32,
-                    id: printBool.1 as u32,
-                }),
-                DataType::Char => ctx.push(LCall {
-                    namespace: outNamespaceID as u32,
-                    id: printChar.1 as u32,
-                }),
-                DataType::Object(o) => {
-                    if o.name == "String" {
-                        ctx.push(LCall {
-                            namespace: outNamespaceID as u32,
-                            id: printString.1 as u32,
-                        })
-                    }
-                    else {
-                        ctx.push(Pop)
-                    }
-                },
-                DataType::Function { .. } => ctx.push(Pop),
-                DataType::Void => {}
-                DataType::Value => ctx.push(Pop)
-            }
-        });
-    }
 
     let d = &mut vm as *mut VirtualMachine;
 
@@ -130,7 +127,7 @@ fn main() {
         fMeta.functionType = Runtime(Body::new(buf));
 
         unsafe {
-            match (&mut *d).link() {
+            match (&mut *d).link(handleExpression) {
                 Ok(_) => {}
                 Err(e) => {
                     e.printUWU();
