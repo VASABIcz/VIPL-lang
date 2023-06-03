@@ -330,7 +330,6 @@ pub fn getSymbolicChunks(ops: &Vec<SymbolicOpcode>) -> Vec<Vec<OpCode>> {
     for op in ops {
         match op {
             Op(o) => curBuf.push(o.clone()),
-            SymbolicOpcode::LoopEnd | SymbolicOpcode::LoopBegin => {}
             _ => {
                 if !curBuf.is_empty() {
                     buf.push(curBuf);

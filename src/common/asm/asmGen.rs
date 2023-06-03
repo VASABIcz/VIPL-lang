@@ -11,8 +11,9 @@ use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use libc::THOUSEP;
 use offset::offset_of;
 use std::collections::HashMap;
+use std::fmt::Pointer;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 /*
 rdi, rsi, rdx, rcx, r8, r9
@@ -112,18 +113,21 @@ impl<T: AsmGen> Jitter<T> {
             if except.contains(&r) || r == Register::R12 || r == Register::R13 {
                 continue;
             }
-            self.gen.pop(r.into());
+            self.gen.pop(r);
         }
     }
 
-    fn safeCall(&mut self, f: AsmLocation, args: &[AsmValue]) {
+    fn safeCall(&mut self, f: AsmLocation, args: &[AsmValue], ret: Option<Register>) {
         let argsCount = args.len();
+        let mut excluded = vec![];
+        excluded.extend(&ARG_REGS[..argsCount]);
+        excluded.extend(ret);
 
         if argsCount > 6 {
             panic!("more than 6 args is not supported yet")
         }
 
-        self.gen.comment("occupie args registers");
+        self.gen.comment("occupies args registers");
         for (i, arg) in args.iter().enumerate() {
             let r = ARG_REGS[i];
 
@@ -132,8 +136,7 @@ impl<T: AsmGen> Jitter<T> {
             self.gen.mov(r.into(), arg.clone());
         }
 
-        self.saveAquiredRegisters(&ARG_REGS[..argsCount]);
-        self.saveCoreRegisters();
+        self.saveAquiredRegisters(&excluded);
 
         let offset = self.gen.getStackOffset();
 
@@ -141,7 +144,7 @@ impl<T: AsmGen> Jitter<T> {
 
         println!("current offset is {}", offset);
 
-        let needsAlignment = false; // (offset) % 2 == 0;
+        let needsAlignment = (offset) % 2 == 0;
 
         if needsAlignment {
             self.gen.offsetStack(-1);
@@ -150,33 +153,20 @@ impl<T: AsmGen> Jitter<T> {
         self.gen.comment("perform call");
         self.gen.call(f);
 
+        if let Some(r) = ret {
+            self.gen.mov(r.into(), Rax.into())
+        }
+
         if needsAlignment {
             self.gen.offsetStack(1);
         }
 
-        self.restoreCoreRegisters();
-        self.restoreAquiredRegisters(&ARG_REGS[..argsCount]);
+        self.restoreAquiredRegisters(&excluded);
 
         self.gen.comment("restore args registers");
         for i in 0..argsCount {
             self.releaseRegister(ARG_REGS[(argsCount - 1) - i])
         }
-    }
-
-    fn saveCoreRegisters(&mut self) {
-        return;
-        self.gen.comment("saveCoreRegisters");
-        self.gen.push(Rbx.into());
-        self.gen.push(R15.into());
-        self.gen.push(R14.into());
-    }
-
-    fn restoreCoreRegisters(&mut self) {
-        return;
-        self.gen.comment("restoreCoreRegisters");
-        self.gen.pop(R14.into());
-        self.gen.pop(R15.into());
-        self.gen.pop(Rbx.into());
     }
 
     fn genCall(
@@ -208,6 +198,13 @@ impl<T: AsmGen> Jitter<T> {
             self.gen.push(r.into());
         }
 
+        let retReg = if returns {
+            Some(self.acquireAny())
+        }
+        else {
+            None
+        };
+
         if argsCount < localsCount {
             self.gen
                 .offsetStack(argsCount as isize - localsCount as isize)
@@ -224,16 +221,15 @@ impl<T: AsmGen> Jitter<T> {
                 offset_of!(NativeWrapper::lCall).as_u32() as isize,
             ),
             &[R15.into(), functionID.into(), namespaceID.into(), r.into()],
+            retReg
         );
 
         self.releaseRegister(r);
 
         self.gen.offsetStack(localsCount as isize); // consume args
 
-        if returns {
-            let r = self.acquireAny();
-            self.gen.mov(r.into(), Rax.into());
-            self.stack.push(r);
+        if let Some(v) = retReg {
+            self.stack.push(v);
         }
     }
 
@@ -269,26 +265,24 @@ impl<T: AsmGen> Jitter<T> {
                 offset_of!(NativeWrapper::printDigit).as_u32() as isize,
             ),
             &[asmValue],
+            None
         );
 
         self.gen.endIgnore();
     }
 
-    fn pushStr(&mut self, s: &str) {
+    pub fn vmOffset(&self, offset: u32) -> AsmLocation {
+        AsmLocation::Indexing(R15.into(), offset as isize)
+    }
+
+    fn pushStr(&mut self, s: usize) {
         self.gen.comment(&format!("pushStr {}", s));
-        let label = self.gen.makeString(s);
-        self.gen.mov(Rdi.into(), R15.into());
-        self.gen.mov(Rsi.into(), R14.into());
-        self.gen.lea(Rdx.into(), label.into());
-        self.gen.mov(
-            R10.into(),
-            AsmValue::Indexing(
-                R15.into(),
-                offset_of!(NativeWrapper::stringNew).as_u32() as isize,
-            ),
-        );
-        self.gen.call(R10.into());
-        self.gen.push(Rax.into());
+
+        let reg = self.acquireAny();
+
+        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::stringCached).as_u32()), &[R15.into(), R14.into(), s.into()], Some(reg));
+
+        self.stack.push(reg);
     }
 
     fn acquireRegister(&mut self, reg: Register) {
@@ -428,20 +422,19 @@ impl<T: AsmGen> Jitter<T> {
                 OpCode::Jmp { offset, jmpType } => {
                     let l = jmpLookup.get(&i).unwrap().clone();
                     match jmpType {
-                        JmpType::One | JmpType::True => {
+                        JmpType::True => {
                             let r = self.stack.pop().unwrap();
                             self.releaseRegister(r);
                             self.gen.compare(r.into(), 1.into());
                             self.gen.jmpIfOne(l.into())
                         }
-                        JmpType::Zero | JmpType::False => {
+                        JmpType::False => {
                             let r = self.stack.pop().unwrap();
                             self.releaseRegister(r);
                             self.gen.compare(r.into(), 0.into());
                             self.gen.jmpIfZero(l.into())
                         }
-                        JmpType::Jmp => self.gen.jmp(l.into()),
-                        _ => todo!(),
+                        JmpType::Jmp => self.gen.jmp(l.into())
                     }
                 }
                 OpCode::Return => {
@@ -551,8 +544,7 @@ impl<T: AsmGen> Jitter<T> {
                     self.stack.push(r1)
                 }
                 OpCode::StrNew(v) => {
-                    todo!();
-                    // pushStr(self.gen, v.as_str())
+                    self.pushStr(*v)
                 }
                 OpCode::SCall { id } => {
                     let f = namespace.getFunctionMeta(*id).unwrap();

@@ -7,3 +7,4 @@ pub mod os;
 pub mod regix;
 pub mod std;
 pub mod test;
+pub mod utils;

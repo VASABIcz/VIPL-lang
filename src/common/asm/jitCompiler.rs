@@ -46,7 +46,7 @@ pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     r.into_boxed_slice()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct JITCompiler {}
 
 impl JITCompiler {
@@ -57,25 +57,12 @@ impl JITCompiler {
         namespace: &Namespace,
         returns: bool,
     ) -> extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value {
-        let gen = OptimizingGen::new();
-        let mut nasmGen = NasmGen::new();
+        let nasmGen = NasmGen::new();
+        let mut j = Jitter::new(nasmGen);
 
-        let mut j = Jitter::new(gen);
+        j.generateAssembly(ops, vm, namespace, returns);
 
-        if true {
-            j.generateAssembly(ops, vm, namespace, returns);
-
-            println!("{:?}", j.gen.data);
-            let optimzed = j.gen.optimize();
-            println!("{:?}", optimzed.data);
-
-            optimzed.compile(&mut nasmGen);
-        } else {
-            j.generateAssembly(ops, vm, namespace, returns)
-        }
-
-        let genAsm = nasmGen.generate();
-        println!("genAsm");
+        let genAsm = j.gen.generate();
 
         let mut bin = compileAssembly(&genAsm);
 

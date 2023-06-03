@@ -12,7 +12,9 @@ use vipl::std::std::bootStrapVM;
 use vipl::utils::namespacePath;
 use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;
+use vipl::vm::value::Value;
 use vipl::vm::vm::{OpCode, VirtualMachine};
+use vipl::vm::vm::OpCode::Pop;
 
 fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
@@ -40,7 +42,11 @@ fn main() -> Result<(), ()> {
     let id = vm.registerNamespace(n);
 
 
-    vm.link().unwrap();
+    vm.link(|c, t| {
+        if !t.isVoid() {
+            c.push(Pop)
+        }
+    }).unwrap();
 
     let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;
 

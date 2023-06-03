@@ -10,9 +10,7 @@ use std::mem::{size_of, transmute};
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{
-    emitOpcodes, ExpressionCtx, genFunctionDef, SimpleCtx, StatementCtx, SymbolicOpcode,
-};
+use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, LabelManager, SimpleCtx, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
 use crate::ffi::NativeWrapper;
@@ -47,16 +45,12 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = true;
-const TRACE: bool = true;
+const DEBUG: bool = false;
+const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
-    One,
-    Zero,
     Jmp,
-    Gt,
-    Less,
     True,
     False,
 }
@@ -195,22 +189,13 @@ pub struct VirtualMachine {
     stack: Vec<Value>,
     heap: Heap,
 
-    stackManager: StackManager<2048>,
-
     frames: Vec<StackFrame>,
     namespaces: FastAcess<String, Namespace>,
 
-    namespaceLoader: NamespaceLoader,
-    jitCompiler: JITCompiler,
-
-    handleStatementExpression: fn(&mut StatementCtx, DataType),
+    jitCompiler: JITCompiler
 }
 
 impl VirtualMachine {
-    pub fn setHandleExpression(&mut self, f: fn(&mut StatementCtx, DataType)) {
-        self.handleStatementExpression = f;
-    }
-
     pub fn allocate<T: Allocation>(&mut self, v: T) -> Hay<T> {
         self.heap.allocate(v)
     }
@@ -227,12 +212,18 @@ impl VirtualMachine {
         self.heap.allocate(aw)
     }
 
+    pub fn getLocalString(&mut self, id: usize) -> Value {
+        let n = self.currentNamespace();
+
+        n.getString(id)
+    }
+
     pub fn stackSize(&self) -> usize {
         self.stack.len()
     }
 
     #[inline]
-    pub fn allocateArray(&mut self, vec: Vec<Value>, t: DataType) -> Hay<ViplObject<Array>> {
+    pub fn allocateArray(&mut self, vec: Vec<Value>) -> Hay<ViplObject<Array>> {
         let arr = Array {
             internal: vec
         };
@@ -549,7 +540,7 @@ impl VirtualMachine {
             println!("[call] {} {:?} args count {}", fMeta.name, fMeta.localsMeta, fMeta.argsCount);
         }
 
-        let res = if vm.stack.len() > 0 {
+        let res = if !vm.stack.is_empty() {
             vm.stack.len() - fMeta.localsMeta.len()
         } else {
             0
@@ -622,31 +613,9 @@ impl VirtualMachine {
                     self.setLocal(*index, x);
                 }
                 Jmp { offset, jmpType } => match jmpType {
-                    JmpType::One => {
-                        self.pop();
-                        let _b = self.pop();
-                        panic!()
-                    }
-                    JmpType::Zero => {}
                     JmpType::Jmp => {
                         let x = *offset;
                         self.seek(x as isize);
-                    }
-                    JmpType::Gt => {
-                        let a = self.pop();
-                        let b = self.pop();
-                        if a.gt(&b, &DataType::Float) {
-                            let x = *offset;
-                            self.seek(x as isize)
-                        }
-                    }
-                    JmpType::Less => {
-                        let a = self.pop();
-                        let b = self.pop();
-                        if a.less(&b, &DataType::Float) {
-                            let x = *offset;
-                            self.seek(x as isize)
-                        }
                     }
                     JmpType::True => {
                         let a = self.pop();
@@ -879,16 +848,18 @@ impl VirtualMachine {
         }
     }
 
-    pub fn link(&mut self) -> Result<(), CodeGenError> {
+    pub fn link(&mut self, h: fn(&mut StatementCtx, DataType)) -> Result<(), CodeGenError> {
+        let mut mother = self.getNaughty();
+        let mut mother2 = self.getNaughty();
         let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
 
         unsafe {
-            for n in &mut (*warCrime.get()).namespaces.actual {
+            for n in &mut (mother.getMut()).namespaces.actual {
                 if n.state == Loaded || n.state == FailedToLoad {
                     continue;
                 }
 
-                let mut symbols = warCrime.get_mut().buildSymbolTable(n.getImportHints())?;
+                let mut symbols = mother2.getMut().buildSymbolTable(n.getImportHints())?;
 
                 for (fId, (fMeta, _)) in n.getFunctions().iter().enumerate() {
                     let argz = fMeta.getArgs();
@@ -908,7 +879,7 @@ impl VirtualMachine {
                         typeHint: None,
                         currentNamespace: anotherWarCrime,
                         vm: warCrime,
-                        labelCounter: &mut 0,
+                        labelCounter: &mut Default::default(),
                         symbols: &mut symbols,
                     };
                     g.0.typ = ctx.toDataType()?;
@@ -925,7 +896,7 @@ impl VirtualMachine {
                         symbols.enterScope();
 
                         for local in f.localsMeta.iter() {
-                            symbols.registerLocal(&local.name, local.typ.clone())
+                            symbols.registerLocal(&local.name, local.typ.clone());
                         }
 
                         let mut ops = vec![];
@@ -934,9 +905,9 @@ impl VirtualMachine {
                         let mut ctx = SimpleCtx {
                             ops: &mut ops,
                             currentNamespace: anotherWarCrime,
-                            handle: (*warCrime.get()).handleStatementExpression,
+                            handle: h,
                             vm: warCrime,
-                            labelCounter: &mut labelCounter,
+                            labels: &mut Default::default(),
                             symbols: &mut symbols,
                         };
 
@@ -967,8 +938,9 @@ impl VirtualMachine {
                         }
 
                         ops = transform(ops, |it| {
-                            let r = constEvaluation(it);
-                            optimizeBytecode(r)
+                            // let r = constEvaluation(it);
+                            // optimizeBytecode(r)
+                            it
                         });
 
                         let opz = branchOmit(ops).0;
@@ -981,8 +953,8 @@ impl VirtualMachine {
                             println!("{:?}", f.localsMeta);
                         }
 
-                        // let nf = self.jitCompiler.compile(opt, &*v, &*nn, f.returns());
-                        // *a = Some(Native(nf))
+                        // let nf = warCrime.get_mut().jitCompiler.compile(opt, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
+                        // *a = Some(Native(nf));
 
                         *a = Some(LoadedFunction::Virtual(opt));
 
@@ -997,21 +969,7 @@ impl VirtualMachine {
     }
 
     pub fn new() -> Self {
-        Self {
-            stack: Vec::with_capacity(128),
-            nativeWrapper: NativeWrapper::new(),
-            heap: Default::default(),
-            stackManager: StackManager::new(),
-            frames: vec![],
-            namespaces: Default::default(),
-            namespaceLoader: NamespaceLoader::new(),
-            jitCompiler: JITCompiler {},
-            handleStatementExpression: |it, t| {
-                if t != Void {
-                    it.push(Pop)
-                }
-            },
-        }
+        Self::default()
     }
 }
 
@@ -1021,16 +979,9 @@ impl Default for VirtualMachine {
             stack: Vec::with_capacity(128),
             nativeWrapper: NativeWrapper::new(),
             heap: Default::default(),
-            stackManager: StackManager::new(),
-            frames: vec![],
+            frames: Vec::with_capacity(32),
             namespaces: Default::default(),
-            namespaceLoader: NamespaceLoader::new(),
-            jitCompiler: JITCompiler {},
-            handleStatementExpression: |it, t| {
-                if t != Void {
-                    it.push(Pop)
-                }
-            },
+            jitCompiler: Default::default(),
         }
     }
 }

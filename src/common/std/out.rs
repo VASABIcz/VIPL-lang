@@ -65,6 +65,17 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         false,
     );
 
+    namespace.makeNativeNoRat(
+        "write",
+        &[DataType::Char],
+        |a, b| {
+            let c = b.get(0).asChar();
+
+            print!("{}", c);
+        },
+        false
+    );
+
     let index = namespace.registerGlobal(GlobalMeta {
         name: "newLine".to_string(),
         default: Expression::CharLiteral('\n'),

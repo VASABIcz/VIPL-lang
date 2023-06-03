@@ -14,16 +14,6 @@ pub fn branchOmit(a: Vec<SymbolicOpcode>) -> (Vec<SymbolicOpcode>, bool) {
             SymbolicOpcode::Op(OpCode::PushBool(v)) => {
                 if let Some(SymbolicOpcode::Jmp(b, a)) = nextOp {
                     match a {
-                        JmpType::One => {
-                            if *v {
-                                buf.push(SymbolicOpcode::Jmp(*b, JmpType::Jmp))
-                            }
-                        }
-                        JmpType::Zero => {
-                            if !v {
-                                buf.push(SymbolicOpcode::Jmp(*b, JmpType::Jmp))
-                            }
-                        }
                         JmpType::True => {
                             if *v {
                                 buf.push(SymbolicOpcode::Jmp(*b, JmpType::Jmp))

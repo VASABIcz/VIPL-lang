@@ -36,12 +36,7 @@ const DEBUG: bool = false;
 #[derive(Debug, Clone)]
 pub enum SymbolicOpcode {
     Op(OpCode),
-    Continue,
-    Break,
     Jmp(usize, JmpType),
-    // zero sized
-    LoopBegin,
-    LoopEnd,
     LoopLabel(usize),
 }
 
@@ -56,29 +51,60 @@ impl Body {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct LabelManager {
+    labelCounter: usize,
+    loopContext: Vec<(usize, usize)>
+}
+
+impl LabelManager {
+    pub fn nextLabel(&mut self) -> usize {
+        let l = self.labelCounter;
+
+        self.labelCounter += 1;
+
+        l
+    }
+
+    pub fn enterLoop(&mut self) -> (usize, usize) {
+        let start = self.nextLabel();
+        let end = self.nextLabel();
+
+        self.loopContext.push((start, end));
+
+        (start, end)
+    }
+
+    pub fn exitLoop(&mut self) {
+        self.loopContext.pop();
+    }
+
+    pub fn getContext(&self) -> Option<(usize, usize)> {
+        self.loopContext.last().map(|it| (it.0, it.1))
+    }
+}
+
 pub struct SimpleCtx<'a> {
     pub ops: &'a mut Vec<SymbolicOpcode>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
     pub handle: fn(&mut StatementCtx, DataType) -> (),
-    pub labelCounter: &'a mut usize,
+    pub labels: &'a mut LabelManager,
     pub symbols: &'a mut SymbolManager
 }
 
 impl SimpleCtx<'_> {
     pub fn inflate<'a>(
         &'a mut self,
-        statement: &'a Statement,
-        loopContext: Option<usize>,
+        statement: &'a Statement
     ) -> StatementCtx<'a> {
         StatementCtx {
             statement: &statement,
             ops: self.ops,
-            loopContext,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
-            labelCounter: self.labelCounter,
+            labels: self.labels,
             symbols: self.symbols,
         }
     }
@@ -95,7 +121,7 @@ impl Body {
     ) -> Result<(), CodeGenError> {
         ctx.symbols.enterScope();
         for statement in &self.statements {
-            let y = ctx.inflate(statement, None);
+            let y = ctx.inflate(statement);
             genStatement(y)?;
         }
         ctx.symbols.exitScope();
@@ -121,15 +147,12 @@ impl SymbolicOpcode {
 
 pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenError> {
     let mut buf = vec![];
-    let mut loopBegins = vec![];
     let mut labelLookup = HashMap::new();
 
     let mut counter = 0usize;
     for sym in &syms {
         match sym {
             SymbolicOpcode::Op(_)
-            | SymbolicOpcode::Continue
-            | SymbolicOpcode::Break
             | SymbolicOpcode::Jmp(_, _) => counter += 1,
             SymbolicOpcode::LoopLabel(id) => {
                 labelLookup.insert(id, counter);
@@ -141,46 +164,12 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
     for (i, sym) in syms.iter().enumerate() {
         match sym {
             SymbolicOpcode::Op(op) => buf.push(op.clone()),
-            SymbolicOpcode::Continue => {
-                let i = *loopBegins.last().ok_or_else(||CodeGenError::VeryBadState)?;
-                buf.push(OpCode::Jmp {
-                    offset: i as i32 - (buf.len() + 1) as i32,
-                    jmpType: JmpType::Jmp,
-                })
-            }
-            SymbolicOpcode::Break => {
-                let mut depth = 0usize;
-                let mut retId = None;
-
-                for (i, op) in syms[i..].iter().enumerate() {
-                    match op {
-                        SymbolicOpcode::LoopBegin => depth += 1,
-                        SymbolicOpcode::LoopEnd => {
-                            if depth == 0 {
-                                retId = Some(i);
-                            } else {
-                                depth -= 1;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                buf.push(OpCode::Jmp {
-                    offset: retId.unwrap() as i32 - 1,
-                    jmpType: JmpType::Jmp,
-                })
-            }
             SymbolicOpcode::Jmp(id, t) => {
                 let i = *labelLookup.get(&id).unwrap();
                 buf.push(OpCode::Jmp {
                     offset: i as i32 - (buf.len() + 1) as i32,
                     jmpType: *t,
                 })
-            }
-            SymbolicOpcode::LoopBegin => loopBegins.push(buf.len()),
-            SymbolicOpcode::LoopEnd => {
-                loopBegins.pop().unwrap();
             }
             SymbolicOpcode::LoopLabel(_) => {}
         }
@@ -196,7 +185,7 @@ pub struct ExpressionCtx<'a> {
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
-    pub labelCounter: &'a mut usize,
+    pub labelCounter: &'a mut LabelManager,
     pub symbols: &'a SymbolManager
 }
 
@@ -496,7 +485,7 @@ pub struct PartialExprCtx<'a> {
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
-    pub labelCounter: &'a mut usize,
+    pub labelCounter: &'a mut LabelManager,
     pub symbols: &'a SymbolManager
 }
 
@@ -506,39 +495,44 @@ impl PartialExprCtx<'_> {
         self.ops.push(Op(op))
     }
 
-    pub fn beginLoop(&mut self) {
-        self.ops.push(SymbolicOpcode::LoopBegin)
+    pub fn beginLoop(&mut self) -> (usize, usize) {
+        let (start, end) = self.labelCounter.enterLoop();
+        self.makeLabel(start);
+
+        (start, end)
     }
 
-    pub fn endLoop(&mut self) {
-        self.ops.push(SymbolicOpcode::LoopEnd)
+    pub fn endLoop(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::VeryBadState)?;
+
+        self.makeLabel(ctx.1);
+        self.labelCounter.exitLoop();
+
+        Ok(())
     }
 
-    pub fn opContinue(&mut self) {
-        self.ops.push(SymbolicOpcode::Continue)
+    pub fn opContinue(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::ContinueOutsideLoop)?;
+
+        self.opJmp(ctx.0, JmpType::Jmp);
+
+        Ok(())
     }
 
-    pub fn opBreak(&mut self) {
-        self.ops.push(SymbolicOpcode::Break)
+    pub fn opBreak(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::BreakOutsideLoop)?;
+
+        self.opJmp(ctx.1, JmpType::Jmp);
+
+        Ok(())
     }
 
     pub fn nextLabel(&mut self) -> usize {
-        let id = *self.labelCounter;
-        *self.labelCounter += 1;
-
-        id
+        self.labelCounter.nextLabel()
     }
 
     pub fn makeLabel(&mut self, id: usize) {
         self.ops.push(SymbolicOpcode::LoopLabel(id));
-    }
-
-    pub fn opLabel(&mut self) -> usize {
-        let id = *self.labelCounter;
-        *self.labelCounter += 1;
-        self.ops.push(SymbolicOpcode::LoopLabel(id));
-
-        id
     }
 
     pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
@@ -553,7 +547,7 @@ impl StatementCtx<'_> {
             typeHint: None,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
-            labelCounter: self.labelCounter,
+            labelCounter: self.labels,
             symbols: self.symbols,
         }
     }
@@ -593,11 +587,10 @@ impl ExpressionCtx<'_> {
 pub struct StatementCtx<'a> {
     pub statement: &'a Statement,
     pub ops: &'a mut Vec<SymbolicOpcode>,
-    pub loopContext: Option<usize>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
     pub handle: fn(&mut StatementCtx, DataType) -> (),
-    pub labelCounter: &'a mut usize,
+    pub labels: &'a mut LabelManager,
     pub symbols: &'a mut SymbolManager
 }
 
@@ -608,7 +601,7 @@ impl StatementCtx<'_> {
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
-            labelCounter: self.labelCounter,
+            labels: self.labels,
             symbols: self.symbols,
         }
     }
@@ -617,46 +610,48 @@ impl StatementCtx<'_> {
         StatementCtx {
             statement,
             ops: self.ops,
-            loopContext: self.loopContext,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
-            labelCounter: self.labelCounter,
+            labels: self.labels,
             symbols: self.symbols,
         }
     }
 
-    pub fn beginLoop(&mut self) {
-        self.symbols.enterScope();
-        self.ops.push(SymbolicOpcode::LoopBegin)
+    pub fn beginLoop(&mut self) -> (usize, usize) {
+        let (start, end) = self.labels.enterLoop();
+        self.makeLabel(start);
+
+        (start, end)
     }
 
-    pub fn endLoop(&mut self) {
-        self.symbols.exitScope();
-        self.ops.push(SymbolicOpcode::LoopEnd)
+    pub fn endLoop(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::VeryBadState)?;
+
+        self.makeLabel(ctx.1);
+        self.labels.exitLoop();
+
+        Ok(())
     }
 
-    pub fn opContinue(&mut self) {
-        self.ops.push(SymbolicOpcode::Continue)
+    pub fn opContinue(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::ContinueOutsideLoop)?;
+
+        self.opJmp(ctx.0, JmpType::Jmp);
+
+        Ok(())
     }
 
-    pub fn opBreak(&mut self) {
-        self.ops.push(SymbolicOpcode::Break)
-    }
+    pub fn opBreak(&mut self) -> Result<(), CodeGenError> {
+        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::BreakOutsideLoop)?;
 
-    pub fn opLabel(&mut self) -> usize {
-        let id = *self.labelCounter;
-        *self.labelCounter += 1;
-        self.ops.push(SymbolicOpcode::LoopLabel(id));
+        self.opJmp(ctx.1, JmpType::Jmp);
 
-        id
+        Ok(())
     }
 
     pub fn nextLabel(&mut self) -> usize {
-        let id = *self.labelCounter;
-        *self.labelCounter += 1;
-
-        id
+        self.labels.nextLabel()
     }
 
     pub fn makeLabel(&mut self, id: usize) {
@@ -668,12 +663,16 @@ impl StatementCtx<'_> {
     }
 
     pub fn registerVariable(&mut self, name: &str, t: DataType) {
-        self.symbols.registerLocal(name, t)
+        self.symbols.registerLocal(name, t);
     }
 
-    pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) {
-        // FIXME
-        self.symbols.registerLocal(name, t)
+    pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) -> (DataType, usize) {
+        if let Ok(v) = self.symbols.getLocal(name) {
+            return v.clone();
+        }
+        else {
+            self.symbols.registerLocal(name, t)
+        }
     }
 }
 
@@ -715,7 +714,7 @@ impl StatementCtx<'_> {
             typeHint,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
-            labelCounter: self.labelCounter,
+            labelCounter: self.labels,
             symbols: self.symbols,
         }
     }
@@ -724,11 +723,10 @@ impl StatementCtx<'_> {
         StatementCtx {
             statement,
             ops: self.ops,
-            loopContext: self.loopContext,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
             handle: self.handle,
-            labelCounter: self.labelCounter,
+            labels: self.labels,
             symbols: self.symbols,
         }
     }
@@ -743,7 +741,7 @@ pub fn genFunctionDef(
             if DEBUG {
                 println!("gening {:?}", statement)
             }
-            let sCtx = ctx.inflate(&statement, None);
+            let sCtx = ctx.inflate(&statement);
             genStatement(sCtx)?;
         }
         match ctx.ops.last() {
@@ -769,9 +767,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 .toDataType()?
                 .assertType(Bool)?;
 
-            let loopEnd = ctx.nextLabel();
-
-            ctx.beginLoop();
+            let (loopStart, loopEnd) = ctx.beginLoop();
 
             genExpression(ctx.makeExpressionCtx(&w.exp, None))?;
 
@@ -779,10 +775,9 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             w.body.generate(ctx.deflate())?;
 
-            ctx.opContinue();
+            ctx.opContinue()?;
 
-            ctx.makeLabel(loopEnd);
-            ctx.endLoop();
+            ctx.endLoop()?;
         }
         Statement::If(flow) => {
             ctx.makeExpressionCtx(&flow.condition, None)
@@ -840,15 +835,15 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             genExpression(ctx.makeExpressionCtx(&ret, None))?;
             ctx.push(Return)
         }
-        Statement::Continue => ctx.opContinue(),
-        Statement::Break => ctx.opBreak(),
+        Statement::Continue => ctx.opContinue()?,
+        Statement::Break => ctx.opBreak()?,
         Statement::Loop(body) => {
             ctx.beginLoop();
 
             body.generate(ctx.deflate())?;
 
-            ctx.opContinue();
-            ctx.endLoop();
+            ctx.opContinue()?;
+            ctx.endLoop()?;
         }
         Statement::StatementExpression(v) => {
             let mut eCtx = ctx.makeExpressionCtx(v, None);
@@ -944,13 +939,21 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         Statement::ForLoop(var, arr, body) => {
-            let endLabel = ctx.nextLabel();
+            let startLabel = ctx.nextLabel();
+
             let t = ctx.makeExpressionCtx(arr, None).toDataType()?.assertNotVoid()?.getArrayType()?;
 
             // iteration counter
             ctx.push(PushIntZero);
 
-            ctx.beginLoop();
+            ctx.opJmp(startLabel, JmpType::Jmp);
+
+            let (_, endLabel) = ctx.beginLoop();
+
+            ctx.push(PushIntOne);
+            ctx.push(Add(Int.toRawType()?));
+
+            ctx.makeLabel(startLabel);
 
             ctx.registerVariable(var, t);
             let varId = ctx.specify().getVariable(var)?.1;
@@ -977,9 +980,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             body.generate(ctx.deflate())?;
 
-            ctx.push(PushIntOne);
-            ctx.push(Add(Int.toRawType()?));
-
             ctx.opContinue();
 
             ctx.endLoop();
@@ -987,10 +987,17 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             ctx.push(Pop);
         }
         Statement::Repeat(var, count, body) => {
-            let endLoop = ctx.nextLabel();
-            let varId = ctx.specify().getVariable(var)?.1;
+            let loopStart = ctx.nextLabel();
 
-            ctx.beginLoop();
+            ctx.opJmp(loopStart, JmpType::Jmp);
+            let (_, endLoop) = ctx.beginLoop();
+            let (_, varId) = ctx.registerVariableIfNotExists(var, DataType::Int);
+
+            ctx.push(OpCode::Inc {
+                typ: Int.toRawType()?,
+                index: varId as u32,
+            });
+            ctx.makeLabel(loopStart);
 
             ctx.push(GetLocal { index: varId });
             ctx.push(PushInt(*count as isize));
@@ -999,10 +1006,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             body.generate(ctx.deflate())?;
 
-            ctx.push(OpCode::Inc {
-                typ: Int.toRawType()?,
-                index: varId as u32,
-            });
             ctx.opContinue();
 
             ctx.endLoop();

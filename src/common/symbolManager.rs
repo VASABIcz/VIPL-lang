@@ -78,13 +78,15 @@ impl SymbolManager {
         return Err(SymbolNotFound(SymbolNotFoundE::var(name)))
     }
 
-    pub fn registerLocal(&mut self, name: &str, typ: DataType) {
+    pub fn registerLocal(&mut self, name: &str, typ: DataType) -> (DataType, usize) {
         if self.usedLocals >= self.locals.len() {
             self.locals.push(VariableMetadata::n(name, typ.clone()));
         }
 
         self.frames.last_mut().unwrap().insert(name.to_string(), (typ, self.usedLocals));
         self.usedLocals += 1;
+
+        self.frames.last().unwrap().get(name).unwrap().clone()
     }
 
     pub fn registerFunction(&mut self, name: String, namespaceId: usize, functionId: usize, args: Vec<DataType>, ret: DataType) {

@@ -4,12 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-rustflags = ["-C target-cpu=native"]
+rustflags = ["-C target-cpu=native inline-threshold=275"]
 
 [profile.release]
 lto = true
 codegen-units = 1
 panic = "abort"
+opt-level = 3
+strip = true
+debug = false
+overflow-checks = false
+debug-assertions = false
+
+[profile.dev.package."*"]
+codegen-units = 1
 opt-level = 3
 strip = true
 debug = false
@@ -27,7 +35,7 @@ path = "src/compiler/main.rs"
 [lib]
 mame = "common"
 path = "src/common/lib.rs"
-# crate-type = ["staticlib"]
+crate-type = ["staticlib", "dylib", "rlib"]
 
 
 [dependencies]

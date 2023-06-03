@@ -15,7 +15,7 @@ use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[no_mangle]
 pub extern "C" fn createVm() -> *mut VirtualMachine {
@@ -139,6 +139,41 @@ pub extern "C" fn stringNew(
 }
 
 #[no_mangle]
+pub extern "C" fn stringCached(
+    vm: *mut VirtualMachine,
+    _locals: *mut StackFrame,
+    id: usize,
+) -> *mut ViplObject<Str> {
+    if DEBUG {
+        println!("[ffi] stringCached");
+    }
+
+    let d = unsafe { &mut *vm };
+
+    let mut s = d.getLocalString(id);
+
+    s.asMutRef::<Str>()
+}
+
+#[no_mangle]
+pub extern "C" fn arrayNew(
+    vm: *mut VirtualMachine,
+    _locals: *mut StackFrame,
+    size: usize
+) -> *mut ViplObject<Array> {
+    if DEBUG {
+        println!("[ffi] arrayNew");
+    }
+    let d = unsafe { &mut *vm };
+
+    let all = d.allocateArray(Vec::with_capacity(size));
+
+    let mut a = Value::from(all);
+
+    a.asMutRef() as *mut ViplObject<Array>
+}
+
+#[no_mangle]
 pub extern "C" fn strConcat(
     vm: &mut VirtualMachine,
     _locals: &mut StackFrame,
@@ -170,7 +205,7 @@ pub extern "C" fn lCall(
 
     if DEBUG {
         println!(
-            "[ffi] LCall {:?} {} {} {:?}",
+            "[ffi] LCall VM: {:?}, N: {}, F: {}, RSP: {:?}",
             vm as *mut VirtualMachine, namespaceID, functionID, rsp
         )
     }
@@ -180,7 +215,7 @@ pub extern "C" fn lCall(
     let returns = f.0.returns();
 
     if DEBUG {
-        println!("[ffi] before call {:?}", rsp);
+        println!("[ffi] before call RSP: {:?}", rsp);
     }
 
     let callable = f.1.as_ref().unwrap();
@@ -225,6 +260,10 @@ pub struct NativeWrapper {
 
     pub stringNew:
         extern "C" fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
+    pub arrayNew:
+    extern "C" fn (*mut VirtualMachine, *mut StackFrame, usize) -> *mut ViplObject<Array>,
+    pub stringCached:
+    extern "C" fn(*mut VirtualMachine, *mut StackFrame, usize) -> *mut ViplObject<Str>,
 
     pub stringGetChar: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern "C" fn(
@@ -246,6 +285,8 @@ impl NativeWrapper {
             arrGetValue,
             arrSetValue,
             stringNew,
+            arrayNew,
+            stringCached,
             stringGetChar,
             strConcat,
             lCall,

@@ -108,10 +108,10 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
                     .iter()
                     .map(|it| vm.allocateString(it).into())
                     .collect::<Vec<Value>>();
-                result.push(vm.allocateArray(a, DataType::str()).into())
+                result.push(vm.allocateArray(a).into())
             }
 
-            let aloc = vm.allocateArray(result, DataType::arr(Generic::Type(DataType::str())));
+            let aloc = vm.allocateArray(result);
 
             aloc.into()
         },
