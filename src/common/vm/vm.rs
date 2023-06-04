@@ -13,7 +13,7 @@ use crate::ast::FunctionDef;
 use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, LabelManager, SimpleCtx, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
-use crate::ffi::NativeWrapper;
+use crate::ffi::{allocateObject, NativeWrapper};
 use crate::naughtyBox::Naughty;
 use crate::symbolManager::SymbolManager;
 use crate::utils::{FastVec, genFunName, printOps, readNeighbours, transform};
@@ -45,7 +45,7 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -676,8 +676,8 @@ impl VirtualMachine {
                     self.getMutTop().not();
                 }
                 ArrayNew => {
-                    let _size = self.pop();
-                    let a = Value::makeArray(vec![], self);
+                    let size = self.pop();
+                    let a = Value::makeArray(vec![Value::null(); size.asNum() as usize], self);
                     self.push(a)
                 }
                 ArrayStore => {
@@ -743,49 +743,26 @@ impl VirtualMachine {
                     namespaceID,
                     structID,
                 } => unsafe {
-                    let n = self.getNamespace(*namespaceID as usize);
-                    let s = n.getStruct(*structID as usize);
-
-                    let mut l = Layout::new::<()>();
-
-                    l = l
-                        .extend(Layout::array::<ViplObjectMeta<()>>(1).unwrap())
-                        .unwrap()
-                        .0;
-                    l = l
-                        .extend(Layout::array::<Value>(s.fieldCount()).unwrap())
-                        .unwrap()
-                        .0;
-
-                    let alloc = alloc(l) as *mut UntypedObject;
-
-                    (*alloc).objectType = ObjectType::Simple(s.fieldCount());
-                    (*alloc).structId = *structID as usize;
-                    (*alloc).namespaceId = *namespaceID as usize;
+                    let alloc = self.allocateObject(*namespaceID as usize, *structID as usize);
 
                     self.push(Value::from(alloc as usize))
                 },
                 SetField {
                     fieldID,
-                } => unsafe {
+                } => {
                     let value = self.pop();
+                    let obj = self.pop();
 
-                    let ptr =
-                        ((self.pop().asRefMeta() as *const UntypedObject).add(1)) as *const Value;
-                    let p = ptr.add(*fieldID) as *mut Value;
-
-                    *p = value;
+                    Self::setField(obj, *fieldID, value)
                 },
                 GetField {
                     fieldID,
-                } => unsafe {
-                    let ptr = self.pop().asRefMeta() as *const UntypedObject;
+                } => {
+                    let obj = self.pop();
 
-                    let ptr2 = ptr.add(1) as *const Value;
+                    let v = Self::getField(obj, *fieldID);
 
-                    let p = ptr2.add(*fieldID) as *const Value;
-
-                    self.push(p.read());
+                    self.push(v);
                 },
                 Swap => {
                     let a = self.pop();
@@ -848,6 +825,60 @@ impl VirtualMachine {
         }
     }
 
+    pub fn setField(obj: Value, fId: usize, value: Value) {
+        unsafe {
+            let ptr =
+                ((obj.asRefMeta() as *const UntypedObject).add(1)) as *const Value;
+            let p = ptr.add(fId) as *mut Value;
+
+            *p = value;
+        }
+    }
+
+    pub fn getField(obj: Value, fId: usize) -> Value {
+        unsafe {
+            let ptr = obj.asRefMeta() as *const UntypedObject;
+
+            let ptr2 = ptr.add(1) as *const Value;
+
+            let p = ptr2.add(fId) as *const Value;
+
+            p.read()
+        }
+    }
+
+    pub fn allocateObject(&mut self, nId: usize, sId: usize) -> *mut UntypedObject {
+        let n = self.getNamespace(nId);
+        let s = n.getStruct(sId);
+
+        let mut l = Layout::new::<()>();
+
+        l = l
+            .extend(Layout::array::<ViplObjectMeta<()>>(1).unwrap())
+            .unwrap()
+            .0;
+        l = l
+            .extend(Layout::array::<Value>(s.fieldCount()).unwrap())
+            .unwrap()
+            .0;
+
+        let alloc = unsafe {
+            let alloc = alloc(l) as *mut UntypedObject;
+
+            (*alloc).objectType = ObjectType::Simple(s.fieldCount());
+            (*alloc).structId = sId;
+            (*alloc).namespaceId = nId;
+
+            alloc
+        };
+
+        if DEBUG {
+            println!("[vm] allocated {}:{} {} bytes", nId, sId, l.size())
+        }
+
+        alloc
+    }
+
     pub fn link(&mut self, h: fn(&mut StatementCtx, DataType)) -> Result<(), CodeGenError> {
         let mut mother = self.getNaughty();
         let mut mother2 = self.getNaughty();
@@ -900,7 +931,6 @@ impl VirtualMachine {
                         }
 
                         let mut ops = vec![];
-                        let mut labelCounter = 0;
 
                         let mut ctx = SimpleCtx {
                             ops: &mut ops,
@@ -940,23 +970,28 @@ impl VirtualMachine {
                         ops = transform(ops, |it| {
                             // let r = constEvaluation(it);
                             // optimizeBytecode(r)
+
                             it
                         });
 
                         let opz = branchOmit(ops).0;
 
 
-                        let opt = emitOpcodes(opz)?;
-
                         if DEBUG {
-                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opt);
+                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opz);
                             println!("{:?}", f.localsMeta);
                         }
 
-                        // let nf = warCrime.get_mut().jitCompiler.compile(opt, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
-                        // *a = Some(Native(nf));
+                        let opt = emitOpcodes(opz)?;
 
-                        *a = Some(LoadedFunction::Virtual(opt));
+
+                        if false {
+                            let nf = warCrime.get_mut().jitCompiler.compile(opt, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
+                            *a = Some(Native(nf));
+                        }
+                        else {
+                            *a = Some(LoadedFunction::Virtual(opt));
+                        }
 
                         symbols.exitScope();
                     }

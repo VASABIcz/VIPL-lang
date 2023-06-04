@@ -12,8 +12,13 @@ use libc::THOUSEP;
 use offset::offset_of;
 use std::collections::HashMap;
 use std::fmt::Pointer;
+use std::mem::size_of;
+use crate::vm::nativeObjects::UntypedObject;
 
 const DEBUG: bool = false;
+const VM_REG: Register = Register::R15;
+const STACK_REG: Register = Register::R14;
+const LOCALS_REG: Register = Register::Rbx;
 
 /*
 rdi, rsi, rdx, rcx, r8, r9
@@ -96,7 +101,7 @@ impl<T: AsmGen> Jitter<T> {
         let rs = self.regs.usedRegisters();
 
         for r in rs {
-            if except.contains(&r) || r == Register::R12 || r == Register::R13 {
+            if except.contains(&r) {
                 continue;
             }
             self.gen.push(r.into());
@@ -110,7 +115,7 @@ impl<T: AsmGen> Jitter<T> {
         rs.reverse();
 
         for r in rs {
-            if except.contains(&r) || r == Register::R12 || r == Register::R13 {
+            if except.contains(&r) {
                 continue;
             }
             self.gen.pop(r);
@@ -137,17 +142,16 @@ impl<T: AsmGen> Jitter<T> {
         }
 
         self.saveAquiredRegisters(&excluded);
+        self.saveCoreRegs();
 
         let offset = self.gen.getStackOffset();
-
-        // FIXME not sure if its even reliable it looks like rust doesnt align stack for ffi calls
 
         println!("current offset is {}", offset);
 
         let needsAlignment = (offset) % 2 == 0;
 
         if needsAlignment {
-            self.gen.offsetStack(-1);
+            self.allocateStack(1);
         }
 
         self.gen.comment("perform call");
@@ -158,9 +162,10 @@ impl<T: AsmGen> Jitter<T> {
         }
 
         if needsAlignment {
-            self.gen.offsetStack(1);
+            self.freeStack(1);
         }
 
+        self.restoreCoreRegs();
         self.restoreAquiredRegisters(&excluded);
 
         self.gen.comment("restore args registers");
@@ -187,8 +192,7 @@ impl<T: AsmGen> Jitter<T> {
         let mut locals = vec![];
 
         for _ in 0..argsCount {
-            let r = self.stack.pop().unwrap();
-            self.releaseRegister(r);
+            let r = self.pop();
             locals.push(r);
         }
 
@@ -206,14 +210,14 @@ impl<T: AsmGen> Jitter<T> {
         };
 
         if argsCount < localsCount {
-            self.gen
-                .offsetStack(argsCount as isize - localsCount as isize)
+            self.allocateStack(localsCount - argsCount);
         }
 
         self.gen.comment("save pointer to stack args");
         // FIXME will cause bugs when there is no free registers and needs to reuse one by saving its content onto a stack
-        let r = self.acquireAny();
+        let r = self.acquireTemp();
         self.gen.mov(r.into(), Rsp.into());
+        self.releaseRegister(r);
 
         self.safeCall(
             AsmLocation::Indexing(
@@ -224,13 +228,15 @@ impl<T: AsmGen> Jitter<T> {
             retReg
         );
 
-        self.releaseRegister(r);
+        self.freeStack(localsCount);
+    }
 
-        self.gen.offsetStack(localsCount as isize); // consume args
+    fn allocateStack(&mut self, values: usize) {
+        self.gen.offsetStack(-(values as isize))
+    }
 
-        if let Some(v) = retReg {
-            self.stack.push(v);
-        }
+    fn freeStack(&mut self, values: usize) {
+        self.gen.offsetStack(values as isize)
     }
 
     fn debugCrash(&mut self, asmValue: AsmValue) {
@@ -275,14 +281,24 @@ impl<T: AsmGen> Jitter<T> {
         AsmLocation::Indexing(R15.into(), offset as isize)
     }
 
+    pub fn saveCoreRegs(&mut self) {
+        self.gen.push(VM_REG.into());
+        self.gen.push(STACK_REG.into());
+        self.gen.push(LOCALS_REG.into());
+    }
+
+    pub fn restoreCoreRegs(&mut self) {
+        self.gen.pop(LOCALS_REG);
+        self.gen.pop(STACK_REG);
+        self.gen.pop(VM_REG);
+    }
+
     fn pushStr(&mut self, s: usize) {
         self.gen.comment(&format!("pushStr {}", s));
 
         let reg = self.acquireAny();
 
         self.safeCall(self.vmOffset(offset_of!(NativeWrapper::stringCached).as_u32()), &[R15.into(), R14.into(), s.into()], Some(reg));
-
-        self.stack.push(reg);
     }
 
     fn acquireRegister(&mut self, reg: Register) {
@@ -295,6 +311,20 @@ impl<T: AsmGen> Jitter<T> {
     }
 
     fn acquireAny(&mut self) -> Register {
+        let aq = self.regs.aquireAny();
+
+        if aq.1 {
+            self.gen.push(aq.0.into());
+        }
+
+        if DEBUG {
+            println!("acquiring {:?}", aq.0);
+        }
+        self.stack.push(aq.0);
+        aq.0
+    }
+
+    fn acquireTemp(&mut self) -> Register {
         let aq = self.regs.aquireAny();
 
         if aq.1 {
@@ -325,6 +355,17 @@ impl<T: AsmGen> Jitter<T> {
         // printDigit(Rsp.into());
 
         self.gen.newLine();
+    }
+
+    fn pop(&mut self) -> Register {
+        let a = self.stack.pop().unwrap();
+        self.releaseRegister(a);
+
+        a
+    }
+
+    fn getTop(&mut self) -> Register {
+        self.stack.last().unwrap().clone()
     }
 
     pub fn generateAssembly(
@@ -360,9 +401,7 @@ impl<T: AsmGen> Jitter<T> {
         }
 
         for (i, op) in opCodes.iter().enumerate() {
-            if DEBUG {
-                println!("self.genning {:?}", op);
-            }
+            println!("genning {:?}", op);
             self.debugPrint(&format!("executing {:?}\n", op));
             self.gen.comment(&format!("start opcode {:?}", op));
 
@@ -370,67 +409,62 @@ impl<T: AsmGen> Jitter<T> {
                 self.gen.makeLabel(v)
             }
 
-            let mut aqireReg = || {
-                let r = self.acquireAny();
-                self.stack.push(r);
-                r
-            };
-
             match op {
                 OpCode::PushInt(v) => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), (*v).into());
                 }
                 OpCode::PushIntOne => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), 1.into());
                 }
                 OpCode::PushIntZero => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), 0.into());
                 }
                 OpCode::PushFloat(_) => todo!(),
                 OpCode::PushBool(b) => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), ((*b) as usize).into());
                 }
                 OpCode::PushChar(c) => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), ((*c) as usize).into());
                 }
                 OpCode::Pop => {
-                    let r = self.stack.pop().unwrap();
-                    self.releaseRegister(r)
+                    self.pop();
                 }
                 OpCode::Dup => {
+                    let r = self.getTop();
+                    let r1 = self.acquireAny();
+                    self.gen.mov(r1.into(), r.into());
+                }
+                OpCode::Swap => {
                     let r = self.stack.pop().unwrap();
                     let r1 = self.stack.pop().unwrap();
-                    self.stack.push(r);
                     self.stack.push(r1);
+                    self.stack.push(r);
                 }
                 OpCode::GetLocal { index } => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen
                         .mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
                 }
                 OpCode::SetLocal { index } => {
-                    let r = self.stack.pop().unwrap();
+                    let r = self.pop();
                     self.gen
                         .mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
-                    self.releaseRegister(r)
                 }
                 OpCode::Jmp { offset, jmpType } => {
                     let l = jmpLookup.get(&i).unwrap().clone();
                     match jmpType {
                         JmpType::True => {
-                            let r = self.stack.pop().unwrap();
-                            self.releaseRegister(r);
+                            let r = self.pop();
                             self.gen.compare(r.into(), 1.into());
                             self.gen.jmpIfOne(l.into())
                         }
                         JmpType::False => {
-                            let r = self.stack.pop().unwrap();
-                            self.releaseRegister(r);
+                            let r = self.pop();
                             self.gen.compare(r.into(), 0.into());
                             self.gen.jmpIfZero(l.into())
                         }
@@ -456,92 +490,86 @@ impl<T: AsmGen> Jitter<T> {
                 }
                 OpCode::Add(t) => match t {
                     RawDataType::Int => {
-                        let r2 = self.stack.pop().unwrap();
-                        let r1 = self.stack.pop().unwrap();
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
                         self.gen.add(r1.into(), r2.into());
-                        self.releaseRegister(r2);
-                        self.stack.push(r1)
                     }
                     _ => todo!(),
                 },
                 OpCode::Sub(t) => match t {
                     RawDataType::Int => {
-                        let r2 = self.stack.pop().unwrap();
-                        let r1 = self.stack.pop().unwrap();
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
                         self.gen.sub(r1.into(), r2.into());
-                        self.releaseRegister(r2);
-                        self.stack.push(r1)
                     }
                     _ => todo!(),
                 },
                 OpCode::Div(_) => todo!(),
                 OpCode::Mul(t) => match t {
                     RawDataType::Int => {
-                        let r2 = self.stack.pop().unwrap();
-                        let r1 = self.stack.pop().unwrap();
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
                         self.gen.imul(r1.into(), r2.into());
-                        self.releaseRegister(r2);
-                        self.stack.push(r1)
                     }
                     _ => todo!(),
                 },
                 OpCode::Equals(t) => {
-                    todo!()
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
+
+                    self.acquireRegister(Rax);
+
+                    self.gen.xor(Rax.into(), Rax.into());
+                    self.gen.compare(r1.into(), r2.into());
+                    self.gen.sete(r1);
+
+                    self.releaseRegister(Rax);
                 }
                 OpCode::Greater(t) => match t {
                     RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
-                        let r2 = self.stack.pop().unwrap();
-                        let r1 = self.stack.pop().unwrap();
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
 
                         self.acquireRegister(Rax);
 
                         self.gen.xor(Rax.into(), Rax.into());
                         self.gen.compare(r1.into(), r2.into());
-                        self.gen.setl(r1.into());
+                        self.gen.setl(r1);
 
                         self.releaseRegister(Rax);
-
-                        self.releaseRegister(r2);
-                        self.stack.push(r1);
                     }
                     _ => todo!(),
                 },
                 OpCode::Less(t) => match t {
                     RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
-                        let r2 = self.stack.pop().unwrap();
-                        let r1 = self.stack.pop().unwrap();
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
 
                         self.acquireRegister(Rax);
 
                         self.gen.xor(Rax.into(), Rax.into());
                         self.gen.compare(r1.into(), r2.into());
-                        self.gen.setl(r1.into());
+                        self.gen.setg(r1);
 
                         self.releaseRegister(Rax);
-
-                        self.releaseRegister(r2);
-                        self.stack.push(r1);
                     }
                     _ => todo!(),
                 },
                 OpCode::Or => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
+
                     self.gen.or(r1.into(), r2.into());
-                    self.releaseRegister(r2);
-                    self.stack.push(r1)
                 }
                 OpCode::And => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
+
                     self.gen.and(r1.into(), r2.into());
-                    self.releaseRegister(r2);
-                    self.stack.push(r1)
                 }
                 OpCode::Not => {
-                    let r1 = self.stack.pop().unwrap();
+                    let r1 = self.getTop();
                     self.gen.not(r1.into());
-                    self.stack.push(r1)
                 }
                 OpCode::StrNew(v) => {
                     self.pushStr(*v)
@@ -561,54 +589,109 @@ impl<T: AsmGen> Jitter<T> {
                     self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
                 }
                 OpCode::GetLocalZero => {
-                    let r = aqireReg();
+                    let r = self.acquireAny();
                     self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
                 }
                 OpCode::SetLocalZero => {
-                    let r = self.stack.pop().unwrap();
+                    let r = self.pop();
                     self.gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
-                    self.releaseRegister(r)
                 }
                 OpCode::LessInt => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
 
                     self.acquireRegister(Rax);
 
                     self.gen.xor(Rax.into(), Rax.into());
                     self.gen.compare(r1.into(), r2.into());
-                    self.gen.setg(r1.into());
+                    self.gen.sete(r1);
 
                     self.releaseRegister(Rax);
-
-                    self.releaseRegister(r2);
-                    self.stack.push(r1);
                 }
                 OpCode::SubInt => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
-
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
                     self.gen.sub(r1.into(), r2.into());
-
-                    self.releaseRegister(r2);
-
-                    self.stack.push(r1)
                 }
                 OpCode::MulInt => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
                     self.gen.imul(r1.into(), r2.into());
-                    self.releaseRegister(r2);
-                    self.stack.push(r1)
                 }
                 OpCode::AddInt => {
-                    let r2 = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
+                    let r2 = self.pop();
+                    let r1 = self.getTop();
                     self.gen.add(r1.into(), r2.into());
-                    self.releaseRegister(r2);
-                    self.stack.push(r1)
                 }
                 OpCode::ArrayNew => {
+                    let r1 = self.pop();
+                    let ret = self.acquireAny();
+
+                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayNew).as_u32()), &[VM_REG.into(), STACK_REG.into(), r1.into()], Some(ret));
+                }
+                OpCode::New { namespaceID, structID } => {
+                    let ret = self.acquireAny();
+
+                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::allocateObject).as_u32()),
+                                  &[VM_REG.into(), STACK_REG.into(), (*namespaceID).into(), (*structID).into()], Some(ret));
+                }
+                OpCode::SetField { fieldID } => {
+                    let value = self.pop();
+                    let obj = self.pop();
+
+                    self.gen.mov(AsmLocation::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize), value.into());
+                }
+                OpCode::GetField { fieldID } => {
+                    let obj = self.pop();
+                    let r = self.acquireAny();
+
+                    self.gen.mov(r.into(), AsmValue::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize));
+                }
+                OpCode::ArrayStore => {
+                    let index = self.pop();
+                    let value = self.pop();
+                    let arr = self.pop();
+
+                    self.safeCall(
+                        self.vmOffset(
+                            offset_of!(NativeWrapper::arrSetValue).as_u32()
+                        ), &[VM_REG.into(), arr.into(), index.into(), value.into()], None);
+                }
+                OpCode::ArrayLoad => {
+                    let index = self.pop();
+                    let arr = self.pop();
+
+                    let ret = self.acquireAny();
+
+                    self.safeCall(
+                        self.vmOffset(
+                            offset_of!(NativeWrapper::arrGetValue).as_u32()
+                        ), &[VM_REG.into(), arr.into(), index.into()], Some(ret));
+                }
+                OpCode::Inc { typ, index } => {
+                    let r = self.acquireTemp();
+
+                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
+
+                    self.gen.inc(r);
+
+                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+
+                    self.releaseRegister(r);
+                }
+                OpCode::ArrayLength => {
+                    let obj = self.pop();
+                    let res = self.acquireAny();
+
+                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayLen).as_u32()), &[obj.into()], Some(res));
+                }
+                OpCode::StringLength => {
+                    let obj = self.pop();
+                    let res = self.acquireAny();
+
+                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::strLen).as_u32()), &[obj.into()], Some(res))
+                }
+                OpCode::DynamicCall => {
                     todo!()
                 }
                 e => todo!("{:?}", e),

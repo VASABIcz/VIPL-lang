@@ -158,6 +158,14 @@ impl Array {
             internal: vec![]
         }
     }
+
+    pub fn insert(&mut self, value: Value, index: usize) {
+        if index == self.internal.len() {
+            self.internal.push(value)
+        } else {
+            self.internal[index] = value
+        }
+    }
 }
 
 impl Allocation for Array {

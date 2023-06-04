@@ -66,6 +66,17 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     );
 
     namespace.makeNativeNoRat(
+        "print",
+        &[DataType::Value],
+        |_a, b| {
+            let c = b.get(0).asNum() as usize;
+
+            println!("{:?}", c)
+        },
+        false,
+    );
+
+    namespace.makeNativeNoRat(
         "write",
         &[DataType::Char],
         |a, b| {

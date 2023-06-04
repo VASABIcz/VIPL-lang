@@ -234,13 +234,7 @@ impl AsmGen for NasmGen {
 
     fn call(&mut self, location: AsmLocation) {
         println!("size: {}", self.stackSize);
-        if self.stackSize % 2 == 0 {
-            self.sub(Rsp.into(), 8.into());
-        }
         self.writeOp1("call", &location.toString());
-        if self.stackSize % 2 == 0 {
-            self.add(Rsp.into(), 8.into());
-        }
     }
 
     fn makeLabel(&mut self, label: &str) {
@@ -302,6 +296,11 @@ impl AsmGen for NasmGen {
 
     fn getStackOffset(&mut self) -> usize {
         self.stackSize
+    }
+
+    fn sete(&mut self, reg: Register) {
+        self.writeOp1("setl", "al");
+        self.mov(reg.into(), Rax.into());
     }
 }
 

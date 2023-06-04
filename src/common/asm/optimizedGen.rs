@@ -426,4 +426,8 @@ impl AsmGen for OptimizingGen {
             self.add(Rsp.into(), (8 * offset).into());
         }
     }
+
+    fn sete(&mut self, reg: Register) {
+        todo!()
+    }
 }

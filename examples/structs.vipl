@@ -31,7 +31,7 @@ n = AnotherStruct {
 }
 
 out::print("before")
-out::print(n.oldPos.x)
+out::print(n.oldPos as value)
 
 n.oldPos.x = 69
 

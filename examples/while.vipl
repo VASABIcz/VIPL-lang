@@ -3,6 +3,6 @@ import out
 x = 0
 
 while x < 10 {
-    out::print(x)
+    out::print x
     x += 1
 }

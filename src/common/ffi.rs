@@ -9,7 +9,7 @@ use crate::std::std::bootStrapVM;
 
 use crate::vm::heap::Hay;
 use crate::vm::namespace::{callNative, LoadedFunction, Namespace};
-use crate::vm::nativeObjects::ViplObject;
+use crate::vm::nativeObjects::{UntypedObject, ViplObject};
 use crate::vm::objects::{Array, Str};
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
@@ -60,7 +60,7 @@ pub extern "C" fn createNamespace(vm: &mut VirtualMachine, name: *const c_char) 
 #[no_mangle]
 pub extern "C" fn pushValue(vm: &mut VirtualMachine, v: isize) {
     if DEBUG {
-        println!("[ffi] pushInt {}", v);
+        println!("[ffi] pushValue {}", v);
     }
     vm.push(Value::from(v))
 }
@@ -68,7 +68,7 @@ pub extern "C" fn pushValue(vm: &mut VirtualMachine, v: isize) {
 #[no_mangle]
 pub extern "C" fn popValue(vm: &mut VirtualMachine) -> isize {
     if DEBUG {
-        println!("[ffi] popInt");
+        println!("[ffi] popValue");
     }
     vm.pop().getNum()
 }
@@ -89,9 +89,10 @@ pub extern "C" fn arrSetValue(
     value: isize,
 ) {
     if DEBUG {
-        println!("[ffi] arrSetInt");
+        println!("[ffi] arrSetValue");
     }
-    *(obj.data.internal.get_mut(index).unwrap().getRefNum()) = value.into()
+
+    obj.data.insert(value.into(), index)
 }
 
 #[no_mangle]
@@ -114,24 +115,24 @@ pub extern "C" fn arrGetValue(
     index: usize,
 ) -> isize {
     if DEBUG {
-        println!("[ffi] arrGetInt");
+        println!("[ffi] arrGetValue");
     }
+    println!("arr {:?} {}", obj as *mut ViplObject<Array>, index);
     obj.data.internal.get(index).unwrap().getNumRef()
 }
 
 #[no_mangle]
 pub extern "C" fn stringNew(
-    vm: *mut VirtualMachine,
-    _locals: *mut StackFrame,
+    vm: &mut VirtualMachine,
+    _locals: &mut StackFrame,
     s: *const c_char,
 ) -> *mut ViplObject<Str> {
     if DEBUG {
         println!("[ffi] stringNew");
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
-    let d = unsafe { &mut *vm };
 
-    let all = d.allocateString(st);
+    let all = vm.allocateString(st);
 
     let mut a = Value::from(all);
 
@@ -140,33 +141,30 @@ pub extern "C" fn stringNew(
 
 #[no_mangle]
 pub extern "C" fn stringCached(
-    vm: *mut VirtualMachine,
-    _locals: *mut StackFrame,
+    vm: &mut VirtualMachine,
+    _locals: &mut StackFrame,
     id: usize,
 ) -> *mut ViplObject<Str> {
     if DEBUG {
         println!("[ffi] stringCached");
     }
 
-    let d = unsafe { &mut *vm };
-
-    let mut s = d.getLocalString(id);
+    let mut s = vm.getLocalString(id);
 
     s.asMutRef::<Str>()
 }
 
 #[no_mangle]
 pub extern "C" fn arrayNew(
-    vm: *mut VirtualMachine,
-    _locals: *mut StackFrame,
+    vm: &mut VirtualMachine,
+    _locals: &mut StackFrame,
     size: usize
 ) -> *mut ViplObject<Array> {
     if DEBUG {
         println!("[ffi] arrayNew");
     }
-    let d = unsafe { &mut *vm };
 
-    let all = d.allocateArray(Vec::with_capacity(size));
+    let all = vm.allocateArray(Vec::with_capacity(size));
 
     let mut a = Value::from(all);
 
@@ -237,13 +235,44 @@ pub extern "C" fn lCall(
         );
     }
 
-    return ret;
+    ret
 }
 
 #[no_mangle]
 pub extern "C" fn printDigit(n: isize) {
     println!("[debug] dec: \"{}\"", n);
     println!("[debug] hex: \"{:#01x}\"", n);
+}
+
+#[no_mangle]
+pub extern "C" fn allocateObject(vm: &mut VirtualMachine, locals: &mut StackFrame, nId: usize, sId: usize) -> *mut UntypedObject {
+    if DEBUG {
+        println!("[ffi] allocating {}:{}", nId, sId)
+    }
+
+    vm.allocateObject(nId, sId)
+}
+
+#[no_mangle]
+pub extern "C" fn arrayLen(obj: &mut ViplObject<Array>) -> Value {
+    if DEBUG {
+        println!("[ffi] arrayLen {:?}", obj as *mut ViplObject<Array>)
+    }
+
+    println!("arr {:?}", obj.data);
+
+    obj.data.internal.len().into()
+}
+
+#[no_mangle]
+pub extern "C" fn strLen(obj: &mut ViplObject<Str>) -> Value {
+    if DEBUG {
+        println!("[ffi] strLen {:?}", obj as *mut ViplObject<Str>)
+    }
+
+    println!("str {:?}", obj.data);
+
+    obj.data.string.len().into()
 }
 
 #[repr(C)]
@@ -259,11 +288,13 @@ pub struct NativeWrapper {
     pub arrSetValue: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Array>, usize, isize),
 
     pub stringNew:
-        extern "C" fn(*mut VirtualMachine, *mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
+        extern "C" fn(&mut VirtualMachine, &mut StackFrame, *const c_char) -> *mut ViplObject<Str>,
     pub arrayNew:
-    extern "C" fn (*mut VirtualMachine, *mut StackFrame, usize) -> *mut ViplObject<Array>,
+    extern "C" fn (&mut VirtualMachine, &mut StackFrame, usize) -> *mut ViplObject<Array>,
     pub stringCached:
-    extern "C" fn(*mut VirtualMachine, *mut StackFrame, usize) -> *mut ViplObject<Str>,
+    extern "C" fn(&mut VirtualMachine, &mut StackFrame, usize) -> *mut ViplObject<Str>,
+    pub allocateObject:
+    extern "C" fn(&mut VirtualMachine,  &mut StackFrame, usize, usize) -> *mut UntypedObject,
 
     pub stringGetChar: extern "C" fn(&mut VirtualMachine, &mut ViplObject<Str>, usize) -> u8,
     pub strConcat: extern "C" fn(
@@ -274,6 +305,8 @@ pub struct NativeWrapper {
     ) -> *mut ViplObject<Str>,
     pub lCall: extern "C" fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,
     pub printDigit: extern "C" fn(isize),
+    pub arrayLen: extern "C" fn (&mut ViplObject<Array>) -> Value,
+    pub strLen: extern "C" fn (&mut ViplObject<Str>) -> Value
 }
 
 impl NativeWrapper {
@@ -287,10 +320,13 @@ impl NativeWrapper {
             stringNew,
             arrayNew,
             stringCached,
+            allocateObject,
             stringGetChar,
             strConcat,
             lCall,
             printDigit,
+            arrayLen,
+            strLen,
         }
     }
 }

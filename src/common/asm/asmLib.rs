@@ -81,6 +81,12 @@ pub enum AsmValue {
     Identifier(String),
 }
 
+impl From<u32> for AsmValue {
+    fn from(value: u32) -> Self {
+        AsmValue::Concrete(Concrete::Number(value as usize))
+    }
+}
+
 impl AsmValue {
     pub fn tryGetAmount(&self) -> Option<usize> {
         match self {
@@ -259,6 +265,7 @@ pub trait AsmGen {
 
     fn setg(&mut self, reg: Register);
     fn setl(&mut self, reg: Register);
+    fn sete(&mut self, reg: Register);
 
     fn beginIgnore(&mut self);
     fn endIgnore(&mut self);
