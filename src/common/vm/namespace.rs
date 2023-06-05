@@ -2,7 +2,7 @@ use std::arch::asm;
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, Node, Statement, VariableModd};
+use crate::ast::{ASTNode, BinaryOp, RawExpression, FunctionDef, RawNode, RawStatement, VariableModd, Statement, Expression};
 use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAcess;
@@ -16,7 +16,7 @@ use crate::utils::{
 };
 use crate::viplParser::{parseTokens, VIPLParsingState};
 use crate::vm::dataType::DataType;
-use crate::vm::dataType::DataType::Void;
+use crate::vm::dataType::DataType::{Function, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector};
 use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::Str;
@@ -78,7 +78,7 @@ pub struct StructMeta {
 #[derive(Debug, Clone)]
 pub struct EnumArm {
     name: String,
-    valueType: DataType,
+    valueType: TokenType,
 }
 
 #[derive(Debug, Clone)]
@@ -113,7 +113,7 @@ impl StructMeta {
 
 impl FunctionMeta {
     pub fn toFunctionType(&self) -> DataType {
-        DataType::Function {
+        Function {
             ret: Box::new(self.returnType.clone()),
             args: self
                 .localsMeta
@@ -273,7 +273,7 @@ pub struct Namespace {
 
     strings: FastAcess<String, *mut ViplObject<Str>>,
 
-    types: FastAcess<DataType, DataType>,
+    types: FastAcess<TokenType, TokenType>,
 
     enums: FastAcess<String, EnumMeta>,
 
@@ -546,23 +546,23 @@ impl Namespace {
         for s in src {
             match s {
                 ASTNode::Global(g) => {
-                    match g {
-                        Node::FunctionDef(d) => {
+                    match g.exp {
+                        RawNode::FunctionDef(d) => {
                             self.registerFunctionDef(d.into());
                         }
-                        Node::StructDef(v) => {
+                        RawNode::StructDef(v) => {
                             self.registerStruct(v.into());
                         }
-                        Node::Import(nam, syms) => {
+                        RawNode::Import(nam, syms) => {
                             self.importHints.push(ImportHints::Symbols(nam, syms))
                         },
-                        Node::NamespaceImport(nam, ren) => {
+                        RawNode::NamespaceImport(nam, ren) => {
                             self.importHints.push(ImportHints::Namespace(nam, ren))
                         },
-                        Node::GlobalVarDef(name, default) => {
+                        RawNode::GlobalVarDef(name, default) => {
                             self.registerGlobal(GlobalMeta {
                                 name,
-                                default,
+                                default: default,
                                 typ: Void,
                             });
                         }
@@ -593,24 +593,24 @@ impl Namespace {
         for s in src {
             match s {
                 ASTNode::Global(g) => {
-                    match g {
-                        Node::FunctionDef(d) => {
+                    match g.exp {
+                        RawNode::FunctionDef(d) => {
                             n.registerFunctionDef(d.into());
                         }
-                        Node::StructDef(v) => {
+                        RawNode::StructDef(v) => {
                             n.registerStruct(v.into());
                         }
-                        Node::Import(na, s) => {
+                        RawNode::Import(na, s) => {
                             n.importHints.push(ImportHints::Symbols(na, s))
                         },
                         // TODO default value
-                        Node::NamespaceImport(na, r) => {
+                        RawNode::NamespaceImport(na, r) => {
                             n.importHints.push(ImportHints::Namespace(na, r))
                         },
-                        Node::GlobalVarDef(name, default) => {
+                        RawNode::GlobalVarDef(name, default) => {
                             n.registerGlobal(GlobalMeta {
                                 name,
-                                default,
+                                default: default,
                                 typ: DataType::Void,
                             });
                         }
@@ -622,7 +622,7 @@ impl Namespace {
                 ASTNode::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
-                        c => initFunction.body.push(Statement::StatementExpression(c)),
+                        c => initFunction.body.push(Statement{ exp: RawStatement::StatementExpression(c), loc: vec![] }),
                     }
                 }
             }

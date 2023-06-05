@@ -12,9 +12,10 @@ use libc::THOUSEP;
 use std::collections::HashMap;
 use std::fmt::Pointer;
 use std::mem::size_of;
-use offset::offset_of;
+use offset::{Offset, offset_of};
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::vm::nativeObjects::UntypedObject;
+use crate::vm::value::Value;
 
 const DEBUG: bool = false;
 const VM_REG: Register = Register::R15;
@@ -137,6 +138,10 @@ impl<T: AsmGen> Jitter<T> {
         }
     }
 
+    fn callFfi<Base, Field>(&mut self, f: Offset<Base, Field>, args: &[AsmValue], ret: Option<Register>) {
+        self.safeCall(AsmLocation::Indexing(VM_REG.into(), f.as_u32() as isize), args, ret)
+    }
+
     fn safeCall(&mut self, f: AsmLocation, args: &[AsmValue], ret: Option<Register>) {
         let argsCount = args.len();
         let mut excluded = vec![];
@@ -236,11 +241,8 @@ impl<T: AsmGen> Jitter<T> {
         });
 
 
-        self.safeCall(
-            AsmLocation::Indexing(
-                R15.into(),
-                offset_of!(NativeWrapper::lCall).as_u32() as isize,
-            ),
+        self.callFfi(
+            offset_of!(NativeWrapper::lCall),
             &[R15.into(), functionID.into(), namespaceID.into(), r.into()],
             retReg
         );
@@ -282,11 +284,7 @@ impl<T: AsmGen> Jitter<T> {
             offset_of!(NativeWrapper::printDigit).as_u32() as isize
         );
 
-        self.safeCall(
-            AsmLocation::Indexing(
-                R15.into(),
-                offset_of!(NativeWrapper::printDigit).as_u32() as isize,
-            ),
+        self.callFfi(offset_of!(NativeWrapper::printDigit),
             &[asmValue],
             None
         );
@@ -315,7 +313,7 @@ impl<T: AsmGen> Jitter<T> {
 
         let reg = self.acquireAny();
 
-        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::stringCached).as_u32()), &[R15.into(), R14.into(), s.into()], Some(reg));
+        self.callFfi(offset_of!(NativeWrapper::stringCached), &[R15.into(), R14.into(), s.into()], Some(reg));
     }
 
     fn acquireRegister(&mut self, reg: Register) {
@@ -605,12 +603,12 @@ impl<T: AsmGen> Jitter<T> {
                         let r1 = self.pop();
                         let ret = self.acquireAny();
 
-                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayNew).as_u32()), &[VM_REG.into(), STACK_REG.into(), r1.into()], Some(ret));
+                        self.callFfi(offset_of!(NativeWrapper::arrayNew), &[VM_REG.into(), STACK_REG.into(), r1.into()], Some(ret));
                     }
                     OpCode::New { namespaceID, structID } => {
                         let ret = self.acquireAny();
 
-                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::allocateObject).as_u32()),
+                        self.callFfi(offset_of!(NativeWrapper::allocateObject),
                                       &[VM_REG.into(), STACK_REG.into(), (*namespaceID).into(), (*structID).into()], Some(ret));
                     }
                     OpCode::SetField { fieldID } => {
@@ -630,10 +628,10 @@ impl<T: AsmGen> Jitter<T> {
                         let value = self.pop();
                         let arr = self.pop();
 
-                        self.safeCall(
-                            self.vmOffset(
-                                offset_of!(NativeWrapper::arrSetValue).as_u32()
-                            ), &[VM_REG.into(), arr.into(), index.into(), value.into()], None);
+                        self.callFfi(
+                            offset_of!(NativeWrapper::arrSetValue),
+                            &[VM_REG.into(), arr.into(), index.into(), value.into()],
+                            None);
                     }
                     OpCode::ArrayLoad => {
                         let index = self.pop();
@@ -641,10 +639,7 @@ impl<T: AsmGen> Jitter<T> {
 
                         let ret = self.acquireAny();
 
-                        self.safeCall(
-                            self.vmOffset(
-                                offset_of!(NativeWrapper::arrGetValue).as_u32()
-                            ), &[VM_REG.into(), arr.into(), index.into()], Some(ret));
+                        self.callFfi(offset_of!(NativeWrapper::arrGetValue), &[VM_REG.into(), arr.into(), index.into()], Some(ret));
                     }
                     OpCode::Inc { typ, index } => {
                         self.withTempReg(|s, r| {
@@ -659,24 +654,42 @@ impl<T: AsmGen> Jitter<T> {
                         let obj = self.pop();
                         let res = self.acquireAny();
 
-                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayLen).as_u32()), &[obj.into()], Some(res));
+                        self.callFfi(offset_of!(NativeWrapper::arrayLen), &[obj.into()], Some(res));
                     }
                     OpCode::StringLength => {
                         let obj = self.pop();
                         let res = self.acquireAny();
 
-                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::strLen).as_u32()), &[obj.into()], Some(res))
+                        self.callFfi(offset_of!(NativeWrapper::strLen), &[obj.into()], Some(res))
                     }
                     OpCode::DynamicCall(returns, argCount) => {
-                        todo!();
-                        let obj = self.pop();
-                        let reg = self.acquireAny();
+                        let lambda = self.pop();
 
-                        self.gen.mov(reg.into(), obj.into());
-                        // self.gen.and(obj.into(), 0xffffffff.into());
-                        // self.gen.and(reg.into(), 0xffffffff00000000.into());
+                        for _ in 0..*argCount {
+                            let r = self.pop().into();
+                            self.gen.push(r);
+                        }
 
-                        // self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
+                        let ret = if *returns {
+                            Some(self.acquireAny())
+                        } else {
+                            None
+                        };
+
+                        let stackPtr = self.acquireTemp();
+                        self.gen.mov(stackPtr.into(), Rsp.into());
+
+                        self.callFfi(
+                            offset_of!(NativeWrapper::dynamicCall),
+                            &[VM_REG.into(), lambda.into(), stackPtr.into()],
+                            ret
+                        );
+                    }
+                    OpCode::PushFunction(nId, fId) => {
+                        let v = Value::makeFunction(*nId, *fId).asUnsigned();
+
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), v.into());
                     }
                     e => todo!("{:?}", e),
                 }

@@ -982,7 +982,7 @@ impl VirtualMachine {
                             println!("{:?}", f.localsMeta);
                         }
 
-                        if true {
+                        if false {
                             let nf = warCrime.get_mut().jitCompiler.compile(&opz, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
                             *a = Some(Native(nf));
                         } else {

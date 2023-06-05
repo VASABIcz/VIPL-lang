@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::RawExpression;
 use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::*;
@@ -264,12 +264,12 @@ impl Value {
 }
 
 impl Value {
-    pub fn toExpression(&self, t: &DataType) -> Expression {
+    pub fn toExpression(&self, t: &DataType) -> RawExpression {
         match t {
-            Int => Expression::IntLiteral(self.asNum().to_string()),
-            Float => Expression::FloatLiteral(self.asFlo().to_string()),
-            Bool => Expression::BoolLiteral(self.asBool()),
-            Char => Expression::CharLiteral(self.asChar()),
+            Int => RawExpression::IntLiteral(self.asNum().to_string()),
+            Float => RawExpression::FloatLiteral(self.asFlo().to_string()),
+            Bool => RawExpression::BoolLiteral(self.asBool()),
+            Char => RawExpression::CharLiteral(self.asChar()),
             _ => unsafe { unreachable_unchecked() },
         }
     }

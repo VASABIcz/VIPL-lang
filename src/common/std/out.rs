@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::{Expression, RawExpression};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::dataType::{DataType, Generic};
 use crate::vm::namespace::NamespaceState::Loaded;
@@ -89,7 +89,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
 
     let index = namespace.registerGlobal(GlobalMeta {
         name: "newLine".to_string(),
-        default: Expression::CharLiteral('\n'),
+        default: Expression{ exp: RawExpression::CharLiteral('\n'), loc: vec![] },
         typ: DataType::Char,
     });
 

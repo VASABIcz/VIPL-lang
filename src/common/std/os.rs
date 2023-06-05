@@ -1,6 +1,6 @@
 use std::ffi::{CStr, CString};
 use libc::{CS, system};
-use crate::ast::Expression;
+use crate::ast::RawExpression;
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::dataType::{DataType, Generic};
 use crate::vm::namespace::NamespaceState::Loaded;

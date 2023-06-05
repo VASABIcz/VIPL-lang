@@ -1,4 +1,4 @@
-use crate::ast::{ASTNode, Expression};
+use crate::ast::{ASTNode, RawExpression};
 use crate::lexer::{Location, Token};
 use crate::parser::ParsingUnitSearchType;
 use crate::vm::dataType::DataType;
@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use strum_macros::{Display, IntoStaticStr};
-use crate::lexingUnits::{Stringable, TokenType};
+use crate::lexingUnits::{Stringable};
 
 impl VIPLError for CodeGenError {
     fn getDomain(&self) -> String {
@@ -355,7 +355,7 @@ impl<T: PartialEq + Clone + Debug> From<LexerError> for LoadFileError<T> {
 pub struct TypeError {
     pub expected: DataType,
     pub actual: DataType,
-    pub exp: Option<Expression>,
+    pub exp: Option<RawExpression>,
 }
 
 #[derive(Debug, Clone, Copy, Display)]
@@ -418,7 +418,7 @@ pub enum CodeGenError {
     SymbolNotFound(SymbolNotFoundE),
     UntypedEmptyArray,
     ArrayWithoutGenericParameter,
-    UnexpectedVoid,
+    UnexpectedVoid(ASTNode),
     ContinueOutsideLoop,
     BreakOutsideLoop,
     LiteralParseError,

@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 
 use crate::ast;
-use crate::ast::Expression::NamespaceAccess;
-use crate::ast::Statement::Assignable;
-use crate::ast::{
-    ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, Expression, Node, Statement, StructDef, WhileS,
-};
+use crate::ast::RawExpression::NamespaceAccess;
+use crate::ast::RawStatement::Assignable;
+use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, WhileS, Statement, Expression};
 use crate::bytecodeGen::Body;
 use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
 use crate::lexingUnits::TokenType;
@@ -14,7 +12,7 @@ use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
 #[derive(Debug)]
@@ -36,14 +34,16 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BoolParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         if parser.tokens.isPeekType(TokenType::False) {
             parser.tokens.getAssert(TokenType::False)?;
-            return Ok(ASTNode::Expr(Expression::BoolLiteral(false)));
+            return Ok(RawExpression::BoolLiteral(false));
         }
         parser.tokens.getAssert(TokenType::True)?;
-        Ok(ASTNode::Expr(Expression::BoolLiteral(true)))
+        Ok(RawExpression::BoolLiteral(true))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -70,11 +70,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for VariableParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        Ok(ASTNode::Expr(Expression::Variable(
+        parser.parseWrappedExpression(|parser| {
+        Ok(RawExpression::Variable(
             parser.tokens.getIdentifier()?,
-        )))
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -101,11 +103,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ReturnParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(Return)?;
         let exp = parser.parseExpr()?;
-        Ok(ASTNode::Statement(Statement::Return(exp)))
+        Ok(RawStatement::Return(exp))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -132,18 +136,20 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for WhileParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(While)?;
 
         let op = parser.parseExpr()?;
 
         let statements = parser.parseBody()?;
 
-        Ok(ASTNode::Statement(Statement::While(WhileS {
+        Ok(RawStatement::While(WhileS {
             exp: op,
             body: statements,
-        })))
+        }))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -170,6 +176,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         let mut elseIfs = vec![];
         let mut elseBody = None;
 
@@ -194,14 +201,15 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
             elseBody = Some(parser.parseBody()?);
         }
 
-        Ok(ASTNode::Statement(Statement::If(ast::If {
+        Ok(RawStatement::If(ast::If {
             condition,
             body,
             elseBody,
             elseIfs,
-        })))
+        }))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -228,12 +236,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BracketsParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         parser.tokens.getAssert(ORB)?;
-        let expr = Ok(ASTNode::Expr(parser.parseExpr()?));
+        let expr = parser.parseExpr()?;
         parser.tokens.getAssert(CRB)?;
-        expr
+            Ok(expr.exp)
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -260,6 +270,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CharParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let c = parser.tokens.getAssert(CharLiteral)?;
         let mut chars = c.str.chars();
         match &chars.next() {
@@ -278,15 +289,16 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CharParsingUnit {
                                 '\\' => '\\',
                                 _ => panic!(),
                             };
-                            return Ok(ASTNode::Expr(Expression::CharLiteral(e)));
+                            return Ok(RawExpression::CharLiteral(e));
                         }
                     }
                 }
-                Ok(ASTNode::Expr(Expression::CharLiteral(*c)))
+                Ok(RawExpression::CharLiteral(*c))
             }
         }
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -315,10 +327,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StringParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let str = parser.tokens.getAssert(StringLiteral)?;
-        Ok(ASTNode::Expr(Expression::StringLiteral(str.str.clone())))
+        Ok(RawExpression::StringLiteral(str.str.clone()))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -345,6 +359,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayLiteralParsingUn
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         parser.tokens.getAssert(OSB)?;
 
         let mut buf = vec![];
@@ -357,9 +372,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayLiteralParsingUn
         }
         parser.tokens.getAssert(CSB)?;
 
-        Ok(ASTNode::Expr(Expression::ArrayLiteral(buf)))
+        Ok(RawExpression::ArrayLiteral(buf))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -386,19 +402,21 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         parser.tokens.getAssert(OSB)?;
         let expr = parser.parseExpr()?;
         parser.tokens.getAssert(CSB)?;
 
-        Ok(ASTNode::Expr(Expression::ArrayIndexing(Box::new(
+        Ok(RawExpression::ArrayIndexing(Box::new(
             ArrayAccess {
                 // FIXME
                 expr: parser.prevPop()?.asExpr()?,
                 index: expr,
             },
-        ))))
+        )))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -425,10 +443,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ContinueParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(Continue)?;
-        Ok(ASTNode::Statement(Statement::Continue))
+        Ok(RawStatement::Continue)
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -457,10 +477,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BreakParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(TokenType::Break)?;
-        Ok(ASTNode::Statement(Statement::Break))
+        Ok(RawStatement::Break)
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -489,11 +511,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LoopParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(Loop)?;
         let body = parser.parseBody()?;
-        Ok(ASTNode::Statement(Statement::Loop(body)))
+        Ok(RawStatement::Loop(body))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -522,13 +546,15 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NotParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let t = parser.tokens.getAssert(Not)?.location;
 
         let expr = parser.parseExpr()?;
 
-        Ok(ASTNode::Expr(Expression::NotExpression(Box::new(expr), t)))
+        Ok(RawExpression::NotExpression(Box::new(expr), t))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -557,6 +583,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedNode(|parser| {
         parser.tokens.getAssert(Struct)?;
         let name = parser.tokens.getIdentifier()?;
 
@@ -580,9 +607,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructParsingUnit {
 
         parser.tokens.getAssert(CCB)?;
 
-        Ok(ASTNode::Global(Node::StructDef(StructDef { name, fields })))
+        Ok(RawNode::StructDef(StructDef { name, fields }))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -603,6 +631,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for SymbolImport {
     }
 
     fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedNode(|parser| {
         parser.tokens.getAssert(From)?;
 
         let namespaceName = parser.parseSymbol()?;
@@ -612,7 +641,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for SymbolImport {
         if parser.tokens.isPeekType(Mul) {
             parser.tokens.getAssert(Mul)?;
 
-            return Ok(ASTNode::Global(Node::Import(namespaceName, vec![(String::from('*'), None)])))
+            return Ok(RawNode::Import(namespaceName, vec![(String::from('*'), None)]))
         }
 
         let symbol = parser.tokens.getIdentifier()?;
@@ -625,9 +654,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for SymbolImport {
             None
         };
 
-        Ok(ASTNode::Global(Node::Import(namespaceName, vec![(symbol, rename)])))
+        Ok(RawNode::Import(namespaceName, vec![(symbol, rename)]))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -656,6 +686,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NamespaceImport {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedNode(|parser| {
         parser.tokens.getAssert(Import)?;
 
         let s = parser.parseSymbol()?;
@@ -668,9 +699,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NamespaceImport {
             None
         };
 
-        Ok(ASTNode::Global(Node::NamespaceImport(s, rename)))
+        Ok(RawNode::NamespaceImport(s, rename))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -699,6 +731,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NamespaceParsingUnit 
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let mut buf = vec![];
 
         while parser.tokens.isPeekType(Identifier) {
@@ -711,9 +744,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NamespaceParsingUnit 
             }
         }
 
-        Ok(ASTNode::Expr(NamespaceAccess(buf)))
+        Ok(NamespaceAccess(buf))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -742,6 +776,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
         parser.tokens.getAssert(ORB)?;
@@ -766,12 +801,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
         parser.tokens.getAssert(TokenType::CRB)?;
 
         // FIXME
-        Ok(ASTNode::Expr(Expression::Callable(
+        Ok(RawExpression::Callable(
             Box::new(parser.prevPop()?.asExpr()?),
             args,
-        )))
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -800,6 +836,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         parser.tokens.getAssert(Fn)?;
 
         let mut args = vec![];
@@ -831,14 +868,15 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
         let body = if parser.tokens.isPeekType(Equals) {
             parser.tokens.getAssert(Equals)?;
             isOneLine = true;
-            Body::new(vec![ast::Statement::Return(parser.parseExpr()?)])
+            Body::new(vec![Statement{ exp: ast::RawStatement::Return(parser.parseExpr()?), loc: vec![] }])
         } else {
             parser.parseBody()?
         };
 
-        Ok(ASTNode::Expr(Expression::Lambda(args, body, returnType)))
+        Ok(RawExpression::Lambda(args, body, returnType))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -867,6 +905,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let s2: &mut VIPLParser = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
         let name = parser.tokens.getIdentifier()?;
@@ -886,9 +925,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit
             CCB,
         )?;
 
-        Ok(ASTNode::Expr(Expression::StructInit(name, inits)))
+        Ok(RawExpression::StructInit(name, inits))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -917,15 +957,17 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FieldAccessParsingUni
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         parser.tokens.getAssert(Dot)?;
         let fieldName = parser.tokens.getIdentifier()?;
 
-        Ok(ASTNode::Expr(Expression::FieldAccess(
+        Ok(RawExpression::FieldAccess(
             Box::new(parser.prevPop()?.asExpr()?),
             fieldName,
-        )))
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -959,6 +1001,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         let prev = parser.prevPop()?.asExpr()?;
 
         let mut typ = None;
@@ -977,13 +1020,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
         let next = parser.parseOne(Ahead)?.asExpr()?;
 
         // FIXME
-        Ok(ASTNode::Statement(Statement::Assignable(
+        Ok(RawStatement::Assignable(
             prev,
             next,
             typ,
-        )))
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1012,6 +1056,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for GlobalParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedNode(|parser| {
         let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
         parser.tokens.getAssert(Global)?;
@@ -1034,9 +1079,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for GlobalParsingUnit {
             Some(p) => p.parse(s2)?.asExpr()?,
         };
 
-        Ok(ASTNode::Global(Node::GlobalVarDef(name, op)))
+        Ok(RawNode::GlobalVarDef(name, op))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1065,6 +1111,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ForParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(For)?;
 
         let varName = parser.tokens.getIdentifier()?;
@@ -1075,9 +1122,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ForParsingUnit {
 
         let body = parser.parseBody()?;
 
-        Ok(ASTNode::Statement(Statement::ForLoop(varName, res, body)))
+        Ok(RawStatement::ForLoop(varName, res, body))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1106,11 +1154,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NullParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        parser.tokens.getAssert(Null)?;
+        parser.parseWrappedExpression(|parser| {
+            parser.tokens.getAssert(Null)?;
 
-        Ok(ASTNode::Expr(Expression::Null))
+            Ok(RawExpression::Null)
+        })
     }
-
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1141,16 +1190,18 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let prev = parser.prevPop()?.asExpr()?;
 
         let arg = parser.parseExprOneLine()?;
 
-        return Ok(ASTNode::Expr(Expression::Callable(
+        Ok(RawExpression::Callable(
             Box::new(prev),
             vec![arg],
-        )));
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1182,16 +1233,19 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let prev = parser.prevPop()?.asExpr()?;
         let name = parser.tokens.getIdentifier()?;
         let arg = parser.parseExprOneLine()?;
 
-        return Ok(ASTNode::Expr(Expression::Callable(
-            Box::new(Expression::Variable(name)),
+            // FIXME
+        return Ok(RawExpression::Callable(
+            Box::new(Expression{ exp: RawExpression::Variable(name), loc: vec![] }),
             vec![prev, arg],
-        )));
+        ));
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1220,6 +1274,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let prev = parser.prevPop()?.asExpr()?;
         parser.tokens.getAssert(QuestionMark)?;
 
@@ -1229,13 +1284,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
 
         let b = parser.parseExpr()?;
 
-        Ok(ASTNode::Expr(Expression::TernaryOperator(
+        Ok(RawExpression::TernaryOperator(
             Box::new(prev),
             Box::new(a),
             Box::new(b),
-        )))
+        ))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1264,6 +1320,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for RepeatParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(Repeat)?;
         let varName = parser.tokens.getIdentifier()?;
         let count = parser.tokens
@@ -1273,9 +1330,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for RepeatParsingUnit {
 
         let body = parser.parseBody()?;
 
-        Ok(ASTNode::Statement(Statement::Repeat(varName, count, body)))
+        Ok(RawStatement::Repeat(varName, count, body))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }
@@ -1304,6 +1362,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedNode(|parser| {
         let mut isNative = false;
 
         parser.tokens.getAssert(TokenType::Fn)?;
@@ -1341,12 +1400,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
         let body = if parser.tokens.isPeekType(Equals) {
             parser.tokens.getAssert(Equals)?;
             isOneLine = true;
-            Body::new(vec![ast::Statement::Return(parser.parseExpr()?)])
+            // FIXME
+            Body::new(vec![Statement{ exp: ast::RawStatement::Return(parser.parseExpr()?), loc: vec![] }])
         } else {
             parser.parseBody()?
         };
 
-        Ok(ASTNode::Global(Node::FunctionDef(ast::FunctionDef {
+        Ok(RawNode::FunctionDef(ast::FunctionDef {
             name,
             localsMeta: args,
             argsCount: argCount,
@@ -1354,9 +1414,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
             returnType,
             isNative,
             isOneLine,
-        })))
+        }))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -1387,6 +1448,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let mut xd = Naughty::new(parser);
 
         let prev = parser.prevPop()?.asExpr()?;
@@ -1400,37 +1462,38 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         match par {
             None => {
                 let res = parser.prevPop()?;
-                Ok(ASTNode::Expr(Expression::BinaryOperation {
+                Ok(RawExpression::BinaryOperation {
                     // FIXME
                     left: Box::new(prev),
                     right: Box::new(res.asExpr()?),
                     op: self.op.clone(),
-                }))
+                })
             },
             Some(p) => unsafe {
                if self.priority < p.getPriority() {
                    let res = xd.getMut().prevPop()?;
 
                    xd.getMut().previousBuf.push(
-                       ASTNode::Expr(Expression::BinaryOperation {
+                       ASTNode::Expr(                   Expression{ exp: RawExpression::BinaryOperation {
                            left: Box::new(prev),
                            right: Box::new(res.asExpr()?),
                            op: self.op.clone(),
-                       }
-                   ));
+                       }, loc: vec![] })
+                   );
 
-                   Ok(p.parse(xd.getMut())?)
+                   Ok(p.parse(xd.getMut())?.asExpr()?.exp)
                 } else {
-                   Ok(ASTNode::Expr(Expression::BinaryOperation {
+                   Ok(RawExpression::BinaryOperation {
                        left: Box::new(prev),
                        right: Box::new(p.parse(xd.getMut())?.asExpr()?),
                        op: self.op.clone(),
-                   }))
+                   })
                 }
             }
         }
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         self.priority
     }
@@ -1487,6 +1550,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let mut peek = parser.tokens.peekOneRes()?;
 
         let mut buf = String::new();
@@ -1499,21 +1563,13 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
 
         let res = match peek.typ {
             TokenType::IntLiteral => {
-                buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::IntLiteral(buf))
-            }
+                buf.push_str(&peek.str);(RawExpression::IntLiteral(buf))            }
             TokenType::LongLiteral => {
-                buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::IntLiteral(buf))
-            }
+                buf.push_str(&peek.str);(RawExpression::IntLiteral(buf))            }
             TokenType::FloatLiteral => {
-                buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::FloatLiteral(buf))
-            }
+                buf.push_str(&peek.str);(RawExpression::FloatLiteral(buf))            }
             TokenType::DoubleLiteral => {
-                buf.push_str(&peek.str);
-                ASTNode::Expr(Expression::FloatLiteral(buf))
-            }
+                buf.push_str(&peek.str);(RawExpression::FloatLiteral(buf))            }
             _ => {
                 return Err(ParserError::InvalidToken(InvalidToken {
                     expected: TokenType::IntLiteral,
@@ -1524,7 +1580,8 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
         parser.tokens.consume();
         Ok(res)
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -1543,14 +1600,16 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
     }
 
     fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
         let e = parser.prevPop()?.asExpr()?;
         parser.tokens.getAssert(As)?;
 
         let t = parser.parseDataType()?;
 
-        Ok(ASTNode::Expr(Expression::TypeCast(Box::new(e), t)))
+        Ok(RawExpression::TypeCast(Box::new(e), t))
     }
-
+)
+    }
     fn getPriority(&self) -> usize {
         todo!()
     }

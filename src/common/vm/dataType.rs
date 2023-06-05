@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::{RawExpression};
 use crate::errors::{CodeGenError, TypeError};
 use crate::vm::dataType::DataType::*;
 use crate::vm::objects::Str;
@@ -86,14 +86,6 @@ impl DataType {
                 actual: self.clone(),
                 exp: None,
             }))
-        }
-    }
-
-    pub fn assertNotVoid(self) -> Result<DataType, CodeGenError> {
-        if self != Void {
-            Ok(self)
-        } else {
-            Err(CodeGenError::UnexpectedVoid)
         }
     }
 

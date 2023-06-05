@@ -229,7 +229,7 @@ pub extern "C" fn lCall(
 
     if DEBUG {
         println!(
-            "[ffi] after call {} {:?}",
+            "[ffi] after call frameCount: {} localsPtr {:?}",
             vm.frameCount(),
             vm.getFrame().localVariables
         );
@@ -275,7 +275,12 @@ pub extern "C" fn strLen(obj: &mut ViplObject<Str>) -> Value {
     obj.data.string.len().into()
 }
 
+#[no_mangle]
 pub extern "C" fn dynamicCall(vm: &mut VirtualMachine, f: Value, rsp: usize) -> Value {
+    if DEBUG {
+        println!("[ffi] dynamicCall {:?} {:?}", f, rsp);
+    }
+
     let (nId, fId) = f.asFunction();
 
     let (fMeta, _) = vm.getNamespace(nId as usize).getFunction(fId as usize);

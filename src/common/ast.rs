@@ -1,4 +1,4 @@
-use crate::ast::Statement::StatementExpression;
+use crate::ast::RawStatement::StatementExpression;
 use crate::bytecodeGen::Body;
 use std::collections::HashMap;
 use std::error::Error;
@@ -37,8 +37,8 @@ pub enum ArithmeticOp {
     Div,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
+#[derive(Debug, Clone)]
+pub enum RawExpression {
     BinaryOperation {
         left: Box<Expression>,
         right: Box<Expression>,
@@ -63,41 +63,41 @@ pub enum Expression {
     TypeCast(Box<Expression>, DataType)
 }
 
-impl Expression {
+impl RawExpression {
     pub fn isCallable(&self) -> bool {
         return match self {
-            Expression::Variable(..) => true,
-            Expression::NamespaceAccess(..) => true,
-            Expression::FieldAccess(..) => true,
+            RawExpression::Variable(..) => true,
+            RawExpression::NamespaceAccess(..) => true,
+            RawExpression::FieldAccess(..) => true,
             _ => false,
         };
     }
 
     pub fn isAssignable(&self) -> bool {
         return match self {
-            Expression::Variable(..) => true,
-            Expression::ArrayIndexing(..) => true,
-            Expression::NamespaceAccess(..) => true,
-            Expression::FieldAccess(..) => true,
+            RawExpression::Variable(..) => true,
+            RawExpression::ArrayIndexing(..) => true,
+            RawExpression::NamespaceAccess(..) => true,
+            RawExpression::FieldAccess(..) => true,
             _ => false,
         };
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ArrayAccess {
     pub expr: Expression,
     pub index: Expression,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
     pub name: String,
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
+#[derive(Debug, Clone)]
+pub enum RawStatement {
     While(WhileS),
     If(If),
     Return(Expression),
@@ -125,12 +125,12 @@ pub enum ModType {
     Mul,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Return {
     pub exp: Expression,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct If {
     pub condition: Expression,
     pub body: Body,
@@ -157,7 +157,7 @@ impl Into<StructMeta> for StructDef {
 }
 
 #[derive(Debug, Clone)]
-pub enum Node {
+pub enum RawNode {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
     GlobalVarDef(String, Expression),
@@ -189,7 +189,7 @@ impl FunctionDef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct WhileS {
     pub exp: Expression,
     pub body: Body,
@@ -199,7 +199,25 @@ pub struct WhileS {
 pub struct VariableCreate {
     pub name: String,
     pub init: Option<Expression>,
-    pub typeHint: Option<DataType>,
+    pub typeHint: Option<TokenType>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Expression {
+    pub exp: RawExpression,
+    pub loc: Vec<Token<TokenType>>
+}
+
+#[derive(Debug, Clone)]
+pub struct Statement {
+    pub exp: RawStatement,
+    pub loc: Vec<Token<TokenType>>
+}
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub exp: RawNode,
+    pub loc: Vec<Token<TokenType>>
 }
 
 #[derive(Debug, Clone)]
@@ -257,9 +275,9 @@ impl ASTNode {
         let clone = self.clone();
         match self {
             ASTNode::Statement(s) => Ok(s),
-            ASTNode::Expr(e) => match e {
-                Expression::NamespaceAccess(f) => todo!(),
-                Expression::Callable(_, _) => Ok(StatementExpression(e.clone())),
+            ASTNode::Expr(e) => match e.exp {
+                RawExpression::NamespaceAccess(f) => todo!(),
+                RawExpression::Callable(_, _) => Ok(Statement{ exp: StatementExpression(e.clone()), loc: e.loc.clone() }),
                 _ => Err(ParserError::InvalidOperation(InvalidOperation {
                     operation: clone,
                     expected: String::from("Statement"),

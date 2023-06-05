@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io::{BufRead, Write};
 use std::process::exit;
 
-use vipl::ast::{ASTNode, Statement};
+use vipl::ast::{ASTNode, RawStatement, Statement};
 use vipl::bytecodeGen::{Body, ExpressionCtx, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
@@ -115,7 +115,7 @@ fn main() {
         for i in &v {
             match i {
                 ASTNode::Statement(s) => buf.push(s.clone()),
-                ASTNode::Expr(e) => buf.push(Statement::StatementExpression(e.clone())),
+                ASTNode::Expr(e) => buf.push(Statement { exp: RawStatement::StatementExpression(e.clone()), loc: vec![] }),
                 _ => {}
             }
         }

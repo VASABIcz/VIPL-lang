@@ -5,21 +5,20 @@ use std::fmt::{Debug, Display, Formatter};
 use std::usize;
 
 use crate::ast;
-use crate::ast::Expression::{IntLiteral, NamespaceAccess};
-use crate::ast::Statement::{Assignable, StatementExpression};
-use crate::ast::{
-    ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, Expression, Node, Statement, StructDef,
-    VariableCreate, VariableModd, WhileS,
-};
+use crate::ast::RawExpression::{IntLiteral, NamespaceAccess};
+use crate::ast::RawStatement::{Assignable, StatementExpression};
+use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, VariableCreate, VariableModd, WhileS};
 use crate::bytecodeGen::Body;
 
-use crate::errors::{InvalidToken, NoSuchParsingUnit, ParserError, SymbolType};
+use crate::errors::{CodeGenError, InvalidToken, NoSuchParsingUnit, ParserError, SymbolType};
 
 use crate::lexer::{SourceProvider, Token};
+use crate::lexingUnits::TokenType;
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parsingUnits::{parsingUnits};
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::{Generic, ObjectMeta};
+use crate::viplParser::VIPLParser;
 use crate::vm::variableMetadata::VariableMetadata;
 
 const DEBUG: bool = false;
