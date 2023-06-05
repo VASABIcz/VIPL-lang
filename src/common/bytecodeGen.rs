@@ -1165,8 +1165,10 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                                 r.push(LCall { namespace: funcId.2 as u32, id: funcId.3 as u32 });
                             }
                         } else {
+                            let (args, prevT) = r.constructCtx(prev).toDataType()?.getFunction().unwrap();
+
                             genExpression(r.constructCtx(prev))?;
-                            r.push(DynamicCall)
+                            r.push(DynamicCall(!prevT.isVoid(), args.len()))
                         }
                     }
                     Expression::NamespaceAccess(v) => {
@@ -1189,6 +1191,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                         let prevT = r.constructCtx(v).toDataType()?.assertNotVoid()?;
 
                         if prevT.isFunction() {
+                            let (argz, f) = prevT.getFunction().unwrap();
+
                             for arg in args {
                                 r.constructCtx(arg).toDataType()?.assertNotVoid()?;
                                 genExpression(r.constructCtx(arg))?;
@@ -1196,7 +1200,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
                             genExpression(r.constructCtx(prev))?;
 
-                            r.push(DynamicCall);
+                            r.push(DynamicCall(!f.isVoid(), argz.len()));
                             return Ok(());
                         }
 
@@ -1226,11 +1230,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                             id: fId as u32,
                         })
                     }
-
-                    _ => {
-                        genExpression(r.constructCtx(prev))?;
-                        r.push(DynamicCall)
-                    }
+                    _ => panic!()
                 }
             },
             Expression::StructInit(name, init) => {

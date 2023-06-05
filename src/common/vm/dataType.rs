@@ -70,6 +70,13 @@ impl DataType {
         }
     }
 
+    pub fn getFunction(self) -> Result<(Vec<DataType>, DataType), CodeGenError> {
+        match self {
+            Function { args, ret } => Ok((args, *ret)),
+            _ => Err(CodeGenError::VeryBadState)
+        }
+    }
+
     pub fn assertType(&self, t: DataType) -> Result<DataType, CodeGenError> {
         if self == &t {
             Ok(t)

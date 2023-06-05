@@ -275,6 +275,16 @@ pub extern "C" fn strLen(obj: &mut ViplObject<Str>) -> Value {
     obj.data.string.len().into()
 }
 
+pub extern "C" fn dynamicCall(vm: &mut VirtualMachine, f: Value, rsp: usize) -> Value {
+    let (nId, fId) = f.asFunction();
+
+    let (fMeta, _) = vm.getNamespace(nId as usize).getFunction(fId as usize);
+
+
+
+    todo!()
+}
+
 #[repr(C)]
 pub struct NativeWrapper {
     pub pushValue: extern "C" fn(&mut VirtualMachine, isize) -> (),
@@ -304,6 +314,7 @@ pub struct NativeWrapper {
         &mut ViplObject<Str>,
     ) -> *mut ViplObject<Str>,
     pub lCall: extern "C" fn(&mut VirtualMachine, usize, usize, *mut Value) -> Value,
+    pub dynamicCall: extern "C" fn(&mut VirtualMachine, Value, usize) -> Value,
     pub printDigit: extern "C" fn(isize),
     pub arrayLen: extern "C" fn (&mut ViplObject<Array>) -> Value,
     pub strLen: extern "C" fn (&mut ViplObject<Str>) -> Value
@@ -324,6 +335,7 @@ impl NativeWrapper {
             stringGetChar,
             strConcat,
             lCall,
+            dynamicCall,
             printDigit,
             arrayLen,
             strLen,

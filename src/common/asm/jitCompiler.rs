@@ -11,6 +11,7 @@ use std::fs;
 use std::mem::transmute;
 use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use crate::bytecodeGen::SymbolicOpcode;
 
 pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     let dir = temp_dir();
@@ -52,7 +53,7 @@ pub struct JITCompiler {}
 impl JITCompiler {
     pub fn compile(
         &self,
-        ops: Vec<OpCode>,
+        ops: &[SymbolicOpcode],
         vm: &VirtualMachine,
         namespace: &Namespace,
         returns: bool,

@@ -8,7 +8,7 @@ use std::ptr::write;
 
 use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R13};
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, std::marker::ConstParamTy)]
 pub enum Register {
     Rax,
     Rbx,

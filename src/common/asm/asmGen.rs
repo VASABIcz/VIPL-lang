@@ -9,10 +9,11 @@ use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use libc::THOUSEP;
-use offset::offset_of;
 use std::collections::HashMap;
 use std::fmt::Pointer;
 use std::mem::size_of;
+use offset::offset_of;
+use crate::bytecodeGen::SymbolicOpcode;
 use crate::vm::nativeObjects::UntypedObject;
 
 const DEBUG: bool = false;
@@ -73,7 +74,7 @@ impl<T: AsmGen> Jitter<T> {
         }
         self.gen.beginIgnore();
 
-        let t = text.replace("\"", "");
+        let t = text.replace('\"', "");
         self.gen.comment(&format!("debugPrint {}", text));
 
         self.acquireRegister(Rax);
@@ -94,6 +95,20 @@ impl<T: AsmGen> Jitter<T> {
         self.releaseRegister(Rax);
 
         self.gen.endIgnore();
+    }
+
+    fn withTempReg<F: Fn(&mut Jitter<T>,Register)>(&mut self, f: F) -> Register {
+        let r = self.acquireTemp();
+        f(self, r);
+        self.releaseRegister(r);
+
+        r
+    }
+
+    fn acquireScoped<F: Fn(&mut Jitter<T>)>(&mut self, reg: Register, f: F) {
+        self.acquireRegister(reg);
+        f(self);
+        self.releaseRegister(reg);
     }
 
     fn saveAquiredRegisters(&mut self, except: &[Register]) {
@@ -215,9 +230,11 @@ impl<T: AsmGen> Jitter<T> {
 
         self.gen.comment("save pointer to stack args");
         // FIXME will cause bugs when there is no free registers and needs to reuse one by saving its content onto a stack
-        let r = self.acquireTemp();
-        self.gen.mov(r.into(), Rsp.into());
-        self.releaseRegister(r);
+
+        let r = self.withTempReg(|s, r| {
+            s.gen.mov(r.into(), Rsp.into());
+        });
+
 
         self.safeCall(
             AsmLocation::Indexing(
@@ -282,15 +299,15 @@ impl<T: AsmGen> Jitter<T> {
     }
 
     pub fn saveCoreRegs(&mut self) {
-        self.gen.push(VM_REG.into());
-        self.gen.push(STACK_REG.into());
-        self.gen.push(LOCALS_REG.into());
+        // self.gen.push(VM_REG.into());
+        // self.gen.push(STACK_REG.into());
+        // self.gen.push(LOCALS_REG.into());
     }
 
     pub fn restoreCoreRegs(&mut self) {
-        self.gen.pop(LOCALS_REG);
-        self.gen.pop(STACK_REG);
-        self.gen.pop(VM_REG);
+        // self.gen.pop(LOCALS_REG);
+        // self.gen.pop(STACK_REG);
+        // self.gen.pop(VM_REG);
     }
 
     fn pushStr(&mut self, s: usize) {
@@ -370,333 +387,320 @@ impl<T: AsmGen> Jitter<T> {
 
     pub fn generateAssembly(
         &mut self,
-        opCodes: Vec<OpCode>,
+        opCodes: &[SymbolicOpcode],
         vm: &VirtualMachine,
         namespace: &Namespace,
         returns: bool,
     ) {
-        let mut jmpCounter = 0usize;
-
-        let mut makeLabelsGreatAgain = HashMap::new();
-        let mut jmpLookup = HashMap::new();
         let mut lastRet = -1isize;
 
         self.initCode();
 
-        for (i, op) in opCodes.iter().enumerate() {
-            if let OpCode::Jmp { offset, jmpType } = op {
-                let o = *offset + 1;
-                let xd = (i as i32 + o) as usize;
-                let label = match makeLabelsGreatAgain.get(&xd) {
-                    None => {
-                        let a = format!("JMP{}", jmpCounter);
-                        makeLabelsGreatAgain.insert(xd, a.clone());
-                        jmpCounter += 1;
-                        a
-                    }
-                    Some(v) => v.clone(),
-                };
-                jmpLookup.insert(i, label);
-            }
+        for (i, oo) in opCodes.iter().enumerate() {
+            self.generateInstruction(&vm, namespace, returns, &mut lastRet, i, oo);
         }
+    }
 
-        for (i, op) in opCodes.iter().enumerate() {
-            println!("genning {:?}", op);
-            self.debugPrint(&format!("executing {:?}\n", op));
-            self.gen.comment(&format!("start opcode {:?}", op));
+    pub fn generateInstruction(&mut self, vm: &VirtualMachine, namespace: &Namespace, returns: bool, lastRet: &mut isize, i: usize, oo: &SymbolicOpcode) -> bool {
+        match oo {
+            SymbolicOpcode::Op(op) => {
+                println!("genning {:?}", op);
+                self.debugPrint(&format!("executing {:?}\n", op));
+                self.gen.comment(&format!("=== start opcode {:?}", op));
 
-            if let Some(v) = makeLabelsGreatAgain.get(&i) {
-                self.gen.makeLabel(v)
-            }
-
-            match op {
-                OpCode::PushInt(v) => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), (*v).into());
-                }
-                OpCode::PushIntOne => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), 1.into());
-                }
-                OpCode::PushIntZero => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), 0.into());
-                }
-                OpCode::PushFloat(_) => todo!(),
-                OpCode::PushBool(b) => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), ((*b) as usize).into());
-                }
-                OpCode::PushChar(c) => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), ((*c) as usize).into());
-                }
-                OpCode::Pop => {
-                    self.pop();
-                }
-                OpCode::Dup => {
-                    let r = self.getTop();
-                    let r1 = self.acquireAny();
-                    self.gen.mov(r1.into(), r.into());
-                }
-                OpCode::Swap => {
-                    let r = self.stack.pop().unwrap();
-                    let r1 = self.stack.pop().unwrap();
-                    self.stack.push(r1);
-                    self.stack.push(r);
-                }
-                OpCode::GetLocal { index } => {
-                    let r = self.acquireAny();
-                    self.gen
-                        .mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
-                }
-                OpCode::SetLocal { index } => {
-                    let r = self.pop();
-                    self.gen
-                        .mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
-                }
-                OpCode::Jmp { offset, jmpType } => {
-                    let l = jmpLookup.get(&i).unwrap().clone();
-                    match jmpType {
-                        JmpType::True => {
-                            let r = self.pop();
-                            self.gen.compare(r.into(), 1.into());
-                            self.gen.jmpIfOne(l.into())
-                        }
-                        JmpType::False => {
-                            let r = self.pop();
-                            self.gen.compare(r.into(), 0.into());
-                            self.gen.jmpIfZero(l.into())
-                        }
-                        JmpType::Jmp => self.gen.jmp(l.into())
+                match op {
+                    OpCode::PushInt(v) => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), (*v).into());
                     }
-                }
-                OpCode::Return => {
-                    if i - 1 == lastRet as usize {
-                        lastRet = i as isize;
-                        continue;
+                    OpCode::PushIntOne => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), 1.into());
                     }
-                    lastRet = i as isize;
-                    if returns {
-                        match self.stack.pop() {
-                            None => {}
-                            Some(r) => {
-                                self.gen.mov(Rax.into(), r.into());
+                    OpCode::PushIntZero => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), 0.into());
+                    }
+                    OpCode::PushFloat(f) => todo!(),
+                    OpCode::PushBool(b) => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), ((*b) as usize).into());
+                    }
+                    OpCode::PushChar(c) => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), ((*c) as usize).into());
+                    }
+                    OpCode::Pop => {
+                        self.pop();
+                    }
+                    OpCode::Dup => {
+                        let r = self.getTop();
+                        let r1 = self.acquireAny();
+                        self.gen.mov(r1.into(), r.into());
+                    }
+                    OpCode::Swap => {
+                        let r = self.stack.pop().unwrap();
+                        let r1 = self.stack.pop().unwrap();
+                        self.stack.push(r1);
+                        self.stack.push(r);
+                    }
+                    OpCode::GetLocal { index } => {
+                        let r = self.acquireAny();
+                        self.gen
+                            .mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
+                    }
+                    OpCode::SetLocal { index } => {
+                        let r = self.pop();
+                        self.gen
+                            .mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+                    }
+                    OpCode::Jmp { offset, jmpType } => {
+                        unreachable!()
+                    }
+                    OpCode::Return => {
+                        if i - 1 == *lastRet as usize {
+                            *lastRet = i as isize;
+                            return true;
+                        }
+                        *lastRet = i as isize;
+                        if returns {
+                            match self.stack.pop() {
+                                None => {}
+                                Some(r) => {
+                                    self.gen.mov(Rax.into(), r.into());
+                                }
                             }
                         }
+                        self.printDigit(Rax.into());
+                        self.gen.ret()
                     }
-                    self.printDigit(Rax.into());
-                    self.gen.ret()
-                }
-                OpCode::Add(t) => match t {
-                    RawDataType::Int => {
+                    OpCode::Add(t) => match t {
+                        RawDataType::Int => {
+                            let r2 = self.pop();
+                            let r1 = self.getTop();
+                            self.gen.add(r1.into(), r2.into());
+                        }
+                        _ => todo!(),
+                    },
+                    OpCode::Sub(t) => match t {
+                        RawDataType::Int => {
+                            let r2 = self.pop();
+                            let r1 = self.getTop();
+                            self.gen.sub(r1.into(), r2.into());
+                        }
+                        _ => todo!(),
+                    },
+                    OpCode::Div(_) => todo!(),
+                    OpCode::Mul(t) => match t {
+                        RawDataType::Int => {
+                            let r2 = self.pop();
+                            let r1 = self.getTop();
+                            self.gen.imul(r1.into(), r2.into());
+                        }
+                        _ => todo!(),
+                    },
+                    OpCode::Equals(t) => {
                         let r2 = self.pop();
                         let r1 = self.getTop();
-                        self.gen.add(r1.into(), r2.into());
+
+                        self.acquireScoped(Rax, |s| {
+                            s.gen.xor(Rax.into(), Rax.into());
+                            s.gen.compare(r1.into(), r2.into());
+                            s.gen.sete(r1);
+                        });
                     }
-                    _ => todo!(),
-                },
-                OpCode::Sub(t) => match t {
-                    RawDataType::Int => {
+                    OpCode::Greater(t) => match t {
+                        RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
+                            let r2 = self.pop();
+                            let r1 = self.getTop();
+
+                            self.acquireScoped(Rax, |s| {
+                                s.gen.xor(Rax.into(), Rax.into());
+                                s.gen.compare(r1.into(), r2.into());
+                                s.gen.setl(r1);
+                            });
+                        }
+                        _ => todo!(),
+                    },
+                    OpCode::Less(t) => match t {
+                        RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
+                            let r2 = self.pop();
+                            let r1 = self.getTop();
+
+                            self.acquireScoped(Rax, |s| {
+                                s.gen.xor(Rax.into(), Rax.into());
+                                s.gen.compare(r1.into(), r2.into());
+                                s.gen.setg(r1);
+                            });
+                        }
+                        _ => todo!(),
+                    },
+                    OpCode::Or => {
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
+
+                        self.gen.or(r1.into(), r2.into());
+                    }
+                    OpCode::And => {
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
+
+                        self.gen.and(r1.into(), r2.into());
+                    }
+                    OpCode::Not => {
+                        let r1 = self.getTop();
+                        self.gen.not(r1.into());
+                    }
+                    OpCode::StrNew(v) => {
+                        self.pushStr(*v)
+                    }
+                    OpCode::SCall { id } => {
+                        let f = namespace.getFunctionMeta(*id).unwrap();
+                        let argsCount = f.argsCount;
+                        let returns = f.returns();
+
+                        self.genCall(namespace.id, *id, returns, argsCount, f.localsMeta.len())
+                    }
+                    OpCode::LCall { namespace, id } => {
+                        let f = &vm.getNamespace(*namespace as usize).getFunction(*id as usize).0;
+                        let returns = f.returns();
+                        let argsCount = f.argsCount;
+
+                        self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
+                    }
+                    OpCode::GetLocalZero => {
+                        let r = self.acquireAny();
+                        self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
+                    }
+                    OpCode::SetLocalZero => {
+                        let r = self.pop();
+                        self.gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
+                    }
+                    OpCode::LessInt => {
+                        let r2 = self.pop();
+                        let r1 = self.getTop();
+
+                        self.acquireScoped(Rax, |s| {
+                            s.gen.xor(Rax.into(), Rax.into());
+                            s.gen.compare(r1.into(), r2.into());
+                            s.gen.sete(r1);
+                        });
+                    }
+                    OpCode::SubInt => {
                         let r2 = self.pop();
                         let r1 = self.getTop();
                         self.gen.sub(r1.into(), r2.into());
                     }
-                    _ => todo!(),
-                },
-                OpCode::Div(_) => todo!(),
-                OpCode::Mul(t) => match t {
-                    RawDataType::Int => {
+                    OpCode::MulInt => {
                         let r2 = self.pop();
                         let r1 = self.getTop();
                         self.gen.imul(r1.into(), r2.into());
                     }
-                    _ => todo!(),
-                },
-                OpCode::Equals(t) => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
-
-                    self.acquireRegister(Rax);
-
-                    self.gen.xor(Rax.into(), Rax.into());
-                    self.gen.compare(r1.into(), r2.into());
-                    self.gen.sete(r1);
-
-                    self.releaseRegister(Rax);
-                }
-                OpCode::Greater(t) => match t {
-                    RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
+                    OpCode::AddInt => {
                         let r2 = self.pop();
                         let r1 = self.getTop();
-
-                        self.acquireRegister(Rax);
-
-                        self.gen.xor(Rax.into(), Rax.into());
-                        self.gen.compare(r1.into(), r2.into());
-                        self.gen.setl(r1);
-
-                        self.releaseRegister(Rax);
+                        self.gen.add(r1.into(), r2.into());
                     }
-                    _ => todo!(),
-                },
-                OpCode::Less(t) => match t {
-                    RawDataType::Int | RawDataType::Bool | RawDataType::Char => {
-                        let r2 = self.pop();
-                        let r1 = self.getTop();
+                    OpCode::ArrayNew => {
+                        let r1 = self.pop();
+                        let ret = self.acquireAny();
 
-                        self.acquireRegister(Rax);
-
-                        self.gen.xor(Rax.into(), Rax.into());
-                        self.gen.compare(r1.into(), r2.into());
-                        self.gen.setg(r1);
-
-                        self.releaseRegister(Rax);
+                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayNew).as_u32()), &[VM_REG.into(), STACK_REG.into(), r1.into()], Some(ret));
                     }
-                    _ => todo!(),
-                },
-                OpCode::Or => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
+                    OpCode::New { namespaceID, structID } => {
+                        let ret = self.acquireAny();
 
-                    self.gen.or(r1.into(), r2.into());
-                }
-                OpCode::And => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
+                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::allocateObject).as_u32()),
+                                      &[VM_REG.into(), STACK_REG.into(), (*namespaceID).into(), (*structID).into()], Some(ret));
+                    }
+                    OpCode::SetField { fieldID } => {
+                        let value = self.pop();
+                        let obj = self.pop();
 
-                    self.gen.and(r1.into(), r2.into());
-                }
-                OpCode::Not => {
-                    let r1 = self.getTop();
-                    self.gen.not(r1.into());
-                }
-                OpCode::StrNew(v) => {
-                    self.pushStr(*v)
-                }
-                OpCode::SCall { id } => {
-                    let f = namespace.getFunctionMeta(*id).unwrap();
-                    let argsCount = f.argsCount;
-                    let returns = f.returns();
+                        self.gen.mov(AsmLocation::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize), value.into());
+                    }
+                    OpCode::GetField { fieldID } => {
+                        let obj = self.pop();
+                        let r = self.acquireAny();
 
-                    self.genCall(namespace.id, *id, returns, argsCount, f.localsMeta.len())
-                }
-                OpCode::LCall { namespace, id } => {
-                    let f = &vm.getNamespace(*namespace as usize).getFunction(*id as usize).0;
-                    let returns = f.returns();
-                    let argsCount = f.argsCount;
+                        self.gen.mov(r.into(), AsmValue::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize));
+                    }
+                    OpCode::ArrayStore => {
+                        let index = self.pop();
+                        let value = self.pop();
+                        let arr = self.pop();
 
-                    self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
-                }
-                OpCode::GetLocalZero => {
-                    let r = self.acquireAny();
-                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), 0));
-                }
-                OpCode::SetLocalZero => {
-                    let r = self.pop();
-                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), 0), r.into());
-                }
-                OpCode::LessInt => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
+                        self.safeCall(
+                            self.vmOffset(
+                                offset_of!(NativeWrapper::arrSetValue).as_u32()
+                            ), &[VM_REG.into(), arr.into(), index.into(), value.into()], None);
+                    }
+                    OpCode::ArrayLoad => {
+                        let index = self.pop();
+                        let arr = self.pop();
 
-                    self.acquireRegister(Rax);
+                        let ret = self.acquireAny();
 
-                    self.gen.xor(Rax.into(), Rax.into());
-                    self.gen.compare(r1.into(), r2.into());
-                    self.gen.sete(r1);
+                        self.safeCall(
+                            self.vmOffset(
+                                offset_of!(NativeWrapper::arrGetValue).as_u32()
+                            ), &[VM_REG.into(), arr.into(), index.into()], Some(ret));
+                    }
+                    OpCode::Inc { typ, index } => {
+                        self.withTempReg(|s, r| {
+                            s.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
 
-                    self.releaseRegister(Rax);
+                            s.gen.inc(r);
+
+                            s.gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
+                        });
+                    }
+                    OpCode::ArrayLength => {
+                        let obj = self.pop();
+                        let res = self.acquireAny();
+
+                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayLen).as_u32()), &[obj.into()], Some(res));
+                    }
+                    OpCode::StringLength => {
+                        let obj = self.pop();
+                        let res = self.acquireAny();
+
+                        self.safeCall(self.vmOffset(offset_of!(NativeWrapper::strLen).as_u32()), &[obj.into()], Some(res))
+                    }
+                    OpCode::DynamicCall(returns, argCount) => {
+                        todo!();
+                        let obj = self.pop();
+                        let reg = self.acquireAny();
+
+                        self.gen.mov(reg.into(), obj.into());
+                        // self.gen.and(obj.into(), 0xffffffff.into());
+                        // self.gen.and(reg.into(), 0xffffffff00000000.into());
+
+                        // self.genCall(*namespace as usize, *id as usize, returns, argsCount, f.localsMeta.len())
+                    }
+                    e => todo!("{:?}", e),
                 }
-                OpCode::SubInt => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
-                    self.gen.sub(r1.into(), r2.into());
-                }
-                OpCode::MulInt => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
-                    self.gen.imul(r1.into(), r2.into());
-                }
-                OpCode::AddInt => {
-                    let r2 = self.pop();
-                    let r1 = self.getTop();
-                    self.gen.add(r1.into(), r2.into());
-                }
-                OpCode::ArrayNew => {
-                    let r1 = self.pop();
-                    let ret = self.acquireAny();
-
-                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayNew).as_u32()), &[VM_REG.into(), STACK_REG.into(), r1.into()], Some(ret));
-                }
-                OpCode::New { namespaceID, structID } => {
-                    let ret = self.acquireAny();
-
-                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::allocateObject).as_u32()),
-                                  &[VM_REG.into(), STACK_REG.into(), (*namespaceID).into(), (*structID).into()], Some(ret));
-                }
-                OpCode::SetField { fieldID } => {
-                    let value = self.pop();
-                    let obj = self.pop();
-
-                    self.gen.mov(AsmLocation::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize), value.into());
-                }
-                OpCode::GetField { fieldID } => {
-                    let obj = self.pop();
-                    let r = self.acquireAny();
-
-                    self.gen.mov(r.into(), AsmValue::Indexing(obj.into(), (size_of::<UntypedObject>() + fieldID * 8) as isize));
-                }
-                OpCode::ArrayStore => {
-                    let index = self.pop();
-                    let value = self.pop();
-                    let arr = self.pop();
-
-                    self.safeCall(
-                        self.vmOffset(
-                            offset_of!(NativeWrapper::arrSetValue).as_u32()
-                        ), &[VM_REG.into(), arr.into(), index.into(), value.into()], None);
-                }
-                OpCode::ArrayLoad => {
-                    let index = self.pop();
-                    let arr = self.pop();
-
-                    let ret = self.acquireAny();
-
-                    self.safeCall(
-                        self.vmOffset(
-                            offset_of!(NativeWrapper::arrGetValue).as_u32()
-                        ), &[VM_REG.into(), arr.into(), index.into()], Some(ret));
-                }
-                OpCode::Inc { typ, index } => {
-                    let r = self.acquireTemp();
-
-                    self.gen.mov(r.into(), AsmValue::Indexing(Rbx.into(), *index as isize));
-
-                    self.gen.inc(r);
-
-                    self.gen.mov(AsmLocation::Indexing(Rbx.into(), *index as isize), r.into());
-
-                    self.releaseRegister(r);
-                }
-                OpCode::ArrayLength => {
-                    let obj = self.pop();
-                    let res = self.acquireAny();
-
-                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::arrayLen).as_u32()), &[obj.into()], Some(res));
-                }
-                OpCode::StringLength => {
-                    let obj = self.pop();
-                    let res = self.acquireAny();
-
-                    self.safeCall(self.vmOffset(offset_of!(NativeWrapper::strLen).as_u32()), &[obj.into()], Some(res))
-                }
-                OpCode::DynamicCall => {
-                    todo!()
-                }
-                e => todo!("{:?}", e),
+                self.gen.comment(&format!("=== end opcode {:?}\n", op));
             }
-            self.gen.comment(&format!("end opcode {:?}\n", op));
+            SymbolicOpcode::Jmp(label, jmpType) => {
+                match jmpType {
+                    JmpType::True => {
+                        let r = self.pop();
+                        self.gen.compare(r.into(), 1.into());
+                        self.gen.jmpIfOne(format!("LABEL{}", label).into())
+                    }
+                    JmpType::False => {
+                        let r = self.pop();
+                        self.gen.compare(r.into(), 0.into());
+                        self.gen.jmpIfZero(format!("LABEL{}", label).into())
+                    }
+                    JmpType::Jmp => self.gen.jmp(format!("LABEL{}", label).into())
+                }
+            }
+            SymbolicOpcode::LoopLabel(l) => {
+                self.gen.makeLabel(&format!("LABEL{}", l))
+            }
         }
+        false
     }
 }

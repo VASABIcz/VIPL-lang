@@ -41,7 +41,7 @@ use crate::vm::vm::OpCode::*;
 #[derive(Debug, Clone)]
 pub enum ImportHints {
     Namespace(Vec<String>, Option<String>),
-    Symbols(Vec<String>, Vec<(String, Option<String>)>)
+    Symbols(Vec<String>, Vec<(String, Option<String>)>),
 }
 
 // FIXME DEBUG is faster than default
@@ -86,7 +86,7 @@ pub enum OpCode {
         namespace: u32,
         id: u32,
     },
-    DynamicCall,
+    DynamicCall(bool, usize),
     Return,
 
     Add(RawDataType),
@@ -192,7 +192,7 @@ pub struct VirtualMachine {
     frames: Vec<StackFrame>,
     namespaces: FastAcess<String, Namespace>,
 
-    jitCompiler: JITCompiler
+    jitCompiler: JITCompiler,
 }
 
 impl VirtualMachine {
@@ -235,7 +235,7 @@ impl VirtualMachine {
         let (namespace, namespaceId) =
             self.namespaces
                 .getSlowStr(name)
-                .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::namespace(
+                .ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::namespace(
                     name,
                 )))?;
 
@@ -299,7 +299,7 @@ impl VirtualMachine {
                             for (gId, s) in n.getGlobals().iter().enumerate() {
                                 table.registerGlobal(s.0.name.clone(), nId, gId, s.0.typ.clone());
                             }
-                            continue
+                            continue;
                         }
 
                         let name = match symRename {
@@ -582,7 +582,7 @@ impl VirtualMachine {
 
             if TRACE {
                 match op {
-                    SCall{ id } => {
+                    SCall { id } => {
                         println!("evaluating {:?} {}", op, self.currentNamespace().getFunction(*id).0.genName());
                     }
                     LCall { namespace, id } => {
@@ -728,7 +728,7 @@ impl VirtualMachine {
 
                     (*vm).call(frame.namespaceId, *id)
                 }
-                DynamicCall => {
+                DynamicCall(_, _) => {
                     let (namespaceRaw, idRaw) = self.pop().asFunction();
                     let namespace = namespaceRaw as usize;
                     let id = idRaw as usize;
@@ -754,7 +754,7 @@ impl VirtualMachine {
                     let obj = self.pop();
 
                     Self::setField(obj, *fieldID, value)
-                },
+                }
                 GetField {
                     fieldID,
                 } => {
@@ -763,7 +763,7 @@ impl VirtualMachine {
                     let v = Self::getField(obj, *fieldID);
 
                     self.push(v);
-                },
+                }
                 Swap => {
                     let a = self.pop();
                     let b = self.pop();
@@ -942,10 +942,10 @@ impl VirtualMachine {
                         };
 
                         match genFunctionDef(f, &mut ctx) {
-                            Ok(v) => {},
+                            Ok(v) => {}
                             Err(e) => {
                                 anotherWarCrime.get_mut().state = FailedToLoad;
-                                return Err(e)
+                                return Err(e);
                             }
                         };
 
@@ -982,14 +982,11 @@ impl VirtualMachine {
                             println!("{:?}", f.localsMeta);
                         }
 
-                        let opt = emitOpcodes(opz)?;
-
-
-                        if false {
-                            let nf = warCrime.get_mut().jitCompiler.compile(opt, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
+                        if true {
+                            let nf = warCrime.get_mut().jitCompiler.compile(&opz, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
                             *a = Some(Native(nf));
-                        }
-                        else {
+                        } else {
+                            let opt = emitOpcodes(opz)?;
                             *a = Some(LoadedFunction::Virtual(opt));
                         }
 
