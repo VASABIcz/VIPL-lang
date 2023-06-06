@@ -121,30 +121,7 @@ impl VIPLError for CodeGenError {
                 errorBody(src, &[(&v.clone().asExpr().unwrap(), Some("this expression evaluates to void"))])
             },
             CodeGenError::AssignableTypeError{ var, varType, exp, expType } => {
-                let mut buf = String::new();
-
-                let locations = var.loc.iter().map(|it| it.location).collect::<Vec<_>>();
-                let row = var.loc.first().unwrap();
-
-                let locations1 = exp.loc.iter().map(|it| it.location).collect::<Vec<_>>();
-                let row1 = exp.loc.first().unwrap();
-
-
-                let a = src.split('\n').enumerate().find(|(i, it)| {
-                    *i == row.location.row
-                }).unwrap();
-
-                let ranges = getRanges(&var.loc, row.location.row);
-                let ranges1 = getRanges(&exp.loc, row1.location.row);
-
-                let vis = visualizeRange(&ranges, ' ', '^', 0).trim_end().to_string();
-                let vis1 = visualizeRange(&ranges1, ' ', '^', 0).trim_end().to_string();
-
-                buf += &format!("  | {}\n", a.1);
-                buf += &format!("  | {} -> this expression evaluates to {}\n", vis1, expType.toString());
-                buf += &format!("  | {} -> this expression evaluates to {}", vis, varType.toString());
-
-                buf
+                errorBody(src, &[(exp, Some(&format!("this expression evaluates to {}", expType.toString()))), (var, Some(&format!("variable is type of {}", varType.toString())))])
             }
             _ => {
                 return None;

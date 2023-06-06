@@ -448,6 +448,7 @@ pub fn visualizeRange(ranges: &[Range<usize>], a: char, b: char, offset: usize) 
 
 pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String {
     let mut buf = String::new();
+    let mut lastLine: Option<usize> = None;
 
     for message in messages {
         let row = message.0.getRow();
@@ -460,9 +461,20 @@ pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String 
 
         let viz = visualizeRange(&ranges, ' ', '^', offset);
 
-        buf += "  | ";
-        buf += trim;
-        buf += "\n";
+        match lastLine {
+            None => {
+                buf += "  | ";
+                buf += trim;
+                buf += "\n";
+            }
+            Some(v) if v != row => {
+                buf += "  | ";
+                buf += trim;
+                buf += "\n";
+            }
+            _ => {}
+        };
+
         buf += "  | ";
         buf += viz.trim_end();
         if let Some(v) = message.1 {
@@ -470,6 +482,8 @@ pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String 
             buf += v;
         }
         buf += "\n";
+
+        lastLine = Some(row);
     }
 
     buf
