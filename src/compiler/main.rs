@@ -42,11 +42,14 @@ fn main() -> Result<(), ()> {
     let id = vm.registerNamespace(n);
 
 
-    vm.link(|c, t| {
+    if let Err(ret) = vm.link(|c, t| {
         if !t.isVoid() {
             c.push(Pop)
         }
-    }).unwrap();
+    }) {
+        ret.printUWU();
+        return Err(())
+    }
 
     let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;
 

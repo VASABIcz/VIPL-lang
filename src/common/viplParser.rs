@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::ast::{ASTNode, Expression, Node, RawExpression, RawNode, RawStatement, Statement};
 use crate::bytecodeGen::Body;
-use crate::errors::{NoSuchParsingUnit, ParserError, SymbolType};
+use crate::errors::{CodeGenError, NoSuchParsingUnit, ParserError, SymbolType};
 
 use crate::lexer::Token;
 use crate::lexingUnits::TokenType;
@@ -31,7 +31,8 @@ impl TokenProvider<TokenType> {
 
 #[derive(Debug)]
 pub struct VIPLParsingState {
-    pub symbols: HashMap<String, SymbolType>
+    pub symbols: HashMap<String, SymbolType>,
+    pub parsingStart: Option<usize>
 }
 
 pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
@@ -40,8 +41,8 @@ pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit
     let mut parser = Parser{
         tokens,
         units,
-        state: VIPLParsingState{ symbols: Default::default() },
-        previousBuf: vec![],
+        state: VIPLParsingState{ symbols: Default::default(), parsingStart: None },
+        previousBuf: vec![]
     };
 
     while !parser.tokens.isDone() {
@@ -79,6 +80,16 @@ pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit
 }
 
 impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
+    pub fn pop(&mut self) -> Result<ASTNode, ParserError<TokenType>> {
+        let r = self.previousBuf.pop().ok_or(ParserError::Unknown("fuuck".to_string().into()))?;
+
+        if self.state.parsingStart.is_none() {
+            self.state.parsingStart = Some((self.tokens.index - 1) as usize);
+        }
+
+        Ok(r)
+    }
+
     pub fn parseWrapped<F: std::ops::Fn(&mut VIPLParser) -> Result<ASTNode, ParserError<TokenType>>>(&mut self, f: F) -> Result<ASTNode, ParserError<TokenType>> {
         let startIndex = self.tokens.index;
 
@@ -94,9 +105,18 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     }
 
     pub fn parseWrappedExpression<F: std::ops::Fn(&mut VIPLParser) -> Result<RawExpression, ParserError<TokenType>>>(&mut self, f: F) -> Result<ASTNode, ParserError<TokenType>> {
-        let startIndex = self.tokens.index;
+        let mut startIndex = self.tokens.index;
+        self.state.parsingStart = None;
 
         let res = f(self)?;
+
+        if let Some(v) = self.state.parsingStart {
+            if v < startIndex {
+                startIndex = v;
+            }
+        }
+
+        self.state.parsingStart = None;
 
         Ok(ASTNode::Expr(Expression { exp: res, loc: self.tokens.tokens[startIndex..self.tokens.index].to_vec() }))
     }

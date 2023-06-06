@@ -238,7 +238,7 @@ impl JSON {
             tokens: provider,
             units: &mut units,
             state: JSONParsingState,
-            previousBuf: vec![],
+            previousBuf: vec![]
         };
 
         let res = parser.parseOne(Ahead)?;

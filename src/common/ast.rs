@@ -228,6 +228,16 @@ pub enum ASTNode {
 }
 
 impl ASTNode {
+    pub fn getLocation(&self) -> &Vec<Token<TokenType>> {
+        match self {
+            ASTNode::Global(v) => &v.loc,
+            ASTNode::Statement(v) => &v.loc,
+            ASTNode::Expr(v) => &v.loc
+        }
+    }
+}
+
+impl ASTNode {
     pub fn isExpr(&self) -> bool {
         match self {
             ASTNode::Expr(_) => true,

@@ -399,7 +399,7 @@ impl<T: AsmGen> Jitter<T> {
         }
     }
 
-    pub fn generateInstruction(&mut self, vm: &VirtualMachine, namespace: &Namespace, returns: bool, lastRet: &mut isize, i: usize, oo: &SymbolicOpcode) -> bool {
+    pub fn generateInstruction(&mut self, vm: &VirtualMachine, namespace: &Namespace, returns: bool, lastRet: &mut isize, i: usize, oo: &SymbolicOpcode) {
         match oo {
             SymbolicOpcode::Op(op) => {
                 println!("genning {:?}", op);
@@ -456,9 +456,23 @@ impl<T: AsmGen> Jitter<T> {
                         unreachable!()
                     }
                     OpCode::Return => {
+                        if i == 0 {
+                            if returns {
+                                match self.stack.pop() {
+                                    None => {}
+                                    Some(r) => {
+                                        self.gen.mov(Rax.into(), r.into());
+                                    }
+                                }
+                            }
+                            self.printDigit(Rax.into());
+                            self.gen.ret();
+                            return;
+                        }
+
                         if i - 1 == *lastRet as usize {
                             *lastRet = i as isize;
-                            return true;
+                            return;
                         }
                         *lastRet = i as isize;
                         if returns {
@@ -714,6 +728,5 @@ impl<T: AsmGen> Jitter<T> {
                 self.gen.makeLabel(&format!("LABEL{}", l))
             }
         }
-        false
     }
 }

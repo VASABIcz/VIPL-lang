@@ -30,6 +30,7 @@ impl VIPLError for CodeGenError {
         Some(match self {
             CodeGenError::TypeError(a) => format!("expected {} got {}", a.expected.toString(), a.actual.toString()),
             CodeGenError::SymbolNotFound(b) => format!("symbol \"{}\" of type {} not found", b.name, b.typ),
+            CodeGenError::UnexpectedVoid(v) => format!("unexpected void {:?} {:#?}", v.getLocation().iter().map(|it| it.location).collect::<Vec<_>>(), v),
             _ => {
                 return None;
             }
