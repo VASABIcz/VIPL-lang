@@ -879,7 +879,7 @@ impl VirtualMachine {
         alloc
     }
 
-    pub fn link(&mut self, h: fn(&mut StatementCtx, DataType)) -> Result<(), CodeGenError> {
+    pub fn link(&mut self, h: fn(&mut StatementCtx, DataType)) -> Result<(), Vec<CodeGenError>> {
         let mut mother = self.getNaughty();
         let mut mother2 = self.getNaughty();
         let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
@@ -890,7 +890,7 @@ impl VirtualMachine {
                     continue;
                 }
 
-                let mut symbols = mother2.getMut().buildSymbolTable(n.getImportHints())?;
+                let mut symbols = mother2.getMut().buildSymbolTable(n.getImportHints()).map_err(|it| vec![it])?;
 
                 for (fId, (fMeta, _)) in n.getFunctions().iter().enumerate() {
                     let argz = fMeta.getArgs();
@@ -913,7 +913,7 @@ impl VirtualMachine {
                         labelCounter: &mut Default::default(),
                         symbols: &mut symbols,
                     };
-                    g.0.typ = ctx.toDataType()?;
+                    g.0.typ = ctx.toDataType().map_err(|it| vec![it])?;
                 }
 
                 let nId = (*anotherWarCrime.get()).id;
@@ -986,7 +986,7 @@ impl VirtualMachine {
                             let nf = warCrime.get_mut().jitCompiler.compile(&opz, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
                             *a = Some(Native(nf));
                         } else {
-                            let opt = emitOpcodes(opz)?;
+                            let opt = emitOpcodes(opz).map_err(|it| vec![it])?;
                             *a = Some(LoadedFunction::Virtual(opt));
                         }
 

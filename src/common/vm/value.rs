@@ -128,7 +128,7 @@ impl Value {
 
     #[inline(always)]
     pub fn asHayUntyped(&self) -> Hay<Xd> {
-        return unsafe { self.Reference };
+        unsafe { self.Reference }
     }
 
     #[inline(always)]

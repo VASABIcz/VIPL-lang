@@ -143,6 +143,7 @@ impl SourceProvider<'_> {
     }
 
     pub fn getLocation(&self) -> Location {
+        println!("get loc: {} {} {}", self.row, self.col, self.index);
         Location {
             row: self.row,
             col: self.col,
@@ -273,9 +274,11 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for RangeL
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+        let loc = lexer.getLocation();
+
         lexer.consumeMany(self.start.len());
 
-        let mut buf = String::new();
+        let mut buf = String::from(self.start);
 
         'lop: while !lexer.isPeek(self.end) {
             match lexer.peekChar() {
@@ -286,7 +289,9 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for RangeL
                 None => break 'lop,
             }
         }
-        let loc = lexer.getLocation();
+
+        buf += self.end;
+
         lexer.consumeMany(self.end.len());
 
         Ok(self.tokenType.map(|v| Token {

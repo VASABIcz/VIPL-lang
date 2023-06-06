@@ -1,3 +1,11 @@
 from out import print
 
-x = print "UwU"
+c   =   print                      "UwU"
+
+
+x = "asdasd"
+x = 1.5 + 3.1
+
+                if 1 {
+    print "UwU"
+}

@@ -21,6 +21,7 @@
 #![feature(try_trait_v2)]
 #![allow(non_snake_case)]
 #![feature(slice_internals)]
+#![feature(pattern)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

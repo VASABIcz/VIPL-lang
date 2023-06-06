@@ -410,7 +410,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
         Ok(RawExpression::ArrayIndexing(Box::new(
             ArrayAccess {
                 // FIXME
-                expr: parser.prevPop()?.asExpr()?,
+                expr: parser.pop()?.asExpr()?,
                 index: expr,
             },
         )))
@@ -802,7 +802,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
 
         // FIXME
         Ok(RawExpression::Callable(
-            Box::new(parser.prevPop()?.asExpr()?),
+            Box::new(parser.pop()?.asExpr()?),
             args,
         ))
     }
@@ -962,7 +962,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FieldAccessParsingUni
         let fieldName = parser.tokens.getIdentifier()?;
 
         Ok(RawExpression::FieldAccess(
-            Box::new(parser.prevPop()?.asExpr()?),
+            Box::new(parser.pop()?.asExpr()?),
             fieldName,
         ))
     }
@@ -1002,7 +1002,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedStatement(|parser| {
-        let prev = parser.prevPop()?.asExpr()?;
+        let prev = parser.pop()?.asExpr()?;
 
         let mut typ = None;
 
@@ -1191,7 +1191,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let prev = parser.prevPop()?.asExpr()?;
+        let prev = parser.pop()?.asExpr()?;
 
         let arg = parser.parseExprOneLine()?;
 
@@ -1234,7 +1234,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let prev = parser.prevPop()?.asExpr()?;
+        let prev = parser.pop()?.asExpr()?;
         let name = parser.tokens.getIdentifier()?;
         let arg = parser.parseExprOneLine()?;
 
@@ -1275,7 +1275,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let prev = parser.prevPop()?.asExpr()?;
+        let prev = parser.pop()?.asExpr()?;
         parser.tokens.getAssert(QuestionMark)?;
 
         let a = parser.parseExpr()?;
@@ -1451,7 +1451,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
         parser.parseWrappedExpression(|parser| {
         let mut xd = Naughty::new(parser);
 
-        let prev = parser.prevPop()?.asExpr()?;
+        let prev = parser.pop()?.asExpr()?;
         parser.tokens.consume();
         let res = parser.parseOneJust(Ahead)?;
 
@@ -1461,7 +1461,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
 
         match par {
             None => {
-                let res = parser.prevPop()?;
+                let res = parser.pop()?;
                 Ok(RawExpression::BinaryOperation {
                     // FIXME
                     left: Box::new(prev),
@@ -1471,7 +1471,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
             },
             Some(p) => unsafe {
                if self.priority < p.getPriority() {
-                   let res = xd.getMut().prevPop()?;
+                   let res = xd.getMut().pop()?;
 
                    xd.getMut().previousBuf.push(
                        ASTNode::Expr(                   Expression{ exp: RawExpression::BinaryOperation {
@@ -1601,7 +1601,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
 
     fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let e = parser.prevPop()?.asExpr()?;
+        let e = parser.pop()?.asExpr()?;
         parser.tokens.getAssert(As)?;
 
         let t = parser.parseDataType()?;

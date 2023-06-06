@@ -77,18 +77,6 @@ impl DataType {
         }
     }
 
-    pub fn assertType(&self, t: DataType) -> Result<DataType, CodeGenError> {
-        if self == &t {
-            Ok(t)
-        } else {
-            Err(CodeGenError::TypeError(TypeError {
-                expected: t,
-                actual: self.clone(),
-                exp: None,
-            }))
-        }
-    }
-
     pub fn isString(&self) -> bool {
         match self {
             Object(o) => return o.name.as_str() == "String",

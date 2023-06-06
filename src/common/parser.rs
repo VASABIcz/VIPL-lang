@@ -331,7 +331,6 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
                 token: self.tokens.peekOne().cloned(),
             }),
         )?;
-
         self.previousBuf.push(u.parse(s2)?);
 
         while let Some(v) = self.getParsingUnit(Behind) {

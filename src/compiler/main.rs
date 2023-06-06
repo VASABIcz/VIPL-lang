@@ -24,13 +24,15 @@ fn main() -> Result<(), ()> {
 
     let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
+    let file = fs::read_to_string(&sourceFile).unwrap();
 
-    let res = match loadSourceFile(fs::read_to_string(&sourceFile).unwrap(), &mut vm, &mut lexingUnits, &mut parsingUnits) {
+
+    let res = match loadSourceFile(&file, &mut vm, &mut lexingUnits, &mut parsingUnits) {
         Ok(v) => v,
         Err(e) => {
             match e {
-                LoadFileError::ParserError(a) => a.printUWU(),
-                LoadFileError::LexerError(a) => a.printUWU()
+                LoadFileError::ParserError(a) => a.printUWU(&file, Some(&sourceFile)),
+                LoadFileError::LexerError(a) => a.printUWU(&file, Some(&sourceFile))
             }
             return Err(())
         }
@@ -47,7 +49,11 @@ fn main() -> Result<(), ()> {
             c.push(Pop)
         }
     }) {
-        ret.printUWU();
+        for e in ret {
+            println!();
+            e.printUWU(&file, Some(&sourceFile));
+        }
+        println!();
         return Err(())
     }
 

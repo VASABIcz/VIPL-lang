@@ -1,4 +1,4 @@
-use crate::ast::{ASTNode, RawExpression};
+use crate::ast::{ASTNode, Expression, RawExpression};
 use crate::lexer::{Location, Token};
 use crate::parser::ParsingUnitSearchType;
 use crate::vm::dataType::DataType;
@@ -6,8 +6,10 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
+use std::str::pattern::Pattern;
 use strum_macros::{Display, IntoStaticStr};
 use crate::lexingUnits::{Stringable};
+use crate::utils::{errorBody, getRanges, visualizeRange};
 
 impl VIPLError for CodeGenError {
     fn getDomain(&self) -> String {
@@ -19,18 +21,131 @@ impl VIPLError for CodeGenError {
     }
 
     fn getLocation(&self) -> Option<Location> {
-        None
+        match self {
+            CodeGenError::UnexpectedVoid(a) => {
+                a.getLocation().first().map(|it| it.location)
+            }
+            CodeGenError::TypeError(t) => {
+                t.exp.clone().and_then(|it| it.loc.first().cloned()).map(|it| it.location)
+            }
+            CodeGenError::AssignableTypeError { var, varType, exp, expType } => {
+                var.loc.first().map(|it| it.location)
+            }
+            _ => None
+        }
     }
 
     fn getSource(&self) -> Option<String> {
         None
     }
 
-    fn getMessage(&self) -> Option<String> {
+    fn getMessage(&self, src: &str) -> Option<String> {
         Some(match self {
-            CodeGenError::TypeError(a) => format!("expected {} got {}", a.expected.toString(), a.actual.toString()),
+            CodeGenError::TypeError(a1) => {
+                let mut buf = String::new();
+
+                let loc = a1.exp.clone().unwrap().loc;
+
+                let locations = loc.iter().map(|it| it.location).collect::<Vec<_>>();
+                let row = locations.first().unwrap().row;
+
+                let ranges = getRanges(&loc, row);
+
+                let vis = visualizeRange(&ranges, ' ', '^', 0).trim_end().to_string();
+
+                let a = src.split('\n').enumerate().find(|(i, it)| {
+                    *i == row
+                }).unwrap();
+
+                buf += &format!("expected {} got {}", a1.expected.toString(), a1.actual.toString());
+
+                buf
+            },
             CodeGenError::SymbolNotFound(b) => format!("symbol \"{}\" of type {} not found", b.name, b.typ),
-            CodeGenError::UnexpectedVoid(v) => format!("unexpected void {:?} {:#?}", v.getLocation().iter().map(|it| it.location).collect::<Vec<_>>(), v),
+            CodeGenError::UnexpectedVoid(v) => {
+                let mut buf = String::new();
+
+                let locations = v.getLocation().iter().map(|it| it.location).collect::<Vec<_>>();
+                let row = locations.first().unwrap().row;
+
+
+                let a = src.split('\n').enumerate().find(|(i, it)| {
+                    *i == row
+                }).unwrap();
+
+                let ranges = getRanges(v.getLocation(), row);
+
+                let vis = visualizeRange(&ranges, ' ', '^', 0).trim_end().to_string();
+
+                buf += &format!("unexpected void");
+
+                buf
+            },
+            CodeGenError::AssignableTypeError{ var, varType, exp, expType } => {
+                let mut buf = String::new();
+
+                let locations = var.loc.iter().map(|it| it.location).collect::<Vec<_>>();
+                let row = var.loc.first().unwrap();
+
+                let locations1 = exp.loc.iter().map(|it| it.location).collect::<Vec<_>>();
+                let row1 = exp.loc.first().unwrap();
+
+
+                let a = src.split('\n').enumerate().find(|(i, it)| {
+                    *i == row.location.row
+                }).unwrap();
+
+                let ranges = getRanges(&var.loc, row.location.row);
+                let ranges1 = getRanges(&exp.loc, row1.location.row);
+
+                let vis = visualizeRange(&ranges, ' ', '^', 0).trim_end().to_string();
+                let vis1 = visualizeRange(&ranges1, ' ', '^', 0).trim_end().to_string();
+
+                buf += &format!("cannot assign {} to variable of type {}", expType.toString(), varType.toString());
+
+                buf
+            }
+            _ => {
+                return None;
+            }
+        })
+    }
+
+    fn getBody(&self, src: &str) -> Option<String> {
+        Some(match self {
+            CodeGenError::TypeError(a1) => {
+                errorBody(src, &[(&a1.exp.clone().unwrap(), Some(&format!("this expression is of type {}", a1.actual.toString())))])
+            },
+            CodeGenError::SymbolNotFound(b) => format!("symbol \"{}\" of type {} not found", b.name, b.typ),
+            CodeGenError::UnexpectedVoid(v) => {
+                errorBody(src, &[(&v.clone().asExpr().unwrap(), Some("this expression evaluates to void"))])
+            },
+            CodeGenError::AssignableTypeError{ var, varType, exp, expType } => {
+                let mut buf = String::new();
+
+                let locations = var.loc.iter().map(|it| it.location).collect::<Vec<_>>();
+                let row = var.loc.first().unwrap();
+
+                let locations1 = exp.loc.iter().map(|it| it.location).collect::<Vec<_>>();
+                let row1 = exp.loc.first().unwrap();
+
+
+                let a = src.split('\n').enumerate().find(|(i, it)| {
+                    *i == row.location.row
+                }).unwrap();
+
+                let ranges = getRanges(&var.loc, row.location.row);
+                let ranges1 = getRanges(&exp.loc, row1.location.row);
+
+                let vis = visualizeRange(&ranges, ' ', '^', 0).trim_end().to_string();
+                let vis1 = visualizeRange(&ranges1, ' ', '^', 0).trim_end().to_string();
+
+                buf += &format!("  | {}\n", a.1);
+                buf += &format!("  | {} -> this expression evaluates to {}\n", vis1, expType.toString());
+                buf += &format!("  | {} -> this expression evaluates to {}", vis, varType.toString());
+
+                buf
+            }
             _ => {
                 return None;
             }
@@ -43,15 +158,17 @@ pub trait VIPLError: Debug {
     fn getType(&self) -> String;
     fn getLocation(&self) -> Option<Location>;
     fn getSource(&self) -> Option<String>;
-    fn getMessage(&self) -> Option<String>;
+    fn getMessage(&self, src: &str) -> Option<String>;
+    fn getBody(&self, src: &str) -> Option<String>;
 
-    fn printUWU(&self) {
+    fn printUWU(&self, src: &str, path: Option<&str>) {
         let domain = self.getDomain();
         let typ = self.getType();
         let location = self.getLocation();
-        let src = self.getSource();
+        let src2 = path;
+        let body = self.getBody(src);
 
-        let message = match self.getMessage() {
+        let message = match self.getMessage(src) {
             None => format!("{:?}", self),
             Some(v) => v
         };
@@ -61,15 +178,18 @@ pub trait VIPLError: Debug {
             domain, typ, message
         );
 
-        match src {
+        match src2 {
             None => {}
             Some(filePath) => {
                 if let Some(l) = location {
-                    eprintln!("  -> {}:{}:{}", filePath, l.row + 1, l.col + 1)
+                    eprintln!("  +-> {}:{}:{}", filePath, l.row + 1, l.col + 1)
                 } else {
-                    eprintln!("  -> {}", filePath)
+                    eprintln!("  +-> {}", filePath)
                 }
             }
+        }
+        if let Some(v) = body {
+            eprintln!("{}", v)
         }
     }
 }
@@ -290,7 +410,7 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
         None
     }
 
-    fn getMessage(&self) -> Option<String> {
+    fn getMessage(&self, src: &str) -> Option<String> {
         let a = match self {
             ParserError::InvalidToken(a) => format!("invalid token, expected {:?} to be {:?}",a.actual, a.expected),
             ParserError::NoSuchParsingUnit(v) => format!("no such {:?} parsing unit to parse token {:?}", v.typ, v.token),
@@ -301,6 +421,10 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
         };
 
         Some(a)
+    }
+
+    fn getBody(&self, src: &str) -> Option<String> {
+        None
     }
 }
 
@@ -327,7 +451,7 @@ impl VIPLError for LexerError {
         None
     }
 
-    fn getMessage(&self) -> Option<String> {
+    fn getMessage(&self, src: &str) -> Option<String> {
         let a = match self {
             LexerError::UnknownToken(v) => format!("failed to parse remaining source: \"{}\"", v),
             LexerError::NotEnoughCharacters(a, b) => "not enough characters to parse next token".to_string(),
@@ -337,6 +461,10 @@ impl VIPLError for LexerError {
         };
 
         Some(a)
+    }
+
+    fn getBody(&self, src: &str) -> Option<String> {
+        None
     }
 }
 
@@ -356,7 +484,7 @@ impl<T: PartialEq + Clone + Debug> From<LexerError> for LoadFileError<T> {
 pub struct TypeError {
     pub expected: DataType,
     pub actual: DataType,
-    pub exp: Option<RawExpression>,
+    pub exp: Option<Expression>,
 }
 
 #[derive(Debug, Clone, Copy, Display)]
@@ -416,6 +544,7 @@ impl SymbolNotFoundE {
 pub enum CodeGenError {
     CannotAssignVoid,
     TypeError(TypeError),
+    AssignableTypeError{var: Expression, varType: DataType, exp: Expression, expType: DataType},
     SymbolNotFound(SymbolNotFoundE),
     UntypedEmptyArray,
     ArrayWithoutGenericParameter,

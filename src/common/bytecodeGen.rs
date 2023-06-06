@@ -188,6 +188,20 @@ pub struct ExpressionCtx<'a> {
 }
 
 impl ExpressionCtx<'_> {
+    pub fn assertType(&mut self, t: DataType) -> Result<(), CodeGenError> {
+        let t1 = self.toDataType()?;
+
+        if t != t1 {
+            return Err(CodeGenError::TypeError(TypeError{
+                expected: t.clone(),
+                actual: t1.clone(),
+                exp: Some(self.exp.clone()),
+            }))
+        }
+
+        Ok(())
+    }
+
     pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
         self.symbols.getLocal(varName)
         // self.vTable.get(varName).ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::var(varName)))
@@ -263,7 +277,7 @@ impl ExpressionCtx<'_> {
                     return Err(CodeGenError::TypeError(TypeError{
                         expected: leftT,
                         actual: rightT,
-                        exp: Some(self.exp.exp.clone()),
+                        exp: Some(self.exp.clone()),
                     }))
                 }
 
@@ -316,14 +330,14 @@ impl ExpressionCtx<'_> {
                                         generics: Box::new([Any]),
                                     }),
                                     actual: Object(o.clone()),
-                                    exp: Some(e.first().unwrap().exp.clone()),
+                                    exp: Some(e.first().unwrap().clone()),
                                 }))
                             }
                         }
                         v => Err(CodeGenError::TypeError(TypeError {
                             expected: DataType::arr(Any),
                             actual: v.clone(),
-                            exp: Some(e.first().unwrap().exp.clone()),
+                            exp: Some(e.first().unwrap().clone()),
                         })),
                     }
                 } else {
@@ -355,7 +369,7 @@ impl ExpressionCtx<'_> {
                 }
             }
             RawExpression::NotExpression(i, _) => {
-                self.transfer(i).toDataType()?.assertType(Bool)?;
+                self.transfer(i).assertType(Bool)?;
 
                 Ok(Bool)
             }
@@ -458,14 +472,11 @@ impl ExpressionCtx<'_> {
             }
             RawExpression::Null => Ok(self.typeHint.clone().unwrap_or(Int)),
             RawExpression::TernaryOperator(cond, tr, fal) => {
-                let a = self.transfer(&tr).toDataType()?;
                 let b = self.transfer(&fal).toDataType()?;
-                let c = self.transfer(&cond).toDataType()?;
+                self.transfer(&tr).assertType(b.clone())?;
+                self.transfer(&cond).assertType(Bool)?;
 
-                a.assertType(b)?;
-                c.assertType(Bool)?;
-
-                Ok(a)
+                Ok(b)
             }
             // FIXME check if cast is possible
             RawExpression::TypeCast(_, t) => Ok(t.clone())
@@ -739,14 +750,21 @@ impl StatementCtx<'_> {
 pub fn genFunctionDef(
     fun: &FunctionMeta,
     ctx: &mut SimpleCtx,
-) -> Result<(), CodeGenError> {
+) -> Result<(), Vec<CodeGenError>> {
+    let mut errors = vec![];
+
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
         for statement in &body.statements {
             if DEBUG {
                 println!("gening {:?}", statement)
             }
             let sCtx = ctx.inflate(&statement);
-            genStatement(sCtx)?;
+            if let Err(e) = genStatement(sCtx) {
+                errors.push(e)
+            }
+        }
+        if !errors.is_empty() {
+            return Err(errors)
         }
         match ctx.ops.last() {
             None => ctx.ops.push(Op(Return)),
@@ -760,7 +778,7 @@ pub fn genFunctionDef(
     }
     else {
         println!("this should never get called :3");
-        Err(CodeGenError::VeryBadState)
+        Err(vec![CodeGenError::VeryBadState])
     }
 }
 
@@ -768,7 +786,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
     match &ctx.statement.exp {
         RawStatement::While(w) => {
             ctx.makeExpressionCtx(&w.exp, None)
-                .toDataType()?
                 .assertType(Bool)?;
 
             let (loopStart, loopEnd) = ctx.beginLoop();
@@ -785,7 +802,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
         }
         RawStatement::If(flow) => {
             ctx.makeExpressionCtx(&flow.condition, None)
-                .toDataType()?
                 .assertType(Bool)?;
 
             let endLabel = ctx.nextLabel();
@@ -815,7 +831,6 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                 ctx.makeLabel(*ifLabels.get(i).ok_or_else(||CodeGenError::VeryBadState)?);
 
                 ctx.makeExpressionCtx(&els.0, None)
-                    .toDataType()?
                     .assertType(Bool)?;
                 ctx.makeExpressionCtx(&els.0, None).genExpression()?;
 
@@ -861,14 +876,32 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         RawStatement::Assignable(dest, value, t) => {
-            let typ = ctx.makeExpressionCtx(value, None).toDataTypeNotVoid()?;
+            let a = ctx.makeExpressionCtx(dest, None).toDataType();
+            let b = ctx.makeExpressionCtx(value, None).toDataType()?;
+
+            if let Ok(t) = a {
+                if t != b || t.isVoid() || b.isVoid() {
+                    return Err(CodeGenError::AssignableTypeError{
+                        var: dest.clone(),
+                        varType: t,
+                        exp: value.clone(),
+                        expType: b,
+                    })
+                }
+            }
+
+            ctx.makeExpressionCtx(value, None).toDataTypeNotVoid()?;
 
             match &dest.exp {
                 RawExpression::Variable(v) => {
                     match ctx.specify().getVariable(v) {
-                        Ok(_) => {}
+                        Ok(v) => {
+                            let d = v.0.clone();
+                            ctx.makeExpressionCtx(value, None).assertType(d)?;
+                        }
                         Err(_) => {
-                            ctx.registerVariable(v, typ)
+                            let t = ctx.makeExpressionCtx(value, None).toDataType()?;
+                            ctx.registerVariable(v, t)
                         }
                     }
                 }
@@ -1045,7 +1078,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             RawExpression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),
             RawExpression::StringLiteral(i) => {
                 r.push(StrNew(
-                    (&mut *r.currentNamespace.get()).allocateOrGetString(i),
+                    (*r.currentNamespace.get()).allocateOrGetString(i.strip_prefix('\"').unwrap().strip_suffix('\"').unwrap()),
                 ));
             },
             RawExpression::BoolLiteral(i) => r.push(OpCode::PushBool(*i)),
@@ -1284,11 +1317,8 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             RawExpression::Null => ctx.push(OpCode::PushIntZero),
             RawExpression::TernaryOperator(cond, tr, fal) => {
                 let a = r.constructCtx(&tr).toDataType()?;
-                let b = r.constructCtx(&fal).toDataType()?;
-                let c = r.constructCtx(&cond).toDataType()?;
-
-                a.assertType(b)?;
-                c.assertType(Bool)?;
+                r.constructCtx(&fal).assertType(a.clone())?;
+                r.constructCtx(&cond).assertType(Bool)?;
 
                 let falseLabel = r.nextLabel();
                 let endLabel = r.nextLabel();

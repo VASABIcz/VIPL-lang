@@ -12,7 +12,9 @@ use crate::vm::vm::{OpCode, VirtualMachine};
 use std::arch::asm;
 use std::error::Error;
 use std::{env, fs};
-use crate::lexer::{LexingUnit, tokenizeSource};
+use std::ops::Range;
+use crate::ast::Expression;
+use crate::lexer::{LexingUnit, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;
 
@@ -374,4 +376,107 @@ pub fn printOps(ops: &[OpCode]) {
     for op in ops {
         println!("{:?}", op)
     }
+}
+
+pub fn getRanges(tokens: &[Token<TokenType>], row: usize) -> Vec<Range<usize>> {
+    let mut buf = vec![];
+
+    for token in tokens {
+        if token.location.row != row {
+            continue
+        }
+
+        let len = token.str.len();
+        let start = token.location.col;
+
+        buf.push(start..start+len)
+    }
+
+    buf
+}
+
+pub fn findMax<T: PartialOrd>(data: &[T]) -> Option<&T> {
+    let mut max = None;
+
+    for item in data {
+        if max.is_none() {
+            max = Some(item);
+            continue
+        }
+
+        if max.unwrap() < item {
+            max = Some(item);
+        }
+    }
+
+
+    max
+}
+
+pub fn findMaxBy<T, F: Fn(&T, &T) -> bool>(data: &[T], f: F) -> Option<&T> {
+    let mut max = None;
+
+    for item in data {
+        if max.is_none() {
+            max = Some(item);
+            continue
+        }
+
+        if f(max.unwrap(), item) {
+            max = Some(item);
+        }
+    }
+
+
+    max
+}
+
+pub fn visualizeRange(ranges: &[Range<usize>], a: char, b: char, offset: usize) -> String {
+    let n = findMaxBy(ranges, |prev, next| prev.end < next.end).unwrap().end;
+
+    let mut buf = String::from(a).repeat(n-offset);
+
+
+    for range in ranges {
+        for i in range.clone() {
+            buf.replace_range(i-offset..i-offset, &b.to_string());
+        }
+    }
+
+    buf
+}
+
+pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String {
+    let mut buf = String::new();
+
+    for message in messages {
+        let row = message.0.getRow();
+
+        let ranges = message.0.getRanges(row);
+
+        let rowStr = getRow(src, row).trim_end();
+        let trim = rowStr.trim_start();
+        let offset = rowStr.len() - trim.len();
+
+        let viz = visualizeRange(&ranges, ' ', '^', offset);
+
+        buf += "  | ";
+        buf += trim;
+        buf += "\n";
+        buf += "  | ";
+        buf += viz.trim_end();
+        if let Some(v) = message.1 {
+            buf += " -> ";
+            buf += v;
+        }
+        buf += "\n";
+    }
+
+    buf
+}
+
+pub fn getRow(src: &str, row: usize) -> &str {
+    src.split('\n').enumerate().find(|(i, it)| {
+        *i == row
+    }).unwrap().1
 }

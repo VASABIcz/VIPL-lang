@@ -3,13 +3,13 @@ use crate::bytecodeGen::Body;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::ops::Index;
+use std::ops::{Index, Range};
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
 use crate::fastAccess::FastAcess;
 use crate::lexer::{Location, Token};
 use crate::lexingUnits::TokenType;
-use crate::utils::genFunName;
+use crate::utils::{genFunName, getRanges};
 use crate::vm::dataType::DataType::{Bool, Char, Object};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
@@ -206,6 +206,16 @@ pub struct VariableCreate {
 pub struct Expression {
     pub exp: RawExpression,
     pub loc: Vec<Token<TokenType>>
+}
+
+impl Expression {
+    pub fn getRanges(&self, row: usize) -> Vec<Range<usize>> {
+        getRanges(&self.loc, row)
+    }
+
+    pub fn getRow(&self) -> usize {
+        self.loc.first().unwrap().location.row
+    }
 }
 
 #[derive(Debug, Clone)]

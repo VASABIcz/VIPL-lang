@@ -32,7 +32,7 @@ impl TokenProvider<TokenType> {
 #[derive(Debug)]
 pub struct VIPLParsingState {
     pub symbols: HashMap<String, SymbolType>,
-    pub parsingStart: Option<usize>
+    pub parsingStart: Vec<Option<usize>>
 }
 
 pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
@@ -41,7 +41,7 @@ pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit
     let mut parser = Parser{
         tokens,
         units,
-        state: VIPLParsingState{ symbols: Default::default(), parsingStart: None },
+        state: VIPLParsingState{ symbols: Default::default(), parsingStart: vec![] },
         previousBuf: vec![]
     };
 
@@ -83,8 +83,10 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     pub fn pop(&mut self) -> Result<ASTNode, ParserError<TokenType>> {
         let r = self.previousBuf.pop().ok_or(ParserError::Unknown("fuuck".to_string().into()))?;
 
-        if self.state.parsingStart.is_none() {
-            self.state.parsingStart = Some((self.tokens.index - 1) as usize);
+        if let Some(v) = self.state.parsingStart.last_mut() {
+            if v.is_none() {
+                *v = Some(self.tokens.index - 1);
+            }
         }
 
         Ok(r)
@@ -106,17 +108,18 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
     pub fn parseWrappedExpression<F: std::ops::Fn(&mut VIPLParser) -> Result<RawExpression, ParserError<TokenType>>>(&mut self, f: F) -> Result<ASTNode, ParserError<TokenType>> {
         let mut startIndex = self.tokens.index;
-        self.state.parsingStart = None;
+        self.state.parsingStart.push(None);
 
         let res = f(self)?;
 
-        if let Some(v) = self.state.parsingStart {
-            if v < startIndex {
-                startIndex = v;
+        println!("{:?}", self.state.parsingStart);
+        if let Some(v) = self.state.parsingStart.last().unwrap() {
+            if v < &startIndex {
+                startIndex = *v;
             }
         }
 
-        self.state.parsingStart = None;
+        self.state.parsingStart.pop();
 
         Ok(ASTNode::Expr(Expression { exp: res, loc: self.tokens.tokens[startIndex..self.tokens.index].to_vec() }))
     }
@@ -278,14 +281,14 @@ pub fn parseDataType(
         let t = tokens.getIdentifier()?;
 
         match t.as_str() {
-            "bool" => return Ok(DataType::Bool),
-            "char" => return Ok(DataType::Char),
-            "int" => return Ok(DataType::Int),
-            "float" => return Ok(DataType::Float),
-            "value" => return Ok(DataType::Value),
+            "bool" => Ok(DataType::Bool),
+            "char" => Ok(DataType::Char),
+            "int" => Ok(DataType::Int),
+            "float" => Ok(DataType::Float),
+            "value" => Ok(DataType::Value),
             c => {
-                return Ok(DataType::Object(ObjectMeta {
-                    name: c.to_string().into(),
+                Ok(DataType::Object(ObjectMeta {
+                    name: c.to_string(),
                     generics: Box::new([]),
                 }))
             }

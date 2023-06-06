@@ -633,12 +633,12 @@ impl Namespace {
 }
 
 pub fn loadSourceFile(
-    src: String,
+    src: &str,
     vm: &mut VirtualMachine,
     lexingUnits: &mut [Box<dyn LexingUnit<TokenType>>],
     parsingUnits: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]
 ) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
-    let tokens = match tokenizeSource(&src, lexingUnits) {
+    let tokens = match tokenizeSource(src, lexingUnits) {
         Ok(v) => v,
         Err(e) => return Err(e.into()),
     };
