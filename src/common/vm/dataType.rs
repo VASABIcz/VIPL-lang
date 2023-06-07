@@ -217,6 +217,16 @@ impl Generic {
             Generic::Type(v) => Ok(v),
         }
     }
+
+    pub fn ok_or_else<E, F>(self, err: F) -> Result<DataType, E>
+        where
+            F: FnOnce() -> E,
+    {
+        match self {
+            Generic::Type(v) => Ok(v),
+            Generic::Any => Err(err()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
