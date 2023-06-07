@@ -5,9 +5,10 @@ use crate::ast::RawExpression::NamespaceAccess;
 use crate::ast::RawStatement::Assignable;
 use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, WhileS, Statement, Expression};
 use crate::bytecodeGen::Body;
-use crate::errors::{InvalidCharLiteral, InvalidToken, ParserError};
+use crate::errors::{InvalidToken, ParserError};
+use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexingUnits::TokenType;
-use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, Else, Equals, Fn, For, From, Global, Identifier, If, Import, In, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
@@ -271,31 +272,25 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CharParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let c = parser.tokens.getAssert(CharLiteral)?;
-        let mut chars = c.str.chars();
-        match &chars.next() {
-            None => Err(ParserError::InvalidCharLiteral(InvalidCharLiteral {
-                token: c.clone(),
-            })),
-            Some(c) => {
-                if *c == '\\' {
-                    match chars.next() {
-                        None => panic!(),
-                        Some(c) => {
-                            let e = match c {
-                                'n' => '\n',
-                                'r' => '\r',
-                                't' => '\t',
-                                '\\' => '\\',
-                                _ => panic!(),
-                            };
-                            return Ok(RawExpression::CharLiteral(e));
-                        }
-                    }
-                }
-                Ok(RawExpression::CharLiteral(*c))
+            let token = parser.tokens.getAssert(CharLiteral)?;
+            let mut chars = token.str.chars();
+            let c1 = &chars.next().ok_or_else(||InvalidCharLiteral(token.clone()))?;
+
+            if *c1 != '\\' {
+                return Err(InvalidCharLiteral(token.clone()));
             }
-        }
+
+            let c = chars.next().ok_or_else(||InvalidCharLiteral(token.clone()))?;
+            let e = match c {
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                '\\' => '\\',
+                _ => Err(ParserError::InvalidCharLiteral(token.clone()))?,
+            };
+
+
+            Ok(RawExpression::CharLiteral(e))
     }
 )
     }
@@ -1515,34 +1510,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
         &self,
         parser: &VIPLParser
     ) -> bool {
-        let peek = match parser.tokens.peekOne() {
-            None => return false,
-            Some(v) => v,
+        if parser.tokens.isPeekOneOf(&[IntLiteral, LongLiteral, FloatLiteral, DoubleLiteral]) {
+           return true;
         }
-        .typ;
 
-        if peek == TokenType::IntLiteral
-            || peek == TokenType::LongLiteral
-            || peek == TokenType::FloatLiteral
-            || peek == TokenType::DoubleLiteral
-        {
+        if parser.tokens.isPeekType(Minus) && parser.tokens.isPeekOffsetOneOf(&[IntLiteral, LongLiteral, FloatLiteral, DoubleLiteral], 1) {
             return true;
         }
 
-        let peek1 = match parser.tokens.peekIndex(1) {
-            None => return false,
-            Some(v) => v,
-        }
-        .typ;
-
-        if peek == Minus
-            && (peek1 == TokenType::DoubleLiteral
-                || peek1 == TokenType::LongLiteral
-                || peek1 == TokenType::FloatLiteral
-                || peek1 == TokenType::IntLiteral)
-        {
-            return true;
-        }
         false
     }
 

@@ -523,22 +523,6 @@ impl PartialExprCtx<'_> {
         Ok(())
     }
 
-    pub fn opContinue(&mut self) -> Result<(), CodeGenError> {
-        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::ContinueOutsideLoop)?;
-
-        self.opJmp(ctx.0, JmpType::Jmp);
-
-        Ok(())
-    }
-
-    pub fn opBreak(&mut self) -> Result<(), CodeGenError> {
-        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::BreakOutsideLoop)?;
-
-        self.opJmp(ctx.1, JmpType::Jmp);
-
-        Ok(())
-    }
-
     pub fn nextLabel(&mut self) -> usize {
         self.labelCounter.nextLabel()
     }
@@ -647,7 +631,7 @@ impl StatementCtx<'_> {
     }
 
     pub fn opContinue(&mut self) -> Result<(), CodeGenError> {
-        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::ContinueOutsideLoop)?;
+        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::ContinueOutsideLoop(self.statement.clone()))?;
 
         self.opJmp(ctx.0, JmpType::Jmp);
 
@@ -655,7 +639,7 @@ impl StatementCtx<'_> {
     }
 
     pub fn opBreak(&mut self) -> Result<(), CodeGenError> {
-        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::BreakOutsideLoop)?;
+        let ctx = self.labels.getContext().ok_or_else(|| CodeGenError::BreakOutsideLoop(self.statement.clone()))?;
 
         self.opJmp(ctx.1, JmpType::Jmp);
 
@@ -945,7 +929,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                     ctx.push(ArrayStore)
                 }
                 RawExpression::NamespaceAccess(v) => unsafe {
-                    let namespace = (&mut *ctx.vm.get()).findNamespaceParts(&v[..v.len() - 1])?;
+                    let namespace = (*ctx.vm.get()).findNamespaceParts(&v[..v.len() - 1])?;
                     let global = namespace.0.findGlobal(v.last().ok_or_else(||CodeGenError::VeryBadState)?)?;
 
                     ctx.push(SetGlobal {

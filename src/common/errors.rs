@@ -1,4 +1,4 @@
-use crate::ast::{ASTNode, Expression, RawExpression};
+use crate::ast::{ASTNode, Expression, RawExpression, Statement};
 use crate::lexer::{Location, Token};
 use crate::parser::ParsingUnitSearchType;
 use crate::vm::dataType::DataType;
@@ -9,7 +9,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::str::pattern::Pattern;
 use strum_macros::{Display, IntoStaticStr};
 use crate::lexingUnits::{Stringable};
-use crate::utils::{errorBody, getRanges, visualizeRange};
+use crate::utils::{errorBody, errorBody2, errorBodys, getRanges, visualizeRange};
 
 impl VIPLError for CodeGenError {
     fn getDomain(&self) -> String {
@@ -30,6 +30,12 @@ impl VIPLError for CodeGenError {
             }
             CodeGenError::AssignableTypeError { var, varType, exp, expType } => {
                 var.loc.first().map(|it| it.location)
+            }
+            CodeGenError::ContinueOutsideLoop(s) => {
+                s.loc.first().map(|it| it.location)
+            }
+            CodeGenError::BreakOutsideLoop(s) => {
+                s.loc.first().map(|it| it.location)
             }
             _ => None
         }
@@ -123,6 +129,9 @@ impl VIPLError for CodeGenError {
             CodeGenError::AssignableTypeError{ var, varType, exp, expType } => {
                 errorBody(src, &[(exp, Some(&format!("this expression evaluates to {}", expType.toString()))), (var, Some(&format!("variable is type of {}", varType.toString())))])
             }
+            CodeGenError::ContinueOutsideLoop(s) => {
+                errorBody2(src, &[(s, Some("this continue is outside of loop"))])
+            }
             _ => {
                 return None;
             }
@@ -197,19 +206,6 @@ impl<T: Clone + PartialEq + Debug> Display for InvalidToken<T> {
 
 impl<T: PartialEq + Clone + Debug> Error for InvalidToken<T> {}
 
-#[derive(Debug, Clone)]
-pub struct InvalidCharLiteral<T: Clone + PartialEq> {
-    pub token: Token<T>,
-}
-
-impl<T: Clone + PartialEq> Display for InvalidCharLiteral<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-impl<T: PartialEq + Clone + Debug> Error for InvalidCharLiteral<T> {}
-
 impl Display for NoValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
@@ -236,18 +232,6 @@ pub struct UnknownToken {
     pub source: String,
     pub location: Location,
 }
-
-impl Display for UnknownToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "failed to parse remaining source: \"{}\"",
-            self.source.replace('\n', "").escape_debug()
-        )
-    }
-}
-
-impl Error for UnknownToken {}
 
 #[derive(Debug)]
 pub struct InvalidTypeException {
@@ -315,7 +299,7 @@ impl Display for OutOfBoundsException {
 
 impl Error for OutOfBoundsException {}
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum LexerError {
     UnknownToken(UnknownToken),
     NotEnoughCharacters(usize, Location),
@@ -330,23 +314,11 @@ impl From<&str> for LexerError {
     }
 }
 
-impl Display for LexerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LexerError::UnknownToken(v) => write!(f, "{}", v),
-            LexerError::NotEnoughCharacters(s, v) => todo!(),
-            LexerError::ReachedEOF(v) => todo!(),
-            LexerError::Unknown(v, _) => write!(f, "{}", v),
-            LexerError::ExpectedChar(v, loc) => write!(f, "{}", v)
-        }
-    }
-}
-
 #[derive(Debug, Display)]
 pub enum ParserError<T: PartialEq + Clone + Debug> {
     InvalidToken(InvalidToken<T>),
     NoSuchParsingUnit(NoSuchParsingUnit<T>),
-    InvalidCharLiteral(InvalidCharLiteral<T>),
+    InvalidCharLiteral(Token<T>),
     InvalidOperation(InvalidOperation),
     NoToken,
     Unknown(Box<dyn Error>),
@@ -362,7 +334,7 @@ impl<T: PartialEq + Clone + Debug> Display for LoadFileError<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             LoadFileError::ParserError(v) => write!(f, "{}", v),
-            LoadFileError::LexerError(v) => write!(f, "{}", v),
+            LoadFileError::LexerError(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -379,6 +351,7 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
     fn getLocation(&self) -> Option<Location> {
         match self {
             ParserError::InvalidToken(a) => a.actual.clone().map(|it| it.location),
+            ParserError::InvalidCharLiteral(t) => Some(t.location),
             _ => None
         }
     }
@@ -391,7 +364,7 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
         let a = match self {
             ParserError::InvalidToken(a) => format!("invalid token, expected {:?} to be {:?}",a.actual, a.expected),
             ParserError::NoSuchParsingUnit(v) => format!("no such {:?} parsing unit to parse token {:?}", v.typ, v.token),
-            ParserError::InvalidCharLiteral(l) => format!("\'{}\' is invalid char literal", l.token.str),
+            ParserError::InvalidCharLiteral(l) => format!("{} is invalid char literal", l.str),
             ParserError::InvalidOperation(v) => format!("expected {:?} to be {}", v.operation, v.expected),
             ParserError::NoToken => format!(""),
             ParserError::Unknown(_) => format!("")
@@ -401,7 +374,12 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
     }
 
     fn getBody(&self, src: &str) -> Option<String> {
-        None
+        match self {
+            ParserError::InvalidCharLiteral(t) => {
+                Some(errorBodys(src, &[(vec![(t.location.toRange(t.str.len()))], t.location.row, Some("this is invalid char literal"))]))
+            }
+            _ => None
+        }
     }
 }
 
@@ -430,7 +408,7 @@ impl VIPLError for LexerError {
 
     fn getMessage(&self, src: &str) -> Option<String> {
         let a = match self {
-            LexerError::UnknownToken(v) => format!("failed to parse remaining source: \"{}\"", v),
+            LexerError::UnknownToken(v) => format!("failed to parse remaining source: \"{}\"", v.source),
             LexerError::NotEnoughCharacters(a, b) => "not enough characters to parse next token".to_string(),
             LexerError::ReachedEOF(_) => "unexpectedly reached end of line".to_string(),
             LexerError::ExpectedChar(c, a) => format!("expected \"{}\"", c),
@@ -441,7 +419,12 @@ impl VIPLError for LexerError {
     }
 
     fn getBody(&self, src: &str) -> Option<String> {
-        None
+        match self {
+            LexerError::UnknownToken(t) => {
+                Some(errorBodys(src, &[(vec![t.location.toRange(t.source.len())], t.location.row, Some("unknown token"))]))
+            }
+            _ => None
+        }
     }
 }
 
@@ -526,8 +509,8 @@ pub enum CodeGenError {
     UntypedEmptyArray,
     ArrayWithoutGenericParameter,
     UnexpectedVoid(ASTNode),
-    ContinueOutsideLoop,
-    BreakOutsideLoop,
+    ContinueOutsideLoop(Statement),
+    BreakOutsideLoop(Statement),
     LiteralParseError,
     ExpressionIsNotAssignable,
     ExpectedReference,

@@ -4,7 +4,7 @@ use crate::errors::{LexerError, UnknownToken};
 use crate::lexer;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
-use std::ops::Index;
+use std::ops::{Index, Range};
 use crate::lexingUnits::TokenType;
 
 const DEBUG: bool = false;
@@ -209,6 +209,12 @@ pub struct Location {
     pub row: usize,
     pub col: usize,
     pub index: usize,
+}
+
+impl Location {
+    pub fn toRange(&self, len: usize) -> Range<usize> {
+        self.col..self.col+len
+    }
 }
 
 #[derive(Clone, Debug)]

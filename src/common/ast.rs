@@ -224,6 +224,16 @@ pub struct Statement {
     pub loc: Vec<Token<TokenType>>
 }
 
+impl Statement {
+    pub fn getRanges(&self, row: usize) -> Vec<Range<usize>> {
+        getRanges(&self.loc, row)
+    }
+
+    pub fn getRow(&self) -> usize {
+        self.loc.first().unwrap().location.row
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Node {
     pub exp: RawNode,

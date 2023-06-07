@@ -13,7 +13,7 @@ use std::arch::asm;
 use std::error::Error;
 use std::{env, fs};
 use std::ops::Range;
-use crate::ast::Expression;
+use crate::ast::{Expression, Statement};
 use crate::lexer::{LexingUnit, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;
@@ -446,16 +446,14 @@ pub fn visualizeRange(ranges: &[Range<usize>], a: char, b: char, offset: usize) 
     buf
 }
 
-pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String {
+pub fn errorBodys(src: &str, messages: &[(Vec<Range<usize>>, usize, Option<&str>)]) -> String {
     let mut buf = String::new();
     let mut lastLine: Option<usize> = None;
 
     for message in messages {
-        let row = message.0.getRow();
+        let ranges = &message.0;
 
-        let ranges = message.0.getRanges(row);
-
-        let rowStr = getRow(src, row).trim_end();
+        let rowStr = getRow(src, message.1).trim_end();
         let trim = rowStr.trim_start();
         let offset = rowStr.len() - trim.len();
 
@@ -467,7 +465,7 @@ pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String 
                 buf += trim;
                 buf += "\n";
             }
-            Some(v) if v != row => {
+            Some(v) if v != message.1 => {
                 buf += "  | ";
                 buf += trim;
                 buf += "\n";
@@ -477,16 +475,24 @@ pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String 
 
         buf += "  | ";
         buf += viz.trim_end();
-        if let Some(v) = message.1 {
+        if let Some(v) = message.2 {
             buf += " -> ";
             buf += v;
         }
         buf += "\n";
 
-        lastLine = Some(row);
+        lastLine = Some(message.1);
     }
 
     buf
+}
+
+pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String {
+    errorBodys(src, &messages.iter().map(|it| (it.0.getRanges(it.0.getRow()), it.0.getRow(), it.1)).collect::<Vec<_>>().as_slice())
+}
+
+pub fn errorBody2(src: &str, messages: &[(&Statement, Option<&str>)]) -> String {
+    errorBodys(src, &messages.iter().map(|it| (it.0.getRanges(it.0.getRow()), it.0.getRow(), it.1)).collect::<Vec<_>>().as_slice())
 }
 
 pub fn getRow(src: &str, row: usize) -> &str {

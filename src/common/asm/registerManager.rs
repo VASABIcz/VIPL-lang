@@ -12,6 +12,7 @@ impl RegisterRecord {
     }
 }
 
+#[derive(Default)]
 pub struct RegisterManager {
     pub registers: Vec<RegisterRecord>,
     aquires: Vec<Register>,
