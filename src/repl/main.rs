@@ -128,6 +128,8 @@ fn readRaw(prev: &mut Vec<String>) -> String {
 
         // enter
         if c == '\n' {
+            putChar('\n');
+            return buf;
             continue
         }
         // back space
@@ -140,8 +142,24 @@ fn readRaw(prev: &mut Vec<String>) -> String {
                 putChar(8 as char);
                 putChar(' ');
                 putChar(8 as char);
+
+                index -= 1;
             }
-            index -= 1;
+            else if index != 0 {
+                let oldIndex = index;
+
+                goLeftBy(index);
+                clearFromTo(0, buf.len());
+                goLeftBy(buf.len());
+
+                buf.remove(index-1);
+                putStr(&buf);
+
+                index = buf.len();
+
+                goLeftBy(index-oldIndex+1);
+                index -= index-oldIndex+1;
+            }
             continue
         }
         // escape sequence
@@ -213,7 +231,7 @@ fn readRaw(prev: &mut Vec<String>) -> String {
             index = buf.len();
 
             goLeftBy(index-(oldIndex+1));
-            index = index-(index-(oldIndex+1));
+            index -= (index-(oldIndex+1));
         }
     }
 }
@@ -224,7 +242,9 @@ fn readInput() -> String {
     enableRawMode();
     print!("UwU");
     stdout().flush();
-    readRaw(&mut v);
+    loop {
+        readRaw(&mut v);
+    }
     print!(">>> ");
     io::stdout().flush();
     let stdin = io::stdin();
