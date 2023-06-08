@@ -141,6 +141,7 @@ fn readRaw(prev: &mut Vec<String>) -> String {
                 putChar(' ');
                 putChar(8 as char);
             }
+            index -= 1;
             continue
         }
         // escape sequence
@@ -194,9 +195,26 @@ fn readRaw(prev: &mut Vec<String>) -> String {
             continue
         }
 
-        buf.push(c);
-        putChar(c);
-        index += 1;
+        if index == buf.len() {
+            buf.push(c);
+            putChar(c);
+            index += 1;
+        }
+        else {
+            let oldIndex = index;
+
+            goLeftBy(index);
+            clearFromTo(0, buf.len());
+            goLeftBy(buf.len());
+
+            buf.insert(index, c);
+            putStr(&buf);
+
+            index = buf.len();
+
+            goLeftBy(index-(oldIndex+1));
+            index = index-(index-(oldIndex+1));
+        }
     }
 }
 
