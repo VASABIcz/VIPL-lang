@@ -245,7 +245,7 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T>
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeek(self.keyword)
             && !lexer.isPeekOffsetChar(
-                |it| it.is_ascii_digit() && it.is_ascii_alphabetic() && it == '_',
+                |it| it.is_ascii_digit() || it.is_ascii_alphabetic() || it == '_',
                 self.keyword.len(),
             )
     }
@@ -351,10 +351,10 @@ impl<T: Debug + Clone + Sync + Send + PartialEq> LexingUnit<T> for IdentifierLex
     }
 
     fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
-        Ok(lexer.consumeWhileMatches(
+        lexer.consumeWhileMatches(
             |it| it.is_alphanumeric() || it == '_',
             Some(self.tokenType.clone()),
-        )?)
+        )
     }
 }
 
