@@ -313,7 +313,6 @@ impl ExpressionCtx<'_> {
                     Ok(f.0.toFunctionType())
                 }
                 Ok(v) => {
-                    println!("found var {}", name);
                     Ok(v.0.clone())
                 },
             },
@@ -865,11 +864,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         RawStatement::Assignable(dest, value, t) => {
-            println!("dest: {:?}", dest.exp);
-
             let a = ctx.makeExpressionCtx(dest, None).toDataType();
-
-            println!("a: {:?}", a);
 
             let b = ctx.makeExpressionCtx(value, None).toDataType()?;
 
