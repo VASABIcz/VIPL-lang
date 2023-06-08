@@ -45,7 +45,7 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -968,10 +968,8 @@ impl VirtualMachine {
                         }
 
                         ops = transform(ops, |it| {
-                            // let r = constEvaluation(it);
-                            // optimizeBytecode(r)
-
-                            it
+                            let r = constEvaluation(it);
+                            optimizeBytecode(r)
                         });
 
                         let opz = branchOmit(ops).0;
@@ -979,7 +977,7 @@ impl VirtualMachine {
 
                         if DEBUG {
                             println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opz);
-                            println!("{:?}", f.localsMeta);
+                            println!("locals meta{:?}", f.localsMeta);
                         }
 
                         if false {

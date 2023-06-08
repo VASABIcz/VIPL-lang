@@ -74,7 +74,7 @@ impl SourceProvider<'_> {
     }
 
     fn peekStr(&self, amount: usize) -> Option<&str> {
-        if self.index >= self.data.len() {
+        if self.index >= self.data.len() || self.index + amount > self.data.len() {
             return None;
         }
 
@@ -134,12 +134,16 @@ impl SourceProvider<'_> {
 
     pub fn isPeekChar<T: Fn(char) -> bool>(&self, f: T) -> bool {
         self.peekStr(1)
-            .map_or(false, |it| f(it.bytes().next().unwrap() as char))
+            .and_then(|it| it.bytes().next())
+            .map(|it| f(it as char))
+            .unwrap_or(false)
     }
 
     pub fn isPeekOffsetChar(&self, f: fn(char) -> bool, offset: usize) -> bool {
         self.peekStr(offset + 1)
-            .map_or(false, |it| f(*it.as_bytes().get(offset).unwrap() as char))
+            .and_then(|it| it.bytes().last())
+            .map(|it| f(it as char))
+            .unwrap_or(false)
     }
 
     pub fn getLocation(&self) -> Location {
@@ -177,7 +181,7 @@ impl SourceProvider<'_> {
             .ok_or(LexerError::ReachedEOF(self.getLocation()))?
             .chars()
             .next()
-            .unwrap();
+            .ok_or(LexerError::ReachedEOF(self.getLocation()))?;
         self.consumeOne();
         Ok(c)
     }
@@ -240,8 +244,8 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T>
 {
     fn canParse(&self, lexer: &SourceProvider) -> bool {
         lexer.isPeek(self.keyword)
-            && lexer.isPeekOffsetChar(
-                |it| !it.is_ascii_digit() && !it.is_ascii_alphabetic() && !(it == '_'),
+            && !lexer.isPeekOffsetChar(
+                |it| it.is_ascii_digit() && it.is_ascii_alphabetic() && it == '_',
                 self.keyword.len(),
             )
     }

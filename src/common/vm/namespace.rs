@@ -336,8 +336,6 @@ impl Namespace {
     }
 
     pub fn findFunctionMut(&mut self, name: &str) -> Result<(&mut FunctionMeta, usize), CodeGenError> {
-        println!("{} {:?}", name, self.functions.lookupTable.keys());
-
         let id = self
             .functions
             .getSlowStrMut(name);

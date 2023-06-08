@@ -258,7 +258,6 @@ impl Value {
 
     #[inline]
     pub fn i2f(&mut self) {
-        println!("{}", self.asNum());
         *self = (self.getNumRef() as f64).into()
     }
 }

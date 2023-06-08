@@ -9,12 +9,12 @@ rustflags = ["-C target-cpu=native inline-threshold=275"]
 [profile.release]
 lto = true
 codegen-units = 1
-# panic = "abort"
+panic = "abort"
 opt-level = 3
-strip = false
-debug = true
-overflow-checks = true
-debug-assertions = true
+strip = true
+debug = false
+overflow-checks = false
+debug-assertions = false
 
 [profile.dev.package."*"]
 codegen-units = 1

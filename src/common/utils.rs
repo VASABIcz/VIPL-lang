@@ -373,9 +373,11 @@ pub fn transform<F: Fn(Vec<OpCode>) -> Vec<OpCode>>(
 }
 
 pub fn printOps(ops: &[OpCode]) {
+    println!("===");
     for op in ops {
         println!("{:?}", op)
     }
+    println!("===");
 }
 
 pub fn getRanges(tokens: &[Token<TokenType>], row: usize) -> Vec<Range<usize>> {

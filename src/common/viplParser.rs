@@ -98,7 +98,6 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
         let res = f(self)?;
 
-        println!("{:?}", self.state.parsingStart);
         if let Some(v) = self.state.parsingStart.last().unwrap() {
             if v < &startIndex {
                 startIndex = *v;
