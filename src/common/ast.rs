@@ -65,22 +65,11 @@ pub enum RawExpression {
 
 impl RawExpression {
     pub fn isCallable(&self) -> bool {
-        return match self {
-            RawExpression::Variable(..) => true,
-            RawExpression::NamespaceAccess(..) => true,
-            RawExpression::FieldAccess(..) => true,
-            _ => false,
-        };
+        return matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..));
     }
 
     pub fn isAssignable(&self) -> bool {
-        return match self {
-            RawExpression::Variable(..) => true,
-            RawExpression::ArrayIndexing(..) => true,
-            RawExpression::NamespaceAccess(..) => true,
-            RawExpression::FieldAccess(..) => true,
-            _ => false,
-        };
+        return matches!(self, RawExpression::Variable(..) | RawExpression::ArrayIndexing(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..));
     }
 }
 

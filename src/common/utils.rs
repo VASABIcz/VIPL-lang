@@ -459,7 +459,7 @@ pub fn errorBodys(src: &str, messages: &[(Vec<Range<usize>>, usize, Option<&str>
         let trim = rowStr.trim_start();
         let offset = rowStr.len() - trim.len();
 
-        let viz = visualizeRange(&ranges, ' ', '^', offset);
+        let viz = visualizeRange(ranges, ' ', '^', offset);
 
         match lastLine {
             None => {

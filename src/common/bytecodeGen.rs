@@ -233,12 +233,14 @@ impl ExpressionCtx<'_> {
     }
 
     pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Result<String, CodeGenError> {
-        for (k, v) in &self.symbols.functions {
-            if k.as_str().starts_with(&name) {
+        let modName = format!("{}(", name);
+
+        for k in self.symbols.functions.keys() {
+            if k.as_str().starts_with(&modName) {
                 return Ok(k.to_string());
             }
         }
-        return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)));
+        Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))
     }
 
     pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
@@ -305,9 +307,15 @@ impl ExpressionCtx<'_> {
                         .currentNamespace
                         .get_mut()
                         .findFunction(&funcName)?;
-                    return Ok(f.0.toFunctionType());
+
+                    println!("THE FUCK {:?}", f);
+
+                    Ok(f.0.toFunctionType())
                 }
-                Ok(v) => Ok(v.0.clone()),
+                Ok(v) => {
+                    println!("found var {}", name);
+                    Ok(v.0.clone())
+                },
             },
             RawExpression::BoolLiteral(_) => Ok(DataType::Bool),
             RawExpression::CharLiteral(_) => Ok(Char),
@@ -857,7 +865,12 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             }
         }
         RawStatement::Assignable(dest, value, t) => {
+            println!("dest: {:?}", dest.exp);
+
             let a = ctx.makeExpressionCtx(dest, None).toDataType();
+
+            println!("a: {:?}", a);
+
             let b = ctx.makeExpressionCtx(value, None).toDataType()?;
 
             if let Ok(t) = a {
