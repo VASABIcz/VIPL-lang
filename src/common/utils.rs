@@ -478,13 +478,13 @@ pub fn errorBodys(src: &str, messages: &[(Vec<Range<usize>>, usize, Option<&str>
         if let Some(v) = message.2 {
             buf += " -> ";
             buf += v;
+            buf += "\n";
         }
-        buf += "\n";
 
         lastLine = Some(message.1);
     }
 
-    buf
+    buf.trim_end().to_string()
 }
 
 pub fn errorBody(src: &str, messages: &[(&Expression, Option<&str>)]) -> String {

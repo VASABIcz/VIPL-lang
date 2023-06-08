@@ -92,20 +92,6 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
         Ok(r)
     }
 
-    pub fn parseWrapped<F: std::ops::Fn(&mut VIPLParser) -> Result<ASTNode, ParserError<TokenType>>>(&mut self, f: F) -> Result<ASTNode, ParserError<TokenType>> {
-        let startIndex = self.tokens.index;
-
-        let res = f(self);
-
-        match res {
-            Ok(v) => {
-                todo!();
-                //Ok(AST { node: v, tokens: (&self.tokens.tokens[startIndex..self.tokens.index]).to_vec() })
-            }
-            Err(e) => Err(e)
-        }
-    }
-
     pub fn parseWrappedExpression<F: std::ops::Fn(&mut VIPLParser) -> Result<RawExpression, ParserError<TokenType>>>(&mut self, f: F) -> Result<ASTNode, ParserError<TokenType>> {
         let mut startIndex = self.tokens.index;
         self.state.parsingStart.push(None);

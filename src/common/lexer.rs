@@ -143,7 +143,6 @@ impl SourceProvider<'_> {
     }
 
     pub fn getLocation(&self) -> Location {
-        println!("get loc: {} {} {}", self.row, self.col, self.index);
         Location {
             row: self.row,
             col: self.col,

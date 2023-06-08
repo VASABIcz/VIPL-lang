@@ -132,6 +132,9 @@ impl VIPLError for CodeGenError {
             CodeGenError::ContinueOutsideLoop(s) => {
                 errorBody2(src, &[(s, Some("this continue is outside of loop"))])
             }
+            CodeGenError::BreakOutsideLoop(s) => {
+                errorBody2(src, &[(s, Some("this break is outside of loop"))])
+            }
             _ => {
                 return None;
             }
