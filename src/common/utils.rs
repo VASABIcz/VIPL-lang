@@ -13,6 +13,7 @@ use std::arch::asm;
 use std::error::Error;
 use std::{env, fs};
 use std::ops::Range;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::ast::{Expression, Statement};
 use crate::lexer::{LexingUnit, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
@@ -501,4 +502,12 @@ pub fn getRow(src: &str, row: usize) -> &str {
     src.split('\n').enumerate().find(|(i, it)| {
         *i == row
     }).unwrap().1
+}
+
+
+pub fn microsSinceEpoch() -> u128 {
+    // should be instant but its good enough for now
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards").as_micros()
 }

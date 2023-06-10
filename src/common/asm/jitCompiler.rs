@@ -12,16 +12,12 @@ use std::mem::transmute;
 use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::bytecodeGen::SymbolicOpcode;
+use crate::utils::microsSinceEpoch;
 
 pub fn compileAssembly(asm: &str) -> Box<[u8]> {
     let dir = temp_dir();
 
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-
-    let name = format!("asm-temp-{}", since_the_epoch.as_micros());
+    let name = format!("asm-temp-{}", microsSinceEpoch());
 
     let p = dir.join(format!("{}.asm", name));
     fs::write(p, asm).unwrap();

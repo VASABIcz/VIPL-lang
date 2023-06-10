@@ -46,7 +46,7 @@ pub enum ImportHints {
 
 // FIXME DEBUG is faster than default
 const DEBUG: bool = false;
-const TRACE: bool = false;
+const TRACE: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {

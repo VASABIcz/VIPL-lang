@@ -19,10 +19,10 @@ use crate::lexer::*;
 use crate::lexingUnits::TokenType::In;
 use crate::parser::*;
 use crate::symbolManager::SymbolManager;
-use crate::utils::genFunName;
+use crate::utils::{genFunName, microsSinceEpoch};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Object, Value, Void};
 use crate::vm::dataType::Generic::Any;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::JmpType::{False, True};
@@ -598,6 +598,20 @@ pub struct StatementCtx<'a> {
 }
 
 impl StatementCtx<'_> {
+    pub fn decrementLocal(&mut self, localId: usize) {
+        self.push(OpCode::GetLocal { index: localId });
+        self.push(OpCode::PushInt(1));
+        self.push(OpCode::Sub(RawDataType::Int));
+        self.push(OpCode::SetLocal { index: localId });
+    }
+
+    pub fn incrementLocal(&mut self, localId: usize) {
+        self.push(OpCode::GetLocal { index: localId });
+        self.push(OpCode::PushInt(1));
+        self.push(OpCode::Add(RawDataType::Int));
+        self.push(OpCode::SetLocal { index: localId });
+    }
+
     pub fn deflate(&mut self) -> SimpleCtx {
         SimpleCtx {
             ops: self.ops,
@@ -665,8 +679,8 @@ impl StatementCtx<'_> {
         self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 
-    pub fn registerVariable(&mut self, name: &str, t: DataType) {
-        self.symbols.registerLocal(name, t);
+    pub fn registerVariable(&mut self, name: &str, t: DataType) -> usize {
+        self.symbols.registerLocal(name, t).1
     }
 
     pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) -> (DataType, usize) {
@@ -890,7 +904,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
                         }
                         Err(_) => {
                             let t = ctx.makeExpressionCtx(value, None).toDataType()?;
-                            ctx.registerVariable(v, t)
+                            ctx.registerVariable(v, t);
                         }
                     }
                 }
@@ -968,49 +982,47 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
             let startLabel = ctx.nextLabel();
 
             let t = ctx.makeExpressionCtx(arr, None).toDataTypeNotVoid()?.getArrayType()?;
+            ctx.symbols.enterScope();
 
-            // iteration counter
-            ctx.push(PushIntZero);
+            let lenId = ctx.registerVariable(&format!("__for-len{}", microsSinceEpoch()), Int);
+            let arrId = ctx.registerVariable(&format!("__for-array{}", microsSinceEpoch()), Int);
+            let counterId = ctx.registerVariable(&format!("__for-counter{}", microsSinceEpoch()), Int);
+            let varId  = ctx.registerVariable(var, t);
+
+            ctx.push(PushInt(0));
+            ctx.push(SetLocal { index: counterId });
+
+            ctx.makeExpressionCtx(arr, None).genExpression()?;
+            ctx.push(Dup);
+            ctx.push(ArrayLength);
+            ctx.push(SetLocal { index: lenId });
+            ctx.push(SetLocal { index: arrId });
 
             ctx.opJmp(startLabel, JmpType::Jmp);
 
-            let (_, endLabel) = ctx.beginLoop();
+            let (_, endLoop) = ctx.beginLoop();
 
-            ctx.push(PushIntOne);
-            ctx.push(Add(Int.toRawType()?));
+            ctx.incrementLocal(counterId);
 
             ctx.makeLabel(startLabel);
 
-            ctx.registerVariable(var, t);
-            let varId = ctx.specify().getVariable(var)?.1;
+            ctx.push(GetLocal { index: lenId });
+            ctx.push(GetLocal { index: counterId });
+            ctx.push(OpCode::Equals(RawDataType::Int));
+            ctx.opJmp(endLoop, True);
 
-            ctx.push(Dup);
-
-            ctx.makeExpressionCtx(arr, None).genExpression()?;
-
-            // dec array length bcs less-eq is not implemented
-            ctx.push(ArrayLength);
-            ctx.push(PushIntOne);
-            ctx.push(Sub(Int.toRawType()?));
-
-            ctx.push(Less(Int.toRawType()?));
-
-            ctx.opJmp(endLabel, True);
-
-            ctx.push(Dup);
-            ctx.makeExpressionCtx(arr, None).genExpression()?;
-            ctx.push(Swap);
-
+            ctx.push(GetLocal { index: arrId });
+            ctx.push(GetLocal { index: counterId  });
             ctx.push(ArrayLoad);
             ctx.push(SetLocal { index: varId });
 
             body.generate(ctx.deflate())?;
 
-            ctx.opContinue();
+            ctx.opContinue()?;
 
-            ctx.endLoop();
-            ctx.makeLabel(endLabel);
-            ctx.push(Pop);
+            ctx.endLoop()?;
+
+            ctx.symbols.exitScope();
         }
         RawStatement::Repeat(var, count, body) => {
             let loopStart = ctx.nextLabel();
