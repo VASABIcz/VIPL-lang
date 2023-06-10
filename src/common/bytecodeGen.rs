@@ -229,8 +229,8 @@ impl ExpressionCtx<'_> {
 
         if t != t1 {
             return Err(CodeGenError::TypeError(TypeError{
-                expected: t.clone(),
-                actual: t1.clone(),
+                expected: t,
+                actual: t1,
                 exp: Some(self.exp.clone()),
             }))
         }
@@ -269,7 +269,7 @@ impl ExpressionCtx<'_> {
     }
 
     pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Result<(&String, &(Vec<DataType>, DataType, usize, usize)), CodeGenError> {
-        Ok(self.symbols.getFunctionsByName(name).first().ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?.clone())
+        Ok(*self.symbols.getFunctionsByName(name).first().ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?)
     }
 
     pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {

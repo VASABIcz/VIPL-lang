@@ -896,6 +896,12 @@ impl VirtualMachine {
                     let argz = fMeta.getArgs();
                     symbols.registerFunction(fMeta.genName(), n.id, fId, argz, fMeta.returnType.clone())
                 }
+                for (sId, s) in n.getStructs().iter().enumerate() {
+                    symbols.registerStruct(s.name.clone(), n.id, sId, s.clone());
+                }
+                for (gId, (g, _)) in n.getGlobals().iter().enumerate() {
+                    symbols.registerGlobal(g.name.clone(), n.id, gId, g.typ.clone());
+                }
 
                 let anotherWarCrime: &mut UnsafeCell<Namespace> = transmute(n);
 

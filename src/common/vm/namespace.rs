@@ -394,11 +394,11 @@ impl Namespace {
         self.structs.getFastMut(id).unwrap()
     }
 
-    pub fn getFunctions(&self) -> &Vec<(FunctionMeta, Option<LoadedFunction>)> {
+    pub fn getFunctions(&self) -> &[(FunctionMeta, Option<LoadedFunction>)] {
         &self.functions.actual
     }
 
-    pub fn getStructs(&self) -> &Vec<StructMeta> {
+    pub fn getStructs(&self) -> &[StructMeta] {
         &self.structs.actual
     }
 
