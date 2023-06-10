@@ -324,7 +324,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StringParsingUnit {
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
         let str = parser.tokens.getAssert(StringLiteral)?;
-        Ok(RawExpression::StringLiteral(str.str.clone()))
+        Ok(RawExpression::StringLiteral(str.str.strip_suffix('\"').unwrap().strip_prefix('\"').unwrap().to_string()))
     }
 )
     }
@@ -1594,6 +1594,27 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
     }
 }
 
+#[derive(Debug)]
+pub struct  FormatStringParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FormatStringParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.tokens.isPeekType(TokenType::FormatStringLiteral)
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
+            let t = parser.tokens.getAssert(TokenType::FormatStringLiteral)?;
+
+            Ok(RawExpression::FormatStringLiteral(t.str.strip_prefix("f\"").unwrap().strip_suffix('\"').unwrap().to_string()))
+        })
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
     vec![
         Box::new(AssignableParsingUnit),
@@ -1674,5 +1695,6 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(TwoArgFunctionParsintUnit),
         Box::new(TernaryOperatorParsingUnit),
         Box::new(RepeatParsingUnit),
+        Box::new(FormatStringParsingUnit)
     ]
 }

@@ -2,6 +2,7 @@ use std::{env, io};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{BufRead, repeat, stdout, Write};
+use std::mem::transmute;
 use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
@@ -85,7 +86,16 @@ fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
     }
 }
 
+extern "C" fn onExit(s: usize) {
+    println!("UwU");
+    exit(1);
+}
+
 fn main() -> Result<(), ()> {
+    unsafe {
+        // libc::signal(libc::SIGINT, onExit as usize);
+    }
+
     enableRawMode();
 
     let mut historyBuf = vec![];

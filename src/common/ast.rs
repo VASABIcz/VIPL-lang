@@ -47,6 +47,7 @@ pub enum RawExpression {
     IntLiteral(String),
     FloatLiteral(String),
     StringLiteral(String),
+    FormatStringLiteral(String),
     BoolLiteral(bool),
     Variable(String),
     CharLiteral(char),
@@ -133,15 +134,15 @@ pub struct StructDef {
     pub fields: HashMap<String, DataType>,
 }
 
-impl Into<StructMeta> for StructDef {
-    fn into(self) -> StructMeta {
+impl From<StructDef> for StructMeta {
+    fn from(v: StructDef) -> Self {
         let mut fields = FastAcess::default();
 
-        for (k, v) in self.fields {
+        for (k, v) in v.fields {
             fields.insert(k.clone(), VariableMetadata::n(&k, v));
         }
 
-        StructMeta::new(self.name, fields)
+        StructMeta::new(v.name, fields)
     }
 }
 

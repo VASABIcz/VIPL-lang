@@ -57,6 +57,10 @@ impl SymbolManager {
         self.getFunction(&genFunName(&j, args))
     }
 
+    pub fn getFunctionArgs(&self, name: &str, args: &[DataType]) -> Result<&(Vec<DataType>, DataType, usize, usize), CodeGenError> {
+        self.getFunction(&genFunName(name, args))
+    }
+
     pub fn getFunction(&self, name: &str) -> Result<&(Vec<DataType>, DataType, usize, usize), CodeGenError> {
         self.functions.get(name).ok_or_else(||SymbolNotFound(SymbolNotFoundE::fun(name)))
     }

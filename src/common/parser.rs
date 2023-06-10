@@ -104,7 +104,7 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
     }
 
     pub fn parseManyWithSeparatorUntil<
-        F: core::ops::FnMut(&mut TokenProvider<T>) -> Result<OUT, ParserError<T>>,
+        F: FnMut(&mut TokenProvider<T>) -> Result<OUT, ParserError<T>>,
         OUT,
     >(
         &mut self,

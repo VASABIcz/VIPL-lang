@@ -1,4 +1,5 @@
 use std::arch::x86_64::_rdrand64_step;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fs;
@@ -7,6 +8,7 @@ use std::ops::Deref;
 use std::ptr::write;
 
 use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R13};
+use crate::ast::ASTNode;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, std::marker::ConstParamTy)]
 pub enum Register {
@@ -31,15 +33,17 @@ pub enum Register {
     R15,
 }
 
-impl Into<AsmLocation> for Register {
-    fn into(self) -> AsmLocation {
-        return AsmLocation::Register(self);
+impl From<Register> for AsmLocation {
+    fn from(v: Register) -> AsmLocation {
+        AsmLocation::Register(v)
     }
 }
 
-impl Into<AsmValue> for Register {
-    fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Register(self));
+
+
+impl From<Register> for AsmValue {
+    fn from(v: Register) -> AsmValue {
+        AsmValue::Concrete(Concrete::Register(v))
     }
 }
 
@@ -97,10 +101,7 @@ impl AsmValue {
 
     pub fn tryGetRegister(&self) -> Option<Register> {
         match self {
-            AsmValue::Concrete(c) => match c {
-                Concrete::Register(v) => Some(v.clone()),
-                _ => None,
-            },
+            AsmValue::Concrete(Concrete::Register(v)) => Some(*v),
             _ => None,
         }
     }
@@ -153,58 +154,58 @@ impl AsmValue {
     }
 }
 
-impl Into<Concrete> for i32 {
-    fn into(self) -> Concrete {
-        return Concrete::Number(self as usize);
+impl From<i32> for Concrete {
+    fn from(v: i32) -> Concrete {
+        Concrete::Number(v as usize)
     }
 }
 
-impl Into<Concrete> for Register {
-    fn into(self) -> Concrete {
-        return Concrete::Register(self);
+impl From<Register> for Concrete {
+    fn from(v: Register) -> Concrete {
+        Concrete::Register(v)
     }
 }
 
-impl Into<AsmValue> for i32 {
-    fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize));
+impl From<i32> for AsmValue {
+    fn from(v: i32) -> AsmValue {
+        AsmValue::Concrete(Concrete::Number(v as usize))
     }
 }
 
-impl Into<AsmValue> for isize {
-    fn into(self) -> AsmValue {
-        return AsmValue::Concrete(Concrete::Number(self as usize));
+impl From<isize> for AsmValue {
+    fn from(v: isize) -> AsmValue {
+        AsmValue::Concrete(Concrete::Number(v as usize))
     }
 }
 
 
 impl From<usize> for AsmValue {
     fn from(value: usize) -> Self {
-        AsmValue::Concrete(Concrete::Number(value as usize))
+        AsmValue::Concrete(Concrete::Number(value))
     }
 }
 
-impl Into<AsmValue> for Concrete {
-    fn into(self) -> AsmValue {
-        return AsmValue::Concrete(self);
+impl From<Concrete> for AsmValue {
+    fn from(v: Concrete) -> AsmValue {
+        AsmValue::Concrete(v)
     }
 }
 
-impl Into<AsmLocation> for &str {
-    fn into(self) -> AsmLocation {
-        return AsmLocation::Identifier(String::from(self));
+impl From<&str> for AsmLocation {
+    fn from(v: &str) -> AsmLocation {
+        AsmLocation::Identifier(String::from(v))
     }
 }
 
-impl Into<AsmLocation> for String {
-    fn into(self) -> AsmLocation {
-        return AsmLocation::Identifier(self);
+impl From<String> for AsmLocation {
+    fn from(v: String) -> AsmLocation {
+        AsmLocation::Identifier(v)
     }
 }
 
-impl Into<AsmValue> for String {
-    fn into(self) -> AsmValue {
-        return AsmValue::Identifier(self);
+impl From<String> for AsmValue {
+    fn from(v: String) -> AsmValue {
+        AsmValue::Identifier(v)
     }
 }
 
@@ -253,10 +254,14 @@ pub trait AsmGen {
     fn newLine(&mut self);
 
     fn offsetStack(&mut self, offset: isize) {
-        if offset < 0 {
-            self.sub(Rsp.into(), (8 * offset * -1).into())
-        } else if offset > 0 {
-            self.add(Rsp.into(), (8 * offset).into());
+        match offset.cmp(&0) {
+            Ordering::Less => {
+                self.sub(Rsp.into(), (-(8 * offset)).into())
+            }
+            Ordering::Greater => {
+                self.add(Rsp.into(), (8 * offset).into());
+            }
+            Ordering::Equal => {}
         }
     }
 

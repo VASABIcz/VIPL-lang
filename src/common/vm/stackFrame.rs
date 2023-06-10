@@ -11,7 +11,9 @@ use std::ops::Deref;
 #[repr(C)]
 pub struct StackFrame {
     pub localVariables: *mut Value,
-    pub programCounter: usize,
+    pub programCounter: usize, // will be set to program stack ptr
+    // pub nativeStackEnd: Option<usize>, // current frame stack end, gets assigned when called frame FFI
+    // pub nativeStackStart: usize, // current frame stack start
     pub namespaceId: usize,
     pub functionId: usize,
 }
@@ -41,7 +43,7 @@ impl StackFrame {
         self.getRefMut(index).getMutReference()
     }
 
-    pub fn getString(&mut self, index: usize) -> &String {
+    pub fn getString(&self, index: usize) -> &String {
         self.getRef(index).getString()
     }
 }

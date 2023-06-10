@@ -8,3 +8,4 @@ pub mod regix;
 pub mod std;
 pub mod test;
 pub mod utils;
+pub mod strings;

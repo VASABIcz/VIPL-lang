@@ -8,21 +8,21 @@ pub enum ConstValue {
     B(bool),
 }
 
-impl Into<ConstValue> for isize {
-    fn into(self) -> ConstValue {
-        ConstValue::I(self)
+impl From<isize> for ConstValue {
+    fn from(v: isize) -> ConstValue {
+        ConstValue::I(v)
     }
 }
 
-impl Into<ConstValue> for f64 {
-    fn into(self) -> ConstValue {
-        ConstValue::F(self)
+impl From<f64> for ConstValue {
+    fn from(v: f64) -> ConstValue {
+        ConstValue::F(v)
     }
 }
 
-impl Into<ConstValue> for bool {
-    fn into(self) -> ConstValue {
-        ConstValue::B(self)
+impl From<bool> for ConstValue {
+    fn from(v: bool) -> ConstValue {
+        ConstValue::B(v)
     }
 }
 

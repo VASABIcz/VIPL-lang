@@ -22,6 +22,7 @@
 #![allow(non_snake_case)]
 #![feature(slice_internals)]
 #![feature(pattern)]
+#![feature(exclusive_range_pattern)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]

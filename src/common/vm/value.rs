@@ -54,10 +54,10 @@ impl Debug for Value {
     }
 }
 
-impl Into<usize> for Value {
+impl From<Value> for usize {
     #[inline]
-    fn into(self) -> usize {
-        unsafe { self.UNum }
+    fn from(v: Value) -> usize {
+        unsafe { v.UNum }
     }
 }
 
@@ -112,9 +112,9 @@ impl From<usize> for Value {
     }
 }
 
-impl<T: Allocation + Debug> Into<Hay<Xd>> for Hay<ViplObject<T>> {
-    fn into(self) -> Hay<Xd> {
-        Hay::new(self.inner as *mut Xd)
+impl<T: Allocation + Debug> From<Hay<ViplObject<T>>> for Hay<Xd> {
+    fn from(value: Hay<ViplObject<T>>) -> Self {
+        Hay::new(value.inner as *mut Xd)
     }
 }
 

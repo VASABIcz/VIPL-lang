@@ -125,14 +125,14 @@ impl FunctionMeta {
     }
 }
 
-impl Into<FunctionMeta> for FunctionDef {
-    fn into(self) -> FunctionMeta {
+impl From<FunctionDef> for FunctionMeta {
+    fn from(v: FunctionDef) -> FunctionMeta {
         FunctionMeta::makeRuntime(
-            self.name,
-            self.localsMeta.into_boxed_slice(),
-            self.argsCount,
-            self.returnType.unwrap_or(Void),
-            self.body,
+            v.name,
+            v.localsMeta.into_boxed_slice(),
+            v.argsCount,
+            v.returnType.unwrap_or(Void),
+            v.body,
         )
     }
 }

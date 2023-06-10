@@ -8,6 +8,7 @@ pub enum TokenType {
     FloatLiteral,
     DoubleLiteral,
     StringLiteral,
+    FormatStringLiteral,
     CharLiteral,
     LambdaBegin,
 
@@ -131,7 +132,8 @@ impl Stringable for TokenType {
             TokenType::QuestionMark => "?",
             TokenType::Repeat => "Repeat",
             TokenType::As => "As",
-            TokenType::From => "From"
+            TokenType::From => "From",
+            TokenType::FormatStringLiteral => "FormatStringLiteral"
         }
     }
 }
@@ -222,6 +224,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
+        RangeLexingUnit::new("#!", "\n", None),
         RangeLexingUnit::new("/*", "*/", None),
         //
         KeywordLexingUnit::new("+=", TokenType::AddAs),
@@ -254,6 +257,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("{", TokenType::OCB),
         KeywordLexingUnit::new("}", TokenType::CCB),
         RangeLexingUnit::new("\'", "\'", Some(TokenType::CharLiteral)),
+        RangeLexingUnit::new("f\"", "\"", Some(TokenType::FormatStringLiteral)),
         RangeLexingUnit::new("\"", "\"", Some(TokenType::StringLiteral)),
         IdentifierLexingUnit::new(TokenType::Identifier),
     ]
