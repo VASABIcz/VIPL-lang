@@ -1,6 +1,6 @@
 ## small interpreted/JIT compiled stack based programing language
 
-- build size around 500kb
+- build size around 450kB
 - performance better than python
 - extensible
 - statically typed
