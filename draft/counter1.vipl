@@ -1,8 +1,0 @@
-import out
-
-i = 0
-
-while i < 10_000_000 {
-    out::print(i)
-    i += 1
-}

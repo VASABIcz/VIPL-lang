@@ -1,5 +1,0 @@
-import out
-
-x = 12 as float as value
-
-out::print x as int

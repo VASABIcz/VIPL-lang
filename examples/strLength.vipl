@@ -1,6 +1,0 @@
-import out
-
-x = "UwU"
-res = x.size
-
-out::print(res)

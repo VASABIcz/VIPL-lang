@@ -1,3 +1,0 @@
-from out import print
-
-print "Hello World"

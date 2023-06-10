@@ -1,6 +1,0 @@
-mul = fn(a: int, b: int): int {
-    return a * b
-}
-
-
-out::print(5 mul 5)

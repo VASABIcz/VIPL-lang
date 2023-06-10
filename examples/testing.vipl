@@ -1,7 +1,0 @@
-import out
-
-x = 10
-
-x
-
-out::print("hello there")

@@ -1,5 +1,0 @@
-x = { a: int ->
-    out::print(a)
-}
-
-x(10)
