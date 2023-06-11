@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Index, Range};
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
-use crate::fastAccess::FastAcess;
+use crate::fastAccess::FastAccess;
 use crate::lexer::{Location, Token};
 use crate::lexingUnits::TokenType;
 use crate::utils::{genFunName, getRanges};
@@ -137,7 +137,7 @@ pub struct StructDef {
 
 impl From<StructDef> for StructMeta {
     fn from(v: StructDef) -> Self {
-        let mut fields = FastAcess::default();
+        let mut fields = FastAccess::default();
 
         for (k, v) in v.fields {
             fields.insert(k.clone(), VariableMetadata::n(&k, v));

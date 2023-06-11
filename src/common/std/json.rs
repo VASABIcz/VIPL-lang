@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use crate::errors::{LoadFileError, ParserError};
-use crate::fastAccess::FastAcess;
+use crate::fastAccess::FastAccess;
 use crate::lexer::{
     tokenize, AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit,
     RangeLexingUnit, SourceProvider, WhitespaceLexingUnit,
@@ -252,7 +252,7 @@ pub fn registerJson(vm: &mut VirtualMachine) {
 
     n.registerStruct(StructMeta::n(
         "JBool",
-        FastAcess::ofStr(vec![("v", VariableMetadata::n("v", Bool))]),
+        FastAccess::ofStr(vec![("v", VariableMetadata::n("v", Bool))]),
     ));
 
     n.makeNative(

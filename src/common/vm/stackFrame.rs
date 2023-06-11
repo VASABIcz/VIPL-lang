@@ -19,10 +19,6 @@ pub struct StackFrame {
 }
 
 impl StackFrame {
-    pub fn getInt(&self, index: usize) -> isize {
-        unsafe { self.localVariables.add(index).read().asNum() }
-    }
-
     pub fn get(&self, index: usize) -> Value {
         unsafe { self.localVariables.add(index).read() }
     }
@@ -35,16 +31,32 @@ impl StackFrame {
         unsafe { &mut *self.localVariables.add(index) }
     }
 
-    pub fn getFloat(&self, index: usize) -> f64 {
-        self.get(index).asFlo()
-    }
-
     pub fn getReference<T: Debug + Allocation>(&mut self, index: usize) -> &mut ViplObject<T> {
         self.getRefMut(index).getMutReference()
     }
 
     pub fn getString(&self, index: usize) -> &String {
         self.getRef(index).getString()
+    }
+
+    pub fn getChar(&self, index: usize) -> char {
+        self.get(index).asChar()
+    }
+
+    pub fn getInt(&self, index: usize) -> isize {
+        self.get(index).asNum()
+    }
+
+    pub fn getUInt(&self, index: usize) -> usize {
+        self.get(index).asUnsigned()
+    }
+
+    pub fn getFloat(&self, index: usize) -> f64 {
+        self.get(index).asFlo()
+    }
+
+    pub fn getBool(&self, index: usize) -> bool {
+        self.get(index).asBool()
     }
 }
 

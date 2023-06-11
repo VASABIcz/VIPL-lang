@@ -4,12 +4,12 @@ use std::hash::Hash;
 use std::path::Iter;
 
 #[derive(Debug, Clone)]
-pub struct FastAcess<LOOKUP: Debug, VALUE: Debug> {
+pub struct FastAccess<LOOKUP: Debug, VALUE: Debug> {
     pub lookupTable: HashMap<LOOKUP, usize>,
     pub actual: Vec<VALUE>,
 }
 
-impl<LOOKUP: Debug, VALUE: Debug> Default for FastAcess<LOOKUP, VALUE> {
+impl<LOOKUP: Debug, VALUE: Debug> Default for FastAccess<LOOKUP, VALUE> {
     fn default() -> Self {
         Self {
             lookupTable: HashMap::default(),
@@ -18,7 +18,7 @@ impl<LOOKUP: Debug, VALUE: Debug> Default for FastAcess<LOOKUP, VALUE> {
     }
 }
 
-impl<VALUE: Debug> FastAcess<String, VALUE> {
+impl<VALUE: Debug> FastAccess<String, VALUE> {
     #[inline]
     pub fn getSlowStr(&self, key: &str) -> Option<(&VALUE, usize)> {
         let v = *self.lookupTable.get(key)?;
@@ -35,7 +35,7 @@ impl<VALUE: Debug> FastAcess<String, VALUE> {
         Some((s, v))
     }
 
-    pub fn ofStr(items: Vec<(&str, VALUE)>) -> FastAcess<String, VALUE> {
+    pub fn ofStr(items: Vec<(&str, VALUE)>) -> FastAccess<String, VALUE> {
         let mut this = Self::default();
 
         for item in items {
@@ -46,8 +46,8 @@ impl<VALUE: Debug> FastAcess<String, VALUE> {
     }
 }
 
-impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAcess<LOOKUP, VALUE> {
-    pub fn of(items: Vec<(LOOKUP, VALUE)>) -> FastAcess<LOOKUP, VALUE> {
+impl<LOOKUP: Hash + Eq + PartialEq + Debug, VALUE: Debug> FastAccess<LOOKUP, VALUE> {
+    pub fn of(items: Vec<(LOOKUP, VALUE)>) -> FastAccess<LOOKUP, VALUE> {
         let mut this = Self::default();
 
         for item in items {

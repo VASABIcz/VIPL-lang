@@ -56,5 +56,53 @@ pub fn registerStrings(vm: &mut VirtualMachine) {
         false
     );
 
+    n.makeNative(
+        "toString",
+        &[DataType::Float],
+        |vm, s| {
+            let i = s.getFloat(0);
+
+            vm.allocateString(i.to_string()).into()
+        },
+        DataType::str(),
+        false
+    );
+
+    n.makeNative(
+        "toString",
+        &[DataType::Bool],
+        |vm, s| {
+            let i = s.getBool(0);
+
+            vm.allocateString(i.to_string()).into()
+        },
+        DataType::str(),
+        false
+    );
+
+    n.makeNative(
+        "toString",
+        &[DataType::Char],
+        |vm, s| {
+            let i = s.getChar(0);
+
+            vm.allocateString(i.to_string()).into()
+        },
+        DataType::str(),
+        false
+    );
+
+    n.makeNative(
+        "toString",
+        &[DataType::Value],
+        |vm, s| {
+            let i = s.getUInt(0);
+
+            vm.allocateString(i.to_string()).into()
+        },
+        DataType::str(),
+        false
+    );
+
     vm.registerNamespace(n);
 }

@@ -12,7 +12,7 @@ use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
 use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, LabelManager, SimpleCtx, StatementCtx, SymbolicOpcode};
 use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
-use crate::fastAccess::FastAcess;
+use crate::fastAccess::FastAccess;
 use crate::ffi::{allocateObject, NativeWrapper};
 use crate::naughtyBox::Naughty;
 use crate::symbolManager::SymbolManager;
@@ -60,7 +60,10 @@ pub enum OpCode {
     F2I,
     I2F,
     PushInt(isize),
-    PushFunction(u32, u32),
+    PushFunction {
+        namespaceId: u32,
+        functionId: u32
+    },
     PushIntOne,
     PushIntZero,
     PushFloat(f64),
@@ -86,7 +89,10 @@ pub enum OpCode {
         namespace: u32,
         id: u32,
     },
-    DynamicCall(bool, usize),
+    DynamicCall {
+        returns: bool,
+        argsCount: usize
+    },
     Return,
 
     Add(RawDataType),
@@ -191,7 +197,7 @@ pub struct VirtualMachine {
     heap: Heap,
 
     frames: Vec<StackFrame>,
-    namespaces: FastAcess<String, Namespace>,
+    namespaces: FastAccess<String, Namespace>,
 
     jitCompiler: JITCompiler,
 }
@@ -729,7 +735,7 @@ impl VirtualMachine {
 
                     (*vm).call(frame.namespaceId, *id)
                 }
-                DynamicCall(_, _) => {
+                DynamicCall{ .. } => {
                     let (namespaceRaw, idRaw) = self.pop().asFunction();
                     let namespace = namespaceRaw as usize;
                     let id = idRaw as usize;
@@ -737,8 +743,8 @@ impl VirtualMachine {
                     vm.call(namespace, id)
                 }
                 LCall { namespace, id } => vm.call(*namespace as usize, *id as usize),
-                PushFunction(namespaceID, functionID) => {
-                    self.push(Value::makeFunction(*namespaceID, *functionID));
+                PushFunction{ namespaceId, functionId } => {
+                    self.push(Value::makeFunction(*namespaceId, *functionId));
                 }
                 New {
                     namespaceID,

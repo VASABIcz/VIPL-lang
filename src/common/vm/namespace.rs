@@ -5,7 +5,7 @@ use std::mem::transmute;
 use crate::ast::{ASTNode, BinaryOp, RawExpression, FunctionDef, RawNode, RawStatement, VariableModd, Statement, Expression};
 use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
-use crate::fastAccess::FastAcess;
+use crate::fastAccess::FastAccess;
 use crate::lexer::{LexingUnit, tokenizeSource};
 use crate::lexingUnits::TokenType;
 // use crate::codegen::complexBytecodeGen;
@@ -72,7 +72,7 @@ pub struct GlobalMeta {
 #[derive(Debug, Clone)]
 pub struct StructMeta {
     pub name: String,
-    fields: FastAcess<String, VariableMetadata>, // TODO default values
+    fields: FastAccess<String, VariableMetadata>, // TODO default values
 }
 
 #[derive(Debug, Clone)]
@@ -84,19 +84,19 @@ pub struct EnumArm {
 #[derive(Debug, Clone)]
 pub struct EnumMeta {
     pub name: String,
-    arms: FastAcess<String, EnumArm>,
+    arms: FastAccess<String, EnumArm>,
 }
 
 impl StructMeta {
 
-    pub fn n(name: &str, fields: FastAcess<String, VariableMetadata>) -> Self {
+    pub fn n(name: &str, fields: FastAccess<String, VariableMetadata>) -> Self {
         Self {
             name: name.to_string(),
             fields,
         }
     }
 
-    pub fn new(name: String, fields: FastAcess<String, VariableMetadata>) -> Self {
+    pub fn new(name: String, fields: FastAccess<String, VariableMetadata>) -> Self {
         Self { name, fields }
     }
 
@@ -266,17 +266,17 @@ pub struct Namespace {
     pub state: NamespaceState,
     pub vm: Naughty<VirtualMachine>,
 
-    functions: FastAcess<String, (FunctionMeta, Option<LoadedFunction>)>,
+    functions: FastAccess<String, (FunctionMeta, Option<LoadedFunction>)>,
 
-    globals: FastAcess<String, (GlobalMeta, Value)>,
+    globals: FastAccess<String, (GlobalMeta, Value)>,
 
-    structs: FastAcess<String, StructMeta>,
+    structs: FastAccess<String, StructMeta>,
 
-    strings: FastAcess<String, *mut ViplObject<Str>>,
+    strings: FastAccess<String, *mut ViplObject<Str>>,
 
-    types: FastAcess<TokenType, TokenType>,
+    types: FastAccess<TokenType, TokenType>,
 
-    enums: FastAcess<String, EnumMeta>,
+    enums: FastAccess<String, EnumMeta>,
 
     importHints: Vec<ImportHints>
 }

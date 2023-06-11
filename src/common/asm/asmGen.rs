@@ -676,10 +676,10 @@ impl<T: AsmGen> Jitter<T> {
 
                         self.callFfi(offset_of!(NativeWrapper::strLen), &[obj.into()], Some(res))
                     }
-                    OpCode::DynamicCall(returns, argCount) => {
+                    OpCode::DynamicCall{ returns, argsCount } => {
                         let lambda = self.pop();
 
-                        for _ in 0..*argCount {
+                        for _ in 0..*argsCount {
                             let r = self.pop().into();
                             self.gen.push(r);
                         }
@@ -699,8 +699,8 @@ impl<T: AsmGen> Jitter<T> {
                             ret
                         );
                     }
-                    OpCode::PushFunction(nId, fId) => {
-                        let v = Value::makeFunction(*nId, *fId).asUnsigned();
+                    OpCode::PushFunction { namespaceId, functionId } => {
+                        let v = Value::makeFunction(*namespaceId, *functionId).asUnsigned();
 
                         let r = self.acquireAny();
                         self.gen.mov(r.into(), v.into());

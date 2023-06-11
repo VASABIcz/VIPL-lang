@@ -307,7 +307,7 @@ fn isPure(ops: &[OpCode], vm: &VirtualMachine, namespace: &Namespace) -> bool {
 
                 return f.0.isPure;
             }
-            OpCode::DynamicCall(_, _) => return false,
+            OpCode::DynamicCall{ .. } => return false,
             SetGlobal { .. } => return false,
             GetGlobal { .. } => return false,
             _ => {}
