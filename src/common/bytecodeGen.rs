@@ -20,13 +20,13 @@ use crate::lexingUnits::TokenType::In;
 use crate::parser::*;
 use crate::symbolManager::{FunctionSymbol, SymbolManager};
 use crate::utils::{genFunName, microsSinceEpoch};
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Object, Value, Void};
+use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Reference, Value, Void};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I, PushBool, IsStruct};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
 const DEBUG: bool = false;
@@ -347,7 +347,7 @@ impl ExpressionCtx<'_> {
                     let l = &self.typeHint;
                     let c = l.clone().ok_or_else(||CodeGenError::UntypedEmptyArray)?;
                     match c {
-                        Object(o) => {
+                        Reference(o) => {
                             if o.name.as_str() == "Array" {
                                 let e = o
                                     .generics
@@ -356,11 +356,11 @@ impl ExpressionCtx<'_> {
                                 Ok(DataType::arr(e.clone()))
                             } else {
                                 Err(CodeGenError::TypeError(TypeError {
-                                    expected: DataType::Object(ObjectMeta {
+                                    expected: DataType::Reference(ObjectMeta {
                                         name: "Array".to_string(),
                                         generics: Box::new([Any]),
                                     }),
-                                    actual: Object(o.clone()),
+                                    actual: Reference(o.clone()),
                                     exp: Some(e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()),
                                 }))
                             }
@@ -383,7 +383,7 @@ impl ExpressionCtx<'_> {
                 let e = self.transfer(&i.expr).toDataTypeNotVoid()?;
 
                 match e {
-                    Object(o) => {
+                    Reference(o) => {
                         if o.name.as_str() == "String" {
                             return Ok(Char);
                         }
@@ -464,14 +464,14 @@ impl ExpressionCtx<'_> {
                     },
                 }
             },
-            RawExpression::StructInit(name, _) => Ok(DataType::Object(ObjectMeta {
+            RawExpression::StructInit(name, _) => Ok(DataType::Reference(ObjectMeta {
                 name: name.clone(),
                 generics: Box::new([]),
             })),
             RawExpression::FieldAccess(prev, fieldName) => {
                 let e = self.transfer(prev).toDataType()?;
                 match e {
-                    Object(o) => {
+                    Reference(o) => {
                         match o.name.as_str() {
                             "Array" | "String" => return Ok(Int),
                             _ => {}
@@ -499,7 +499,9 @@ impl ExpressionCtx<'_> {
             }
             // FIXME check if cast is possible
             RawExpression::TypeCast(_, t) => Ok(t.clone()),
-            RawExpression::FormatStringLiteral(_) => todo!()
+            RawExpression::FormatStringLiteral(_) => todo!(),
+            // FIXME
+            RawExpression::TypeCheck(_, _) => Ok(DataType::Bool)
         }
     }
 }
@@ -1067,16 +1069,16 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             body.generate(ctx.deflate())?;
 
-            ctx.opContinue();
+            ctx.opContinue()?;
 
-            ctx.endLoop();
+            ctx.endLoop()?;
             ctx.makeLabel(endLoop);
         }
     }
     Ok(())
 }
 
-fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
+fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
     let mut r = ctx;
 
     unsafe {
@@ -1146,7 +1148,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                             .toDataTypeNotVoid()?,
                     ),
                     Some(ref v) => match v {
-                        DataType::Object(v) => match v.generics.first() {
+                        DataType::Reference(v) => match v.generics.first() {
                             None => None,
                             Some(v) => match v {
                                 Generic::Any => None,
@@ -1199,13 +1201,6 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             }
             RawExpression::Lambda(args, body, ret) => {
                 todo!();
-                let meta = FunctionMeta::makeRuntime(
-                    "lambda".to_string(),
-                    args.clone().into_boxed_slice(),
-                    0,
-                    ret.clone().unwrap_or(Void),
-                    body.clone(),
-                );
             }
             RawExpression::Callable(prev, args) => unsafe {
                 match &prev.exp {
@@ -1356,31 +1351,43 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             RawExpression::TypeCast(exp, target) => {
                 let src = r.transfer(exp).toDataTypeNotVoid()?;
 
-                if target.isValue() || src.isValue() {
+                if &src == target || target.isValue() || src.isValue() {
                     r.transfer(exp).genExpression()?;
-                    return Ok(())
                 }
 
-                if &src == target {
-                    r.transfer(exp).genExpression()?;
-                    return Ok(())
-                }
-
-                if src.isInt() && target.isFloat() {
+                else if src.isInt() && target.isFloat() {
                     r.transfer(exp).genExpression()?;
                     r.push(I2F);
-                    return Ok(())
                 }
 
-                if target.isInt() && src.isFloat() {
+                else if target.isInt() && src.isFloat() {
                     r.transfer(exp).genExpression()?;
                     r.push(F2I);
-                    return Ok(())
                 }
 
-                todo!()
+                else if src.isReference() && target.isObject() {
+                    r.transfer(exp).genExpression()?;
+                }
+
+                else {
+                    todo!("src: {:?} tgt: {:?}", src, target);
+                }
             }
-            RawExpression::FormatStringLiteral(_) => todo!()
+            RawExpression::FormatStringLiteral(_) => todo!(),
+            RawExpression::TypeCheck(source, target) => {
+                let src = r.transfer(source).toDataType()?;
+
+                if src.isObject() && let DataType::Reference(v) = target {
+                    r.transfer(source).genExpression()?;
+
+                    let t = r.symbols.getStruct(&target.toString())?;
+
+                    r.push(IsStruct { namespaceId: t.nId, structId: t.sId })
+                }
+                else {
+                    r.push(PushBool(&src == target))
+                }
+            }
         }
     }
     Ok(())

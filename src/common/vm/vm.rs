@@ -148,6 +148,10 @@ pub enum OpCode {
     LessInt,
     GetLocalZero,
     SetLocalZero,
+    IsStruct {
+        namespaceId: usize,
+        structId: usize,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -824,6 +828,11 @@ impl VirtualMachine {
                 Modulo(t) => {
                     let a = self.pop();
                     self.getMutTop().modulo(&a, &t.toType());
+                }
+                IsStruct { namespaceId, structId } => {
+                    let v = self.pop().toRefMeta();
+
+                    self.push((v.structId == *structId && v.namespaceId == *namespaceId).into())
                 }
                 o => {
                     if DEBUG || TRACE {

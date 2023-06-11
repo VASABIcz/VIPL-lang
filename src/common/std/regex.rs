@@ -39,28 +39,31 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
         |vm, s| {
             let str = s.getRef(0).getString();
 
-            let res = Regix::parse(str);
+            match Regix::parse(str) {
+                Ok(res) => {
+                    let a = ViplObject {
+                        meta: ViplObjectMeta {
+                            namespaceId: s.namespaceId,
+                            structId: 0,
+                            objectType: ObjectType::Native(ViplNativeObject {
+                                getField: blankGetField,
+                                setField: blankSetField,
+                                destroy: blankDestroy,
+                                collect: blankCollect,
+                            }),
+                        },
+                        data: RegixData {
+                            reg: res,
+                            capturesCount: 0,
+                        },
+                    };
 
-            let a = ViplObject {
-                meta: ViplObjectMeta {
-                    namespaceId: s.namespaceId,
-                    structId: 0,
-                    objectType: ObjectType::Native(ViplNativeObject {
-                        getField: blankGetField,
-                        setField: blankSetField,
-                        destroy: blankDestroy,
-                        collect: blankCollect,
-                    }),
-                },
-                data: RegixData {
-                    reg: res,
-                    capturesCount: 0,
-                },
-            };
+                    let ptr = vm.allocate(a);
 
-            let ptr = vm.allocate(a);
-
-            Value::from(ptr)
+                    Value::from(ptr)
+                }
+                Err(_) => Value::null()
+            }
         },
         DataType::obj("Regex"),
         false,

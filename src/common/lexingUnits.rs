@@ -39,6 +39,7 @@ pub enum TokenType {
     In,
     Null,
     As,
+    Is,
 
     ORB,
     CRB,
@@ -135,7 +136,8 @@ impl Stringable for TokenType {
             TokenType::As => "As",
             TokenType::From => "From",
             TokenType::FormatStringLiteral => "FormatStringLiteral",
-            TokenType::Modulo => "%"
+            TokenType::Modulo => "%",
+            TokenType::Is => "Is"
         }
     }
 }
@@ -234,6 +236,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         AlphabeticKeywordLexingUnit::new("null", TokenType::Null),
         AlphabeticKeywordLexingUnit::new("repeat", TokenType::Repeat),
         AlphabeticKeywordLexingUnit::new("as", TokenType::As),
+        AlphabeticKeywordLexingUnit::new("is", TokenType::Is),
         AlphabeticKeywordLexingUnit::new("from", TokenType::From),
 
         KeywordLexingUnit::new("&&", TokenType::And),

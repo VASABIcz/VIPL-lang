@@ -1,0 +1,11 @@
+struct String {}
+
+struct Array<T> {}
+
+x = [1, 2, 3]
+
+assert x is Array<int>
+
+c = x as object
+
+assert !(c as Array<char>)

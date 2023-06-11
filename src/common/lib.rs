@@ -23,13 +23,14 @@
 #![feature(slice_internals)]
 #![feature(pattern)]
 #![feature(exclusive_range_pattern)]
+#![deny(unused_must_use)]
+#![deny(unused_assignments)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]
 // static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 extern crate core;
-
 pub mod ast;
 pub mod asm;
 pub mod bytecodeGen;

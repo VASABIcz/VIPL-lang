@@ -21,7 +21,6 @@ const DEBUG: bool = true;
 pub extern "C" fn createVm() -> *mut VirtualMachine {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
-    forget(ptr);
     ptr
 }
 

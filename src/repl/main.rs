@@ -1,3 +1,7 @@
+#![feature(let_chains)]
+#![allow(non_snake_case)]
+#![deny(unused_assignments)]
+
 use std::{env, io};
 use std::collections::HashMap;
 use std::error::Error;
@@ -17,14 +21,13 @@ use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
 use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw};
 use vipl::utils::namespacePath;
-use vipl::vm::dataType::DataType;
+use vipl::vm::dataType::{DataType, Generic};
 use vipl::vm::namespace::{loadSourceFile, Namespace, NamespaceState};
 use vipl::vm::namespace::FunctionTypeMeta::Runtime;
 use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::value::Value;
 use vipl::vm::vm::{OpCode, VirtualMachine};
 use vipl::vm::vm::OpCode::{LCall, Pop, SCall};
-use vipl::wss::WhySoSlow;
 
 fn readInput(history: &[String]) -> Result<String, ()> {
     putStr(">>> ");
@@ -43,7 +46,7 @@ fn readInput(history: &[String]) -> Result<String, ()> {
 }
 
 fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
-    let mut vm = unsafe { &mut *ctx.vm.get() };
+    let vm = unsafe { &mut *ctx.vm.get() };
     let (n, outNamespaceID) = vm.findNamespace("out").unwrap();
 
     let printInt = n.findFunction("print(int)").unwrap();
@@ -51,7 +54,8 @@ fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
     let printFloat = n.findFunction("print(float)").unwrap();
     let printChar = n.findFunction("print(char)").unwrap();
     let printString = n.findFunction("print(String)").unwrap();
-    // let printArray = n.findFunction("print(Array)").unwrap();
+    let printArrayString = n.findFunction("print(Array<String>)").unwrap();
+    let printArray = n.findFunction("print(Array<*>)").unwrap();
 
     match t {
         DataType::Int => ctx.push(LCall {
@@ -70,19 +74,32 @@ fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
             namespace: outNamespaceID as u32,
             id: printChar.1 as u32,
         }),
-        DataType::Object(o) => {
+        DataType::Reference(o) => {
             if o.name == "String" {
                 ctx.push(LCall {
                     namespace: outNamespaceID as u32,
                     id: printString.1 as u32,
                 })
+            } else if o.name == "Array" && let Some(Generic::Type(v)) = o.generics.first() {
+                if v.isString() {
+                    ctx.push(LCall {
+                        namespace: outNamespaceID as u32,
+                        id: printArrayString.1 as u32,
+                    })
+                } else {
+                    ctx.push(LCall {
+                        namespace: outNamespaceID as u32,
+                        id: printArray.1 as u32,
+                    })
+                }
             } else {
                 ctx.push(Pop)
             }
         },
         DataType::Function { .. } => ctx.push(Pop),
         DataType::Void => {}
-        DataType::Value => ctx.push(Pop)
+        DataType::Value => ctx.push(Pop),
+        DataType::Object => todo!()
     }
 }
 
@@ -96,12 +113,11 @@ fn main() -> Result<(), ()> {
 
     let mut historyBuf = vec![];
     let mut vm = bootStrapVM();
-    let mut mainLocals = vec![];
     let mut localValues = vec![];
     let mut lexingUnits = lexingUnits();
     let mut parsingUnits = parsingUnits();
 
-    let n = Namespace::constructNamespace(vec![], "UwU", &mut vm, mainLocals.clone());
+    let n = Namespace::constructNamespace(vec![], "UwU", &mut vm, vec![]);
     let generatedNamespace = vm.registerNamespace(n);
 
     let d = &mut vm as *mut VirtualMachine;
@@ -181,8 +197,6 @@ fn main() -> Result<(), ()> {
                 localValues.push(Value::from(0))
             }
         }
-
-        mainLocals = fMeta.localsMeta.clone().into_vec();
 
         unsafe {
             f.as_ref().unwrap().call(

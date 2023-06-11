@@ -20,6 +20,7 @@ impl Allocation for Xd {
 }
 
 #[derive(Copy, Clone)]
+#[repr(C)]
 pub union Value {
     pub Num: isize,
     pub UNum: usize,
@@ -146,6 +147,13 @@ impl Value {
     }
 
     #[inline(always)]
+    pub fn toRefMeta(self) -> UntypedObject {
+        let casted = self.asHayUntyped().inner as *mut UntypedObject;
+
+        unsafe { (*casted).clone() }
+    }
+
+    #[inline(always)]
     pub fn asMutRef<T: Allocation + Debug>(&mut self) -> &mut ViplObject<T> {
         let casted = unsafe { self.Reference.inner } as *mut ViplObject<T>;
 
@@ -194,7 +202,7 @@ impl Value {
                 *self.getRefFlo() += value.getFlo();
             }
             DataType::Bool => {}
-            Object(it) => match it.name.as_str() {
+            Reference(it) => match it.name.as_str() {
                 "String" => {
                     let str1 = self.getString();
                     let str2 = value.getString();
@@ -376,7 +384,7 @@ impl Value {
             Float => self.getFlo() == val.getFlo(),
             Bool => self.getBool() == val.getBool(),
             Char => self.getChar() == val.getChar(),
-            Object(a) => self.getNumRef() == val.getNumRef(),
+            Reference(a) => self.getNumRef() == val.getNumRef(),
             _ => unreachable!(),
         };
         *self = x.into()

@@ -215,6 +215,7 @@ pub enum LoadedFunction {
 
 #[inline(always)]
 pub fn printStack() {
+    #[allow(unused_assignments)]
     let mut ptr = 0usize;
     unsafe {
         asm!(

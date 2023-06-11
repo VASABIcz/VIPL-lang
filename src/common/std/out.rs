@@ -57,10 +57,22 @@ pub fn registerOut(vm: &mut VirtualMachine) {
             let c = b.get(0);
             let ar = &c.asRef::<Array>();
 
-            for (i, item) in ar.data.internal.iter().enumerate() {
-                print!("{}: {:?}, ", i, item)
-            }
-            println!()
+
+            let d = ar.data.internal.iter().map(|it| format!("{:?}", it)).collect::<Vec<_>>().join(", ");
+            println!("[{}]", d)
+        },
+        false,
+    );
+
+    namespace.makeNativeNoRat(
+        "print",
+        &[DataType::arr(Generic::Type(DataType::str()))],
+        |_a, b| {
+            let c = b.get(0);
+            let ar = &c.asRef::<Array>();
+
+            let d = ar.data.internal.iter().map(|it| format!("{:?}", it.getString())).collect::<Vec<_>>().join(", ");
+            println!("[{}]", d)
         },
         false,
     );
@@ -69,7 +81,7 @@ pub fn registerOut(vm: &mut VirtualMachine) {
         "print",
         &[DataType::Value],
         |_a, b| {
-            let c = b.get(0).asNum() as usize;
+            let c = b.get(0).asUnsigned();
 
             println!("{:?}", c)
         },

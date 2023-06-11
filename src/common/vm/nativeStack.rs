@@ -24,6 +24,7 @@ impl<const SIZE: usize> StackManager<SIZE> {
     }
 
     #[inline(always)]
+    #[allow(unused_assignments)]
     pub fn getRbpRsp() -> (usize, usize) {
         let mut rbp = 0;
         let mut rsp = 0;
@@ -77,6 +78,7 @@ pub fn testProc(a: &usize, b: &usize) {
     black_box(a);
 }
 
+#[allow(unused_assignments)]
 pub fn printRegisters() {
     let x = 0usize;
     let c = 1usize;

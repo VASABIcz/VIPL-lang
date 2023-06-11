@@ -125,7 +125,7 @@ impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JArrayParsingUnit {
         &self,
         parser: &mut JSONParser
     ) -> Result<JSON, ParserError<JsonToken>> {
-        parser.tokens.getAssert(ArrayBegin);
+        parser.tokens.getAssert(ArrayBegin)?;
         let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
         let res = parser.tokens.parseManyWithSeparatorUntil(

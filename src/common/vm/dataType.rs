@@ -31,18 +31,23 @@ pub enum DataType {
     Float,
     Bool,
     Char,
-    Object(ObjectMeta),
+    Reference(ObjectMeta),
     Function {
         args: Vec<DataType>,
         ret: Box<DataType>,
     },
     Void,
-    Value
+    Value,
+    Object
 }
 
 impl DataType {
+    pub fn isReference(&self) -> bool {
+        matches!(self, DataType::Reference(_))
+    }
+
     pub fn isObject(&self) -> bool {
-        matches!(self, DataType::Object(_))
+        matches!(self, DataType::Object)
     }
 
     pub fn toRawType(self) -> Result<RawDataType, CodeGenError> {
@@ -53,7 +58,7 @@ impl DataType {
             Char => RawDataType::Char,
             // FIXME this is stupid check if ref is null workaround
             // maybe introduce isnull opcode? idk
-            Object(_) => RawDataType::Int,
+            Reference(_) => RawDataType::Int,
             _ => Err(CodeGenError::ExpectedRawType)?
         })
     }
@@ -66,7 +71,7 @@ impl DataType {
 
     pub fn getRef(self) -> Result<ObjectMeta, CodeGenError> {
         match self {
-            Object(v) => Ok(v),
+            Reference(v) => Ok(v),
             _ => {
                 panic!();
                 Err(CodeGenError::ExpectedReference)
@@ -83,14 +88,14 @@ impl DataType {
 
     pub fn isString(&self) -> bool {
         match self {
-            Object(o) => return o.name.as_str() == "String",
+            Reference(o) => return o.name.as_str() == "String",
             _ => false,
         }
     }
 
     pub fn isArray(&self) -> bool {
         match self {
-            Object(o) => return o.name.as_str() == "Array",
+            Reference(o) => return o.name.as_str() == "Array",
             _ => false,
         }
     }
@@ -117,7 +122,7 @@ impl DataType {
 
     pub fn asArray(&self) -> Result<&ObjectMeta, CodeGenError> {
         match self {
-            Object(o) => {
+            Reference(o) => {
                 if o.name.as_str() == "Array" {
                     Ok(o)
                 } else {
@@ -137,21 +142,21 @@ impl DataType {
     }
 
     pub fn str() -> Self {
-        Object(ObjectMeta {
+        Reference(ObjectMeta {
             name: "String".to_string(),
             generics: Box::new([]),
         })
     }
 
     pub fn arr(inner: Generic) -> Self {
-        Object(ObjectMeta {
+        Reference(ObjectMeta {
             name: "Array".to_string(),
             generics: Box::new([inner]),
         })
     }
 
     pub fn obj(name: &'static str) -> Self {
-        Object(ObjectMeta {
+        Reference(ObjectMeta {
             name: name.to_string(),
             generics: Box::new([]),
         })
@@ -163,7 +168,7 @@ impl DataType {
             Float => "float".to_string(),
             Bool => "bool".to_string(),
             Value => "value".to_string(),
-            Object(x) => {
+            Reference(x) => {
                 if x.generics.len() == 0 {
                     return x.name.clone();
                 } else {
@@ -188,6 +193,7 @@ impl DataType {
                     .join(", "),
                 ret.toString()
             ),
+            Object => "object".to_string()
         }
     }
 

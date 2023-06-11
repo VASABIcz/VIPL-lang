@@ -1,0 +1,11 @@
+from test import assert
+
+struct Vec3 {
+    x: int
+    y: int
+    z: int
+}
+
+a = Vec3{} as object
+
+assert a is String

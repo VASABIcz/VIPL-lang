@@ -1,3 +1,4 @@
+#![allow(unused_assignments)]
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
@@ -18,6 +19,7 @@ use crate::ast::{Expression, Statement};
 use crate::lexer::{LexingUnit, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;
+
 
 // same as Vec but can be unsafely modified and accessed
 pub struct FastVec<T> {

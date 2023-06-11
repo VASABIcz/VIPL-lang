@@ -1,4 +1,4 @@
-use crate::errors::{LexerError};
+use crate::errors::{CodeGenError, LexerError};
 use crate::lexer::SourceProvider;
 use libc::isdigit;
 use std::collections::HashSet;
@@ -81,7 +81,7 @@ impl Regix {
             let mut buf = vec![];
 
             while !l.isPeek("]") {
-                Self::parseRaw(l, &mut buf, captures);
+                Self::parseRaw(l, &mut buf, captures)?;
             }
             l.assertConsume("]")?;
 
@@ -148,7 +148,7 @@ impl Regix {
         Ok(())
     }
 
-    pub fn parse(str: &str) -> Regix {
+    pub fn parse(str: &str) -> Result<Regix, LexerError> {
         let mut regixes = vec![];
         let mut groups = 0usize;
         let mut l = SourceProvider {
@@ -159,10 +159,10 @@ impl Regix {
         };
 
         while !l.isDone() {
-            Regix::parseRaw(&mut l, &mut regixes, &mut groups);
+            Regix::parseRaw(&mut l, &mut regixes, &mut groups)?;
         }
 
-        Regix::Group(regixes)
+        Ok(Regix::Group(regixes))
     }
 
     pub fn matchStr<'a>(&self, s: &'a str, matches: &mut Vec<Vec<&'a str>>) -> Option<usize> {

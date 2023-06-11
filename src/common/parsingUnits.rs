@@ -8,7 +8,7 @@ use crate::bytecodeGen::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexingUnits::TokenType;
-use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::lexingUnits::TokenType::{AddAs, As, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
@@ -858,11 +858,8 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
             returnType = Some(parser.parseDataType()?);
         }
 
-        let mut isOneLine = false;
-
         let body = if parser.tokens.isPeekType(Equals) {
             parser.tokens.getAssert(Equals)?;
-            isOneLine = true;
             Body::new(vec![Statement{ exp: ast::RawStatement::Return(parser.parseExpr()?), loc: vec![] }])
         } else {
             parser.parseBody()?
@@ -1057,11 +1054,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for GlobalParsingUnit {
         parser.tokens.getAssert(Global)?;
 
         let name = parser.tokens.getIdentifier()?;
-        let mut typeHint = None;
 
         if parser.tokens.isPeekType(Colon) {
             parser.tokens.getAssert(Colon)?;
-            typeHint = Some(parser.parseDataType()?);
         }
 
         parser.tokens.getAssert(TokenType::Equals)?;
@@ -1582,8 +1577,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
         let t = parser.parseDataType()?;
 
         Ok(RawExpression::TypeCast(Box::new(e), t))
-    }
-)
+        })
     }
     fn getPriority(&self) -> usize {
         todo!()
@@ -1595,7 +1589,31 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCastParsingUnit {
 }
 
 #[derive(Debug)]
-pub struct  FormatStringParsingUnit;
+pub struct TypeCheckParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCheckParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Behind
+    }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.isPrevExp() && parser.tokens.isPeekType(Is)
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
+            let e = parser.pop()?.asExpr()?;
+            parser.tokens.getAssert(Is)?;
+
+            let t = parser.parseDataType()?;
+
+            Ok(RawExpression::TypeCheck(Box::new(e), t))
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct FormatStringParsingUnit;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FormatStringParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -1627,6 +1645,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(OneArgFunctionParsintUnit),
         Box::new(ArrayLiteralParsingUnit),
         Box::new(TypeCastParsingUnit),
+        Box::new(TypeCheckParsingUnit),
         Box::new(NumericParsingUnit),
         Box::new(CharParsingUnit),
         Box::new(StringParsingUnit),

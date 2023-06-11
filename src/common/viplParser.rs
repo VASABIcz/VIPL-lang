@@ -242,13 +242,13 @@ pub fn parseDataType(
         }
         tokens.getAssert(TokenType::Less)?;
 
-        Ok(DataType::Object(ObjectMeta {
+        Ok(DataType::Reference(ObjectMeta {
             name: t,
             generics: generics.into_boxed_slice(),
         }))
     } else if tokens.isPeekType(TokenType::ORB) {
         tokens.getAssert(ORB)?;
-        let args = tokens.parseManyWithSeparatorUntil(|it| parseDataType(it), Some(Comma), CRB)?;
+        let args = tokens.parseManyWithSeparatorUntil(parseDataType, Some(Comma), CRB)?;
         let ret = if tokens.isPeekType(Colon) {
             tokens.getAssert(Colon)?;
             parseDataType(tokens)?
@@ -271,8 +271,9 @@ pub fn parseDataType(
             "int" => Ok(DataType::Int),
             "float" => Ok(DataType::Float),
             "value" => Ok(DataType::Value),
+            "object" => Ok(DataType::Object),
             c => {
-                Ok(DataType::Object(ObjectMeta {
+                Ok(DataType::Reference(ObjectMeta {
                     name: c.to_string(),
                     generics: Box::new([]),
                 }))

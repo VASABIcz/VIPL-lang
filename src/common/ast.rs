@@ -10,7 +10,7 @@ use crate::fastAccess::FastAccess;
 use crate::lexer::{Location, Token};
 use crate::lexingUnits::TokenType;
 use crate::utils::{genFunName, getRanges};
-use crate::vm::dataType::DataType::{Bool, Char, Object};
+use crate::vm::dataType::DataType::{Bool, Char, Reference};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::namespace::StructMeta;
@@ -62,7 +62,8 @@ pub enum RawExpression {
     FieldAccess(Box<Expression>, String),
     TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
     Null,
-    TypeCast(Box<Expression>, DataType)
+    TypeCast(Box<Expression>, DataType),
+    TypeCheck(Box<Expression>, DataType)
 }
 
 impl RawExpression {
