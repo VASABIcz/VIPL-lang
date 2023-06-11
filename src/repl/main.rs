@@ -92,10 +92,6 @@ extern "C" fn onExit(s: usize) {
 }
 
 fn main() -> Result<(), ()> {
-    unsafe {
-        // libc::signal(libc::SIGINT, onExit as usize);
-    }
-
     enableRawMode();
 
     let mut historyBuf = vec![];
@@ -152,6 +148,15 @@ fn main() -> Result<(), ()> {
         }
 
         nn.extendFunctionality(v);
+
+        unsafe {
+            // FIXME this is just a quick workaround
+            if let Err(e) = (*d).buildSymbolTable(nn.getImportHints()) {
+                nn.getImportHintsMut().clear();
+                e.printUWU(&userInput, None);
+                continue
+            }
+        }
 
         let (fMeta, f) = nn.getFunctionMut(0);
 

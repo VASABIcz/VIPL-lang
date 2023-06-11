@@ -132,7 +132,7 @@ pub extern "C" fn stringNew(
     }
     let st = unsafe { CStr::from_ptr(s) }.to_str().unwrap();
 
-    let all = vm.allocateString(st);
+    let all = vm.allocateString(st.to_string());
 
     let mut a = Value::from(all);
 

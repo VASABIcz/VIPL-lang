@@ -18,6 +18,7 @@ pub enum TokenType {
     Minus,
     Div,
     Mul,
+    Modulo,
 
     Fn,
     While,
@@ -133,7 +134,8 @@ impl Stringable for TokenType {
             TokenType::Repeat => "Repeat",
             TokenType::As => "As",
             TokenType::From => "From",
-            TokenType::FormatStringLiteral => "FormatStringLiteral"
+            TokenType::FormatStringLiteral => "FormatStringLiteral",
+            TokenType::Modulo => "%"
         }
     }
 }
@@ -159,19 +161,32 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
     ) -> Result<Option<Token<TokenType>>, LexerError> {
         let mut buf = String::new();
         let mut typ = TokenType::IntLiteral;
-        let encounteredDot = false;
+        let mut encounteredDot = false;
 
         let loc = lexer.getLocation();
 
         while lexer.isPeekChar(|c| c == '.' || c == '_' || c.is_numeric()) {
+            if lexer.isPeek(".") && !encounteredDot {
+                if !lexer.isPeekOffsetChar(|c| c.is_numeric(), 1) {
+                    return Ok(Some(Token {
+                        typ,
+                        str: buf,
+                        location: loc,
+                    }))
+                }
+
+                typ = TokenType::FloatLiteral;
+                encounteredDot = true;
+                buf.push(lexer.assertChar()?);
+                buf.push(lexer.assertChar()?);
+                continue
+            }
+
             let c = lexer.assertChar()?;
             if c == '.' && encounteredDot {
                 // fixme return result from lexer
                 // panic!("number cant have more than 1 dots")
                 return None.ok_or("number cant have more than one dot".into());
-            }
-            if c == '.' {
-                typ = TokenType::FloatLiteral
             }
             if c != '_' {
                 buf.push(c)
@@ -246,6 +261,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("?", TokenType::QuestionMark),
         // ops
         KeywordLexingUnit::new("+", TokenType::Plus),
+        KeywordLexingUnit::new("%", TokenType::Modulo),
         KeywordLexingUnit::new("-", TokenType::Minus),
         KeywordLexingUnit::new("*", TokenType::Mul),
         KeywordLexingUnit::new("/", TokenType::Div),

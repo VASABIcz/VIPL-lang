@@ -93,6 +93,7 @@ pub enum OpCode {
     Sub(RawDataType),
     Div(RawDataType),
     Mul(RawDataType),
+    Modulo(RawDataType),
 
     Equals(RawDataType),
     Greater(RawDataType),
@@ -205,8 +206,8 @@ impl VirtualMachine {
     }
 
     #[inline]
-    pub fn allocateString(&mut self, st: &str) -> Hay<ViplObject<Str>> {
-        let a1 = Str::new(String::from(st));
+    pub fn allocateString(&mut self, st: String) -> Hay<ViplObject<Str>> {
+        let a1 = Str::new(st);
         let aw = ViplObject::<Str>::str(a1);
 
         self.heap.allocate(aw)
@@ -264,7 +265,7 @@ impl VirtualMachine {
         for hint in hints {
             match hint {
                 ImportHints::Namespace(namespace, rename) => {
-                    let (n, nId) = self.findNamespaceParts(&namespace)?;
+                    let (n, nId) = self.findNamespaceParts(namespace)?;
 
                     let name = match rename {
                         None => n.name.clone(),
@@ -284,7 +285,7 @@ impl VirtualMachine {
                     }
                 }
                 ImportHints::Symbols(namespace, syms) => {
-                    let (n, nId) = self.findNamespaceParts(&namespace)?;
+                    let (n, nId) = self.findNamespaceParts(namespace)?;
 
                     for (symName, symRename) in syms {
                         if symName == "*" {
@@ -814,6 +815,10 @@ impl VirtualMachine {
                     self.setLocal(0, x);
                 }
                 GetLocalZero => self.push(*self.getLocal(0)),
+                Modulo(t) => {
+                    let a = self.pop();
+                    self.getMutTop().modulo(&a, &t.toType());
+                }
                 o => {
                     if DEBUG || TRACE {
                         panic!("unimplemented opcode {:?}", o)
@@ -890,7 +895,7 @@ impl VirtualMachine {
                     continue;
                 }
 
-                let mut symbols = mother2.getMut().buildSymbolTable(n.getImportHints()).map_err(|it| vec![it])?;
+                let mut symbols = mother2.getMut().buildSymbolTable(n.getImportHintsMut()).map_err(|it| vec![it])?;
 
                 for (fId, (fMeta, _)) in n.getFunctions().iter().enumerate() {
                     let argz = fMeta.getArgs();

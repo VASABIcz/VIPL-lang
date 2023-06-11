@@ -1,0 +1,7 @@
+from out import print
+
+x = "world"
+
+y = f"hello {x}"
+
+print y

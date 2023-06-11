@@ -17,7 +17,7 @@ pub fn registerStrings(vm: &mut VirtualMachine) {
             c += a;
             c += b;
 
-            vm.allocateString(&c).into()
+            vm.allocateString(c).into()
         },
         DataType::str(),
         false,
@@ -35,12 +35,24 @@ pub fn registerStrings(vm: &mut VirtualMachine) {
             let mut b: Vec<Value> = vec![];
 
             for item in res {
-                b.push(vm.allocateString(item).into());
+                b.push(vm.allocateString(item.to_string()).into());
             }
 
             vm.allocateArray(b).into()
         },
         DataType::arr(Generic::Type(DataType::str())),
+        false
+    );
+
+    n.makeNative(
+        "toString",
+        &[DataType::Int],
+        |vm, s| {
+            let i = s.getInt(0);
+
+            vm.allocateString(i.to_string()).into()
+        },
+        DataType::str(),
         false
     );
 

@@ -88,6 +88,7 @@ pub struct EnumMeta {
 }
 
 impl StructMeta {
+
     pub fn n(name: &str, fields: FastAcess<String, VariableMetadata>) -> Self {
         Self {
             name: name.to_string(),
@@ -297,6 +298,10 @@ impl Namespace {
         &self.importHints
     }
 
+    pub fn getImportHintsMut(&mut self) -> &mut Vec<ImportHints> {
+        &mut self.importHints
+    }
+
     pub fn getString(&self, id: usize) -> Value {
         Value::from(*self.strings.getFast(id).unwrap() as usize)
     }
@@ -304,7 +309,7 @@ impl Namespace {
     pub fn allocateOrGetString(&mut self, s: &str) -> usize {
         match self.strings.getSlowStr(s) {
             None => {
-                let al = self.vm.getMut().allocateString(s);
+                let al = self.vm.getMut().allocateString(s.to_string());
                 self.strings.insert(s.to_string(), al.inner).unwrap()
             }
             Some(v) => v.1,
@@ -542,31 +547,28 @@ impl Namespace {
 
     pub fn extendFunctionality(&mut self, src: Vec<ASTNode>) {
         for s in src {
-            match s {
-                ASTNode::Global(g) => {
-                    match g.exp {
-                        RawNode::FunctionDef(d) => {
-                            self.registerFunctionDef(d.into());
-                        }
-                        RawNode::StructDef(v) => {
-                            self.registerStruct(v.into());
-                        }
-                        RawNode::Import(nam, syms) => {
-                            self.importHints.push(ImportHints::Symbols(nam, syms))
-                        },
-                        RawNode::NamespaceImport(nam, ren) => {
-                            self.importHints.push(ImportHints::Namespace(nam, ren))
-                        },
-                        RawNode::GlobalVarDef(name, default) => {
-                            self.registerGlobal(GlobalMeta {
-                                name,
-                                default: default,
-                                typ: Void,
-                            });
-                        }
+            if let ASTNode::Global(g) = s {
+                match g.exp {
+                    RawNode::FunctionDef(d) => {
+                        self.registerFunctionDef(d.into());
+                    }
+                    RawNode::StructDef(v) => {
+                        self.registerStruct(v.into());
+                    }
+                    RawNode::Import(nam, syms) => {
+                        self.importHints.push(ImportHints::Symbols(nam, syms))
+                    },
+                    RawNode::NamespaceImport(nam, ren) => {
+                        self.importHints.push(ImportHints::Namespace(nam, ren))
+                    },
+                    RawNode::GlobalVarDef(name, default) => {
+                        self.registerGlobal(GlobalMeta {
+                            name,
+                            default,
+                            typ: Void,
+                        });
                     }
                 }
-                _ => {}
             }
         }
     }

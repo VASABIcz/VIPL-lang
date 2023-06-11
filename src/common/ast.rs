@@ -27,6 +27,7 @@ pub enum BinaryOp {
     Eq,
     And,
     Or,
+    Modulo
 }
 
 #[derive(Debug, Clone, PartialEq)]

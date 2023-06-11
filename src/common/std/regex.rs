@@ -106,7 +106,7 @@ pub fn registerRegex(vm: &mut VirtualMachine) {
             for item in buf {
                 let a = item
                     .iter()
-                    .map(|it| vm.allocateString(it).into())
+                    .map(|it| vm.allocateString(it.to_string()).into())
                     .collect::<Vec<Value>>();
                 result.push(vm.allocateArray(a).into())
             }

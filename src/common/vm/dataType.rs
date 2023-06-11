@@ -41,6 +41,10 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn isObject(&self) -> bool {
+        matches!(self, DataType::Object(_))
+    }
+
     pub fn toRawType(self) -> Result<RawDataType, CodeGenError> {
         Ok(match self {
             Int => RawDataType::Int,

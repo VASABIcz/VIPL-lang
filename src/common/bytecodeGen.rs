@@ -321,7 +321,8 @@ impl ExpressionCtx<'_> {
                     BinaryOp::Add => leftT,
                     BinaryOp::Sub => leftT,
                     BinaryOp::Mul => leftT,
-                    BinaryOp::Div => Float
+                    BinaryOp::Div => Float,
+                    BinaryOp::Modulo => leftT
                 };
 
                 Ok(t)
@@ -1075,8 +1076,19 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
         match &r.exp.exp {
             RawExpression::BinaryOperation { left, right, op } => {
                 let dat = r.transfer(left).toDataTypeNotVoid()?;
+                let dat1 = r.transfer(right).toDataTypeNotVoid()?;
+
+                if dat != dat1 {
+                    return Err(CodeGenError::TypeError(TypeError{
+                        expected: dat,
+                        actual: dat1,
+                        exp: Some(r.exp.clone()),
+                    }))
+                }
+
                 genExpression(r.transfer(left))?;
                 genExpression(r.transfer(right))?;
+
                 let t = match op {
                     BinaryOp::Add => OpCode::Add(dat.toRawType()?),
                     BinaryOp::Sub => OpCode::Sub(dat.toRawType()?),
@@ -1087,6 +1099,7 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     BinaryOp::Eq => OpCode::Equals(dat.toRawType()?),
                     BinaryOp::And => OpCode::And,
                     BinaryOp::Or => OpCode::Or,
+                    BinaryOp::Modulo => OpCode::Modulo(dat.toRawType()?)
                 };
                 r.push(t);
             }
@@ -1225,25 +1238,25 @@ fn genExpression(mut ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                         });
                     }
                     RawExpression::FieldAccess(v, name) => {
-                        let prevT = r.transfer(v).toDataTypeNotVoid()?;
+                        if let Ok(t) = r.transfer(prev).toDataType() {
+                            // TODO type checking
+                            if let Ok(v) = t.getFunction() {
+                                for arg in args {
+                                    r.transfer(arg).toDataTypeNotVoid()?;
+                                    genExpression(r.transfer(arg))?;
+                                }
 
-                        if prevT.isFunction() {
-                            let (argz, f) = prevT.getFunction()?;
+                                r.transfer(prev).genExpression()?;
+                                r.push(DynamicCall(!v.1.isVoid(), v.0.len()));
 
-                            for arg in args {
-                                r.transfer(arg).toDataTypeNotVoid()?;
-                                genExpression(r.transfer(arg))?;
+                                return Ok(())
                             }
-
-                            genExpression(r.transfer(prev))?;
-
-                            r.push(DynamicCall(!f.isVoid(), argz.len()));
-                            return Ok(());
                         }
+
+                        let prevT = r.transfer(v).toDataTypeNotVoid()?;
 
                         let mut argsB = vec![];
 
-                        println!("fType: {:?}", prevT);
                         argsB.push(prevT);
                         argsB.extend(
                             args.iter()

@@ -226,6 +226,19 @@ impl Value {
     }
 
     #[inline]
+    pub fn modulo(&mut self, value: &Value, typ: &DataType) {
+        match typ {
+            DataType::Int => {
+                *self.getRefNum() %= value.getNumRef();
+            }
+            DataType::Float => {
+                *self.getRefFlo() %= value.getFlo();
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
     pub fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
             DataType::Int => {
