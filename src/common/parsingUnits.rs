@@ -1129,7 +1129,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ForParsingUnit {
 
         parser.tokens.getAssert(In)?;
 
-        let res = parser.parseOne(Ahead)?.asExpr()?;
+        let res = parser.parseCondition()?;
 
         let body = parser.parseBody()?;
 

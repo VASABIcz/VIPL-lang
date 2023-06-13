@@ -24,6 +24,6 @@ n = [
     }
 ]
 
-for item in (n) {
+for item in n {
     out::print(item.x)
 }

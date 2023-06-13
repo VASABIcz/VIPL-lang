@@ -38,7 +38,7 @@ fn main() -> Result<(), ()> {
         }
     };
 
-    println!("AST: {:#?}", res);
+    // println!("AST: {:#?}", res);
 
     let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
     let id = vm.registerNamespace(n);
