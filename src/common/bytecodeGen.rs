@@ -228,11 +228,7 @@ impl ExpressionCtx<'_> {
         let t1 = self.toDataType()?;
 
         if t != t1 {
-            return Err(CodeGenError::TypeError(TypeError{
-                expected: t,
-                actual: t1,
-                exp: Some(self.exp.clone()),
-            }))
+            return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())))
         }
 
         Ok(())
@@ -298,26 +294,25 @@ impl ExpressionCtx<'_> {
         match &(self.exp).exp {
             RawExpression::BinaryOperation {
                 left,
-                right: _,
+                right,
                 op: o,
             } => {
                 let leftT = self.transfer(left).toDataType()?;
-                let rightT = self.transfer(left).toDataType()?;
+                let rightT = self.transfer(right).toDataType()?;
 
-                if leftT != rightT {
-                    return Err(CodeGenError::TypeError(TypeError{
-                        expected: leftT,
-                        actual: rightT,
-                        exp: Some(self.exp.clone()),
-                    }))
+                if !left.isNull() && !right.isNull() {
+                    println!("wtf {:?} {:?}", left, right);
+                    if leftT != rightT {
+                        return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())))
+                    }
                 }
 
                 let t = match o {
-                    BinaryOp::Gt => return Ok(Bool),
-                    BinaryOp::Less => return Ok(Bool),
-                    BinaryOp::Eq => return Ok(Bool),
-                    BinaryOp::And => return Ok(Bool),
-                    BinaryOp::Or => return Ok(Bool),
+                    BinaryOp::Gt => Bool,
+                    BinaryOp::Less => Bool,
+                    BinaryOp::Eq => Bool,
+                    BinaryOp::And => Bool,
+                    BinaryOp::Or => Bool,
                     BinaryOp::Add => leftT,
                     BinaryOp::Sub => leftT,
                     BinaryOp::Mul => leftT,
@@ -355,21 +350,18 @@ impl ExpressionCtx<'_> {
                                     .ok_or_else(||CodeGenError::ArrayWithoutGenericParameter)?;
                                 Ok(DataType::arr(e.clone()))
                             } else {
-                                Err(CodeGenError::TypeError(TypeError {
-                                    expected: DataType::Reference(ObjectMeta {
-                                        name: "Array".to_string(),
-                                        generics: Box::new([Any]),
-                                    }),
-                                    actual: Reference(o.clone()),
-                                    exp: Some(e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()),
-                                }))
+                                Err(CodeGenError::TypeError(TypeError::new(
+                                    DataType::arr(Any),
+                                    Reference(o.clone()),
+                                    e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()
+                                )))
                             }
                         }
-                        v => Err(CodeGenError::TypeError(TypeError {
-                            expected: DataType::arr(Any),
-                            actual: v.clone(),
-                            exp: Some(e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()),
-                        })),
+                        v => Err(CodeGenError::TypeError(TypeError::new(
+                            DataType::arr(Any),
+                            v.clone(),
+                            e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()
+                        ))),
                     }
                 } else {
                     let t = self
@@ -465,7 +457,7 @@ impl ExpressionCtx<'_> {
                 }
             },
             RawExpression::StructInit(name, _) => Ok(DataType::Reference(ObjectMeta {
-                name: name.clone(),
+                name: name.last().unwrap().clone(),
                 generics: Box::new([]),
             })),
             RawExpression::FieldAccess(prev, fieldName) => {
@@ -1087,14 +1079,6 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 let dat = r.transfer(left).toDataTypeNotVoid()?;
                 let dat1 = r.transfer(right).toDataTypeNotVoid()?;
 
-                if dat != dat1 {
-                    return Err(CodeGenError::TypeError(TypeError{
-                        expected: dat,
-                        actual: dat1,
-                        exp: Some(r.exp.clone()),
-                    }))
-                }
-
                 genExpression(r.transfer(left))?;
                 genExpression(r.transfer(right))?;
 
@@ -1282,7 +1266,7 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
             },
             RawExpression::StructInit(name, init) => {
                 // FIXME doesnt support other namespaces
-                let s = r.symbols.getStruct(name)?;
+                let s = r.symbols.getStruct(name.last().unwrap())?;
 
                 r.push(New {
                     namespaceID: s.nId as u32,

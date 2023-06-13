@@ -355,6 +355,7 @@ impl<T: Debug + Clone + PartialEq> VIPLError for ParserError<T> {
         match self {
             ParserError::InvalidToken(a) => a.actual.clone().map(|it| it.location),
             ParserError::InvalidCharLiteral(t) => Some(t.location),
+            ParserError::NoSuchParsingUnit(t) => t.token.clone().map(|it| it.location),
             _ => None
         }
     }
@@ -445,9 +446,28 @@ impl<T: PartialEq + Clone + Debug> From<LexerError> for LoadFileError<T> {
 
 #[derive(Debug, Clone)]
 pub struct TypeError {
-    pub expected: DataType,
-    pub actual: DataType,
-    pub exp: Option<Expression>,
+    expected: DataType,
+    actual: DataType,
+    exp: Option<Expression>,
+}
+
+impl TypeError {
+    pub fn new(expected: DataType, actual: DataType, exp: Expression) -> Self {
+        panic!();
+        Self {
+            expected: expected,
+            actual: actual,
+            exp: Some(exp),
+        }
+    }
+
+    pub fn newNone(expected: DataType, actual: DataType) -> Self {
+        Self {
+            expected: expected,
+            actual: actual,
+            exp: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Display)]

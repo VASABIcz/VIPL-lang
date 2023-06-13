@@ -11,13 +11,22 @@ use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parsingUnits::parsingUnits;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 
-pub const VALID_EXPRESSION_TOKENS: [TokenType; 5] = [
+pub const VALID_EXPRESSION_TOKENS: [TokenType; 7] = [
     StringLiteral,
     IntLiteral,
     LongLiteral,
     Identifier,
     CharLiteral,
+    True,
+    False
 ];
+
+#[derive(Debug, PartialEq)]
+pub enum ParsingContext {
+    TopLevel,
+    Body,
+    Condition
+}
 
 pub type VIPLParser<'a> = Parser<'a, TokenType, ASTNode, VIPLParsingState>;
 
@@ -29,57 +38,21 @@ impl TokenProvider<TokenType> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VIPLParsingState {
     pub symbols: HashMap<String, SymbolType>,
-    pub parsingStart: Vec<Option<usize>>
-}
-
-pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
-    let tokens = TokenProvider::new(toks);
-
-    let mut parser = Parser{
-        tokens,
-        units,
-        state: VIPLParsingState{ symbols: Default::default(), parsingStart: vec![] },
-        previousBuf: vec![]
-    };
-
-    while !parser.tokens.isDone() {
-        if parser.previousBuf.is_empty() {
-            if parser.parseType(Ahead)? {
-                continue;
-            }
-
-            if parser.parseType(Behind)? {
-                continue;
-            }
-
-            if parser.parseType(Around)? {
-                continue;
-            }
-        } else {
-            if parser.parseType(Behind)? {
-                continue;
-            }
-
-            if parser.parseType(Around)? {
-                continue;
-            }
-            if parser.parseType(Ahead)? {
-                continue;
-            }
-        }
-
-        return Err(ParserError::NoSuchParsingUnit(NoSuchParsingUnit {
-            typ: Ahead,
-            token: parser.tokens.peekOne().cloned(),
-        }));
-    }
-    Ok(parser.previousBuf)
+    pub parsingStart: Vec<Option<usize>>,
+    pub parsingContext: Vec<ParsingContext>
 }
 
 impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
+    pub fn isContext(&self, ctx: ParsingContext) -> bool {
+        match self.state.parsingContext.last() {
+            None => false,
+            Some(v) => v == &ctx
+        }
+    }
+
     pub fn pop(&mut self) -> Result<ASTNode, ParserError<TokenType>> {
         let r = self.previousBuf.pop().ok_or(ParserError::Unknown("fuuck".to_string().into()))?;
 
@@ -184,10 +157,16 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     pub fn isPrevAssignable(&self) -> bool {
         match self.previousBuf.last() {
             None => false,
-            Some(v) => match v {
-                ASTNode::Expr(e) => e.exp.isAssignable(),
-                _ => false
-            }
+            Some(ASTNode::Expr(e)) => e.exp.isAssignable(),
+            _ => false
+        }
+    }
+
+    pub fn isPrevConstructable(&self) -> bool {
+        match self.previousBuf.last() {
+            None => false,
+            Some(ASTNode::Expr(e)) => e.exp.isConstructable(),
+            _ => false
         }
     }
 
@@ -226,6 +205,57 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
         Ok(Body::new(statements))
     }
+
+    pub fn parseCondition(&mut self) -> Result<Expression, ParserError<TokenType>> {
+        self.state.parsingContext.push(ParsingContext::Condition);
+        let res = self.parseExpr();
+        self.state.parsingContext.pop();
+        res
+    }
+}
+
+pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
+    let tokens = TokenProvider::new(toks);
+
+    let mut parser = Parser{
+        tokens,
+        units,
+        state: Default::default(),
+        previousBuf: vec![]
+    };
+
+    while !parser.tokens.isDone() {
+        if parser.previousBuf.is_empty() {
+            if parser.parseType(Ahead)? {
+                continue;
+            }
+
+            if parser.parseType(Behind)? {
+                continue;
+            }
+
+            if parser.parseType(Around)? {
+                continue;
+            }
+        } else {
+            if parser.parseType(Behind)? {
+                continue;
+            }
+
+            if parser.parseType(Around)? {
+                continue;
+            }
+            if parser.parseType(Ahead)? {
+                continue;
+            }
+        }
+
+        return Err(ParserError::NoSuchParsingUnit(NoSuchParsingUnit {
+            typ: Ahead,
+            token: parser.tokens.peekOne().cloned(),
+        }));
+    }
+    Ok(parser.previousBuf)
 }
 
 pub fn parseDataType(

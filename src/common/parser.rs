@@ -10,7 +10,7 @@ use crate::ast::RawStatement::{Assignable, StatementExpression};
 use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, VariableCreate, VariableModd, WhileS};
 use crate::bytecodeGen::Body;
 
-use crate::errors::{CodeGenError, InvalidToken, NoSuchParsingUnit, ParserError, SymbolType};
+use crate::errors::{CodeGenError, InvalidToken, LexerError, NoSuchParsingUnit, ParserError, SymbolType};
 
 use crate::lexer::{SourceProvider, Token};
 use crate::lexingUnits::TokenType;
@@ -30,6 +30,28 @@ pub struct TokenProvider<T: PartialEq + Clone> {
 }
 
 impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
+    pub fn findOffsetIgnoring(&self, increment: T, decrement: T, startOffset: isize) -> Option<isize> {
+        let mut count = 0;
+        let mut index = (self.index as isize) + startOffset;
+
+        loop {
+            let peek = self.peekOffset(index)?;
+
+            if peek.typ == decrement {
+                count -= 1;
+            }
+            else if peek.typ == increment {
+                count += 1;
+            }
+
+            if count == 0 {
+                return Some(index - self.index as isize)
+            }
+
+            index += 1;
+        }
+    }
+
     pub fn new(tokens: Vec<Token<T>>) -> TokenProvider<T> {
         Self { tokens, index: 0 }
     }
@@ -60,15 +82,15 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
-    pub fn isPeekIndexRow(&self, index: usize, row: usize) -> bool {
-        match self.peekIndex(index) {
+    pub fn peekOffsetRow(&self, index: isize, row: usize) -> bool {
+        match self.peekOffset(index) {
             None => false,
             Some(v) => v.location.row == row,
         }
     }
 
-    pub fn peekIndex(&self, offset: usize) -> Option<&Token<T>> {
-        self.tokens.get(self.index + offset)
+    pub fn peekOffset(&self, offset: isize) -> Option<&Token<T>> {
+        self.tokens.get((self.index as isize + offset) as usize)
     }
 
     pub fn consume(&mut self) {
@@ -81,7 +103,7 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
 
     pub fn isPeekTypeMany(&self, types: &[T]) -> bool {
         for (index, typ) in types.into_iter().enumerate() {
-            if !self.isPeekIndexType(*typ, index) {
+            if !self.isPeekIndexType(*typ, index as isize) {
                 return false;
             }
         }
@@ -96,8 +118,8 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
-    pub fn isPeekOffsetOneOf(&self, types: &[T], offset: usize) -> bool {
-        match self.peekIndex(offset) {
+    pub fn isPeekOffsetOneOf(&self, types: &[T], offset: isize) -> bool {
+        match self.peekOffset(offset) {
             None => false,
             Some(v) => types.contains(&v.typ)
         }
@@ -182,8 +204,8 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
-    pub fn isPeekIndexType(&self, typ: T, offset: usize) -> bool {
-        let t = self.peekIndex(offset);
+    pub fn isPeekIndexType(&self, typ: T, offset: isize) -> bool {
+        let t = self.peekOffset(offset);
 
         match t {
             None => false,
@@ -195,8 +217,8 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         self.index >= self.tokens.len()
     }
 
-    pub fn isPeekIndexOf(&self, f: fn(T) -> bool, offset: usize) -> bool {
-        let t = self.peekIndex(offset);
+    pub fn isPeekIndexOf(&self, f: fn(T) -> bool, offset: isize) -> bool {
+        let t = self.peekOffset(offset);
 
         match t {
             None => false,

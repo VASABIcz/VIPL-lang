@@ -1,0 +1,11 @@
+from out import print
+from test import assert
+
+y = false
+
+if y {
+    assert false
+}
+else {
+    print "hello there"
+}

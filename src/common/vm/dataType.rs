@@ -126,18 +126,10 @@ impl DataType {
                 if o.name.as_str() == "Array" {
                     Ok(o)
                 } else {
-                    Err(CodeGenError::TypeError(TypeError {
-                        expected: DataType::arr(Generic::Any),
-                        actual: self.clone(),
-                        exp: None,
-                    }))
+                    Err(CodeGenError::TypeError(TypeError::newNone(DataType::arr(Generic::Any), self.clone())))
                 }
             }
-            v => Err(CodeGenError::TypeError(TypeError {
-                expected: DataType::arr(Generic::Any),
-                actual: self.clone(),
-                exp: None,
-            })),
+            v => Err(CodeGenError::TypeError(TypeError::newNone(DataType::arr(Generic::Any),self.clone())))
         }
     }
 

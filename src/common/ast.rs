@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::{Index, Range};
+use strum_macros::Display;
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
 use crate::fastAccess::FastAccess;
@@ -38,7 +39,7 @@ pub enum ArithmeticOp {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum RawExpression {
     BinaryOperation {
         left: Box<Expression>,
@@ -58,7 +59,7 @@ pub enum RawExpression {
     NamespaceAccess(Vec<String>),
     Lambda(Vec<VariableMetadata>, Body, Option<DataType>),
     Callable(Box<Expression>, Vec<Expression>),
-    StructInit(String, Vec<(String, Expression)>),
+    StructInit(Vec<String>, Vec<(String, Expression)>),
     FieldAccess(Box<Expression>, String),
     TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
     Null,
@@ -74,6 +75,10 @@ impl RawExpression {
     pub fn isAssignable(&self) -> bool {
         return matches!(self, RawExpression::Variable(..) | RawExpression::ArrayIndexing(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..));
     }
+
+    pub fn isConstructable(&self) -> bool {
+        return matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..));
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +93,7 @@ pub struct FunctionCall {
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum RawStatement {
     While(WhileS),
     If(If),
@@ -148,7 +153,7 @@ impl From<StructDef> for StructMeta {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum RawNode {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
@@ -201,12 +206,24 @@ pub struct Expression {
 }
 
 impl Expression {
+    pub fn isNull(&self) -> bool {
+        matches!(self.exp,  RawExpression::Null)
+    }
+
     pub fn getRanges(&self, row: usize) -> Vec<Range<usize>> {
         getRanges(&self.loc, row)
     }
 
     pub fn getRow(&self) -> usize {
         self.loc.first().unwrap().location.row
+    }
+
+    pub fn getIdentifier(self) -> Result<Vec<String>, ParserError<TokenType>> {
+        match self.exp {
+            RawExpression::Variable(a) => Ok(vec![a]),
+            RawExpression::NamespaceAccess(a) => Ok(a),
+            _ => Err(ParserError::Unknown("getIdentifier".into()))
+        }
     }
 }
 
@@ -237,6 +254,10 @@ pub enum ASTNode {
     Global(Node),
     Statement(Statement),
     Expr(Expression),
+}
+
+pub fn indent(count: usize) -> String {
+    String::from(' ').repeat(count)
 }
 
 impl ASTNode {

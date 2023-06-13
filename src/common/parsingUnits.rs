@@ -13,6 +13,7 @@ use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
+use crate::viplParser::ParsingContext::Condition;
 use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
@@ -140,7 +141,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for WhileParsingUnit {
         parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(While)?;
 
-        let op = parser.parseExpr()?;
+        let op = parser.parseCondition()?;
 
         let statements = parser.parseBody()?;
 
@@ -178,36 +179,40 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedStatement(|parser| {
-        let mut elseIfs = vec![];
-        let mut elseBody = None;
+            let mut elseIfs = vec![];
+            let mut elseBody = None;
 
-        parser.tokens.getAssert(If)?;
-
-        let condition = parser.parseExpr()?;
-
-        let body = parser.parseBody()?;
-
-        while parser.tokens.isPeekType(Else) && parser.tokens.isPeekIndexType(If, 1) {
-            parser.tokens.getAssert(Else)?;
             parser.tokens.getAssert(If)?;
 
-            let cond = parser.parseExpr()?;
-            let statements = parser.parseBody()?;
+            println!("me here");
+            let condition = parser.parseCondition()?;
+            println!("me still here {:?}", parser.tokens.peekOne());
 
-            elseIfs.push((cond, statements))
-        }
+            let body = parser.parseBody()?;
 
-        if parser.tokens.isPeekType(Else) {
-            parser.tokens.getAssert(Else)?;
-            elseBody = Some(parser.parseBody()?);
-        }
+            println!("after body {:?}", parser.tokens.peekOne());
 
-        Ok(RawStatement::If(ast::If {
-            condition,
-            body,
-            elseBody,
-            elseIfs,
-        }))
+            while parser.tokens.isPeekType(Else) && parser.tokens.isPeekIndexType(If, 1) {
+                parser.tokens.getAssert(Else)?;
+                parser.tokens.getAssert(If)?;
+
+                let cond = parser.parseCondition()?;
+                let statements = parser.parseBody()?;
+
+                elseIfs.push((cond, statements))
+            }
+
+            if parser.tokens.isPeekType(Else) {
+                parser.tokens.getAssert(Else)?;
+                elseBody = Some(parser.parseBody()?);
+            }
+
+            Ok(RawStatement::If(ast::If {
+                condition,
+                body,
+                elseBody,
+                elseIfs,
+            }))
     }
 )
     }
@@ -883,14 +888,31 @@ struct StructInitParsingUnit;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
-        Ahead
+        Behind
     }
 
     fn canParse(
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.tokens.isPeekType(Identifier) && parser.tokens.isPeekIndexType(OCB, 1)
+        if !parser.isPrevConstructable() || !parser.tokens.isPeekType(OCB) {
+            return false;
+        }
+
+        if parser.isContext(Condition) {
+            println!("hello");
+           let a = match parser.tokens.findOffsetIgnoring(OCB, CCB, 0) {
+               None => {
+                   return false
+               }
+               Some(v) => v
+           };
+
+            println!("peek is: {:?}", parser.tokens.peekOffset(a + 1));
+            return parser.tokens.isPeekIndexType(OCB, a+1);
+        }
+
+        true
     }
 
     fn parse(
@@ -898,26 +920,25 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let s2: &mut VIPLParser = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
+            let s2: &mut VIPLParser = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
-        let name = parser.tokens.getIdentifier()?;
+            let identifier = parser.prevPop()?.asExpr()?.getIdentifier()?;
 
+            parser.tokens.getAssert(OCB)?;
 
-        parser.tokens.getAssert(OCB)?;
+            let inits = parser.tokens.parseManyWithSeparatorUntil(
+                |it| {
+                    let fieldName = it.getIdentifier()?;
+                    it.getAssert(Colon)?;
+                    let initializer = s2.parseOne(Ahead)?.asExpr()?;
 
-        let inits = parser.tokens.parseManyWithSeparatorUntil(
-            |it| {
-                let fieldName = it.getIdentifier()?;
-                it.getAssert(Colon)?;
-                let initializer = s2.parseOne(Ahead)?.asExpr()?;
+                    Ok((fieldName, initializer))
+                },
+                None,
+                CCB,
+            )?;
 
-                Ok((fieldName, initializer))
-            },
-            None,
-            CCB,
-        )?;
-
-        Ok(RawExpression::StructInit(name, inits))
+            Ok(RawExpression::StructInit(identifier, inits))
     }
 )
     }
