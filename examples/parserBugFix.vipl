@@ -1,6 +1,13 @@
 from out import print
 from test import assert
 
+struct x {}
+
+
+if null == x { } {
+    assert false
+}
+
 y = false
 
 if y {

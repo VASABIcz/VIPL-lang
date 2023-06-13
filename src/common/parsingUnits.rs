@@ -184,13 +184,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
 
             parser.tokens.getAssert(If)?;
 
-            println!("me here");
             let condition = parser.parseCondition()?;
-            println!("me still here {:?}", parser.tokens.peekOne());
 
             let body = parser.parseBody()?;
-
-            println!("after body {:?}", parser.tokens.peekOne());
 
             while parser.tokens.isPeekType(Else) && parser.tokens.isPeekIndexType(If, 1) {
                 parser.tokens.getAssert(Else)?;
@@ -900,7 +896,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit
         }
 
         if parser.isContext(Condition) {
-            println!("hello");
            let a = match parser.tokens.findOffsetIgnoring(OCB, CCB, 0) {
                None => {
                    return false
@@ -908,8 +903,8 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructInitParsingUnit
                Some(v) => v
            };
 
-            println!("peek is: {:?}", parser.tokens.peekOffset(a + 1));
-            return parser.tokens.isPeekIndexType(OCB, a+1);
+            // FIXME not sure about the -1
+            return parser.tokens.isPeekIndexType(OCB, a-1);
         }
 
         true
