@@ -301,7 +301,6 @@ impl ExpressionCtx<'_> {
                 let rightT = self.transfer(right).toDataType()?;
 
                 if !left.isNull() && !right.isNull() {
-                    println!("wtf {:?} {:?}", left, right);
                     if leftT != rightT {
                         return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())))
                     }
