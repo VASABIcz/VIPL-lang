@@ -300,10 +300,8 @@ impl ExpressionCtx<'_> {
                 let leftT = self.transfer(left).toDataType()?;
                 let rightT = self.transfer(right).toDataType()?;
 
-                if !left.isNull() && !right.isNull() {
-                    if leftT != rightT {
-                        return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())))
-                    }
+                if !left.isNull() && !right.isNull() && leftT != rightT {
+                    return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())))
                 }
 
                 let t = match o {
@@ -317,7 +315,11 @@ impl ExpressionCtx<'_> {
                     BinaryOp::Mul => leftT,
                     BinaryOp::Div => Float,
                     BinaryOp::Modulo => leftT,
-                    BinaryOp::NotEq => Bool
+                    BinaryOp::NotEq => Bool,
+                    BinaryOp::ShiftLeft => Int,
+                    BinaryOp::ShiftRight => Int,
+                    BinaryOp::BitwiseOr => Int,
+                    BinaryOp::BitwiseAnd => Int
                 };
 
                 Ok(t)
@@ -502,6 +504,15 @@ impl ExpressionCtx<'_> {
                 else {
                     Ok(t)
                 }
+            }
+            RawExpression::BitwiseNot(v) => {
+                let t =  self.transfer(v).toDataType()?;
+
+                if !t.isInt() {
+                    return Err(CodeGenError::TypeError(TypeError::new(Int, t, *v.clone())))
+                }
+
+                Ok(Int)
             }
         }
     }
@@ -1110,7 +1121,11 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     BinaryOp::And => vec![OpCode::And],
                     BinaryOp::Or => vec![OpCode::Or],
                     BinaryOp::Modulo => vec![OpCode::Modulo(rawT)],
-                    BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not]
+                    BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not],
+                    BinaryOp::ShiftLeft => vec![OpCode::ShiftLeft],
+                    BinaryOp::ShiftRight => vec![OpCode::ShiftRight],
+                    BinaryOp::BitwiseOr => vec![OpCode::BitwiseOr],
+                    BinaryOp::BitwiseAnd => vec![OpCode::BitwiseAnd],
                 };
                 for t in ts {
                     r.push(t)
@@ -1402,6 +1417,11 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 else {
                     unreachable!("invalid type, type should be float or int")
                 }
+            }
+            RawExpression::BitwiseNot(e) => {
+                r.transfer(e).genExpression()?;
+
+                r.push(OpCode::BitwiseNot)
             }
         }
     }

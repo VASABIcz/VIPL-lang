@@ -105,6 +105,12 @@ pub enum OpCode {
     Greater(RawDataType),
     Less(RawDataType),
 
+    ShiftLeft,
+    ShiftRight,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseNot,
+
     Or,
     And,
     Not,
@@ -833,6 +839,25 @@ impl VirtualMachine {
                     let v = self.pop().toRefMeta();
 
                     self.push((v.structId == *structId && v.namespaceId == *namespaceId).into())
+                }
+                BitwiseAnd => {
+                    let a = self.pop();
+                    self.getMutTop().bitwiseAnd(a);
+                }
+                BitwiseOr => {
+                    let a = self.pop();
+                    self.getMutTop().bitwiseOr(a);
+                }
+                BitwiseNot => {
+                    self.getMutTop().bitwiseNot();
+                }
+                ShiftRight => {
+                    let a = self.pop();
+                    self.getMutTop().shiftRight(a);
+                }
+                ShiftLeft => {
+                    let a = self.pop();
+                    self.getMutTop().shiftLeft(a);
                 }
                 o => {
                     if DEBUG || TRACE {

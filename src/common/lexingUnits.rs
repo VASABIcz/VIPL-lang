@@ -72,6 +72,11 @@ pub enum TokenType {
     NewLine,
     QuestionMark,
     Repeat,
+    ShiftRight,
+    ShiftLeft,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseNot
 }
 
 pub trait Stringable {
@@ -139,7 +144,12 @@ impl Stringable for TokenType {
             TokenType::FormatStringLiteral => "FormatStringLiteral",
             TokenType::Modulo => "%",
             TokenType::Is => "Is",
-            TokenType::NotEq => "!="
+            TokenType::NotEq => "!=",
+            TokenType::ShiftRight => ">>",
+            TokenType::ShiftLeft => "<<",
+            TokenType::BitwiseAnd => "&",
+            TokenType::BitwiseOr => "|",
+            TokenType::BitwiseNot => "~"
         }
     }
 }
@@ -253,12 +263,17 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("/=", TokenType::DivAs),
         KeywordLexingUnit::new("==", TokenType::Eq),
         KeywordLexingUnit::new("!=", TokenType::NotEq),
+        KeywordLexingUnit::new(">>", TokenType::ShiftRight),
+        KeywordLexingUnit::new("<<", TokenType::ShiftLeft),
+        KeywordLexingUnit::new("::", TokenType::Namespace),
+        KeywordLexingUnit::new("->", TokenType::LambdaBegin),
+
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),
         KeywordLexingUnit::new("!", TokenType::Not),
-        KeywordLexingUnit::new("::", TokenType::Namespace),
         KeywordLexingUnit::new(".", TokenType::Dot),
-        KeywordLexingUnit::new("->", TokenType::LambdaBegin),
+        KeywordLexingUnit::new("&", TokenType::BitwiseAnd),
+        KeywordLexingUnit::new("|", TokenType::BitwiseOr),
         //
         KeywordLexingUnit::new(";", TokenType::Semicolon),
         KeywordLexingUnit::new("=", TokenType::Equals),
@@ -271,6 +286,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("-", TokenType::Minus),
         KeywordLexingUnit::new("*", TokenType::Mul),
         KeywordLexingUnit::new("/", TokenType::Div),
+        KeywordLexingUnit::new("~", TokenType::BitwiseNot),
         // brackets
         KeywordLexingUnit::new("(", TokenType::ORB),
         KeywordLexingUnit::new(")", TokenType::CRB),

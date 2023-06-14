@@ -453,6 +453,7 @@ pub struct TypeError {
 
 impl TypeError {
     pub fn new(expected: DataType, actual: DataType, exp: Expression) -> Self {
+        panic!("{:?} {:?}", expected, actual);
         Self {
             expected: expected,
             actual: actual,

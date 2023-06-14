@@ -29,7 +29,11 @@ pub enum BinaryOp {
     NotEq,
     And,
     Or,
-    Modulo
+    Modulo,
+    ShiftLeft,
+    ShiftRight,
+    BitwiseOr,
+    BitwiseAnd
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,7 +70,8 @@ pub enum RawExpression {
     Null,
     TypeCast(Box<Expression>, DataType),
     TypeCheck(Box<Expression>, DataType),
-    Negate(Box<Expression>)
+    Negate(Box<Expression>),
+    BitwiseNot(Box<Expression>)
 }
 
 impl RawExpression {

@@ -246,6 +246,26 @@ impl Value {
         }
     }
 
+    pub fn bitwiseAnd(&mut self, value: Value) {
+        *self.getRefNum() &= value.getNum();
+    }
+
+    pub fn bitwiseOr(&mut self, value: Value) {
+        *self.getRefNum() |= value.getNum();
+    }
+
+    pub fn bitwiseNot(&mut self) {
+        *self.getRefNum() = !self.getNum();
+    }
+
+    pub fn shiftLeft(&mut self, value: Value) {
+        *self.getRefNum() <<= value.getNum();
+    }
+
+    pub fn shiftRight(&mut self, value: Value) {
+        *self.getRefNum() >>= value.getNum();
+    }
+
     #[inline]
     pub fn mul(&mut self, value: &Value, typ: &DataType) {
         match typ {
