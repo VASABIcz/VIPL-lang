@@ -40,7 +40,6 @@ pub struct GlobalSymbol {
     pub gId: usize
 }
 
-
 #[derive(Debug, Default)]
 pub struct SymbolManager {
     pub functions: HashMap<String, FunctionSymbol>,
@@ -92,7 +91,30 @@ impl SymbolManager {
     }
 
     pub fn getFunctionArgs(&self, name: &str, args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
-        self.getFunction(&genFunName(name, args))
+        // FIXME this is pretty bad
+        for pattern in 0..(args.len() * args.len()) {
+            let mut buf = vec![];
+
+            for o in 0..args.len() {
+                if (pattern & (1 << o)) != 0 {
+                    buf.push(DataType::Value)
+                } else {
+                    buf.push(args[o].clone())
+                }
+            }
+
+            match self.getFunction(&genFunName(name, &buf)) {
+                Ok(v) => {
+                    return Ok(v)
+                }
+                Err(e) => {
+                    if pattern == args.len() * args.len() {
+                        return Err(e)
+                    }
+                }
+            }
+        }
+        unreachable!()
     }
 
     pub fn getFunction(&self, name: &str) -> Result<&FunctionSymbol, CodeGenError> {

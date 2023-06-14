@@ -1,0 +1,8 @@
+from test import assert
+
+fn a(x: value, y: value): int {
+    return x as int + y as int
+}
+
+
+assert a(10, 10) == 20

@@ -506,10 +506,13 @@ pub fn getRow(src: &str, row: usize) -> &str {
     }).unwrap().1
 }
 
-
 pub fn microsSinceEpoch() -> u128 {
     // should be instant but its good enough for now
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards").as_micros()
+}
+
+pub fn indent(count: usize) -> String {
+    String::from(' ').repeat(count)
 }

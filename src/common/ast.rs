@@ -263,10 +263,6 @@ pub enum ASTNode {
     Expr(Expression),
 }
 
-pub fn indent(count: usize) -> String {
-    String::from(' ').repeat(count)
-}
-
 impl ASTNode {
     pub fn getLocation(&self) -> &Vec<Token<TokenType>> {
         match self {
