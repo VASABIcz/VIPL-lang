@@ -1542,6 +1542,8 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NegateParsingUnit {
 }
 
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
+    let mut x = 0;
+
     vec![
         Box::new(AssignableParsingUnit),
         Box::new(StructInitParsingUnit),
@@ -1567,52 +1569,57 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Mul,
             typ: TokenType::Mul,
-            priority: 0,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Div,
             typ: TokenType::Div,
-            priority: 1,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Add,
             typ: TokenType::Plus,
-            priority: 2,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Sub,
             typ: TokenType::Minus,
-            priority: 3,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Eq,
             typ: TokenType::Eq,
-            priority: 4,
+            priority: {x += 1; x},
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: BinaryOp::NotEq,
+            typ: TokenType::NotEq,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Less,
             typ: TokenType::Less,
-            priority: 5,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Gt,
             typ: TokenType::Gt,
-            priority: 6,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::And,
             typ: TokenType::And,
-            priority: 7,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Or,
             typ: TokenType::Or,
-            priority: 8,
+            priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Modulo,
             typ: TokenType::Modulo,
-            priority: 9,
+            priority: {x += 1; x},
         }),
         Box::new(BracketsParsingUnit),
         Box::new(VariableParsingUnit),

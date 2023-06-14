@@ -316,7 +316,8 @@ impl ExpressionCtx<'_> {
                     BinaryOp::Sub => leftT,
                     BinaryOp::Mul => leftT,
                     BinaryOp::Div => Float,
-                    BinaryOp::Modulo => leftT
+                    BinaryOp::Modulo => leftT,
+                    BinaryOp::NotEq => Bool
                 };
 
                 Ok(t)
@@ -1096,19 +1097,24 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     return Ok(())
                 }
 
-                let t = match op {
-                    BinaryOp::Add => OpCode::Add(dat.toRawType()?),
-                    BinaryOp::Sub => OpCode::Sub(dat.toRawType()?),
-                    BinaryOp::Mul => OpCode::Mul(dat.toRawType()?),
-                    BinaryOp::Div => OpCode::Div(dat.toRawType()?),
-                    BinaryOp::Gt => OpCode::Greater(dat.toRawType()?),
-                    BinaryOp::Less => OpCode::Less(dat.toRawType()?),
-                    BinaryOp::Eq => OpCode::Equals(dat.toRawType()?),
-                    BinaryOp::And => OpCode::And,
-                    BinaryOp::Or => OpCode::Or,
-                    BinaryOp::Modulo => OpCode::Modulo(dat.toRawType()?)
+                let rawT = dat.toRawType()?;
+
+                let ts = match op {
+                    BinaryOp::Add => vec![OpCode::Add(rawT)],
+                    BinaryOp::Sub => vec![OpCode::Sub(rawT)],
+                    BinaryOp::Mul => vec![OpCode::Mul(rawT)],
+                    BinaryOp::Div => vec![OpCode::Div(rawT)],
+                    BinaryOp::Gt => vec![OpCode::Greater(rawT)],
+                    BinaryOp::Less => vec![OpCode::Less(rawT)],
+                    BinaryOp::Eq => vec![OpCode::Equals(rawT)],
+                    BinaryOp::And => vec![OpCode::And],
+                    BinaryOp::Or => vec![OpCode::Or],
+                    BinaryOp::Modulo => vec![OpCode::Modulo(rawT)],
+                    BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not]
                 };
-                r.push(t);
+                for t in ts {
+                    r.push(t)
+                }
             }
             RawExpression::IntLiteral(i) => r.push(PushInt(i.parse::<isize>().map_err(|_| LiteralParseError)?)),
             RawExpression::FloatLiteral(i) => r.push(OpCode::PushFloat(i.parse::<f64>().map_err(|_| LiteralParseError)?)),

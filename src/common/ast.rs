@@ -26,6 +26,7 @@ pub enum BinaryOp {
     Gt,
     Less,
     Eq,
+    NotEq,
     And,
     Or,
     Modulo

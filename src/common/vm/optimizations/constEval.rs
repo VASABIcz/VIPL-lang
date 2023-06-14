@@ -117,6 +117,10 @@ impl ConstValue {
                 ConstValue::F(v1) => *self = (*v == v1).into(),
                 _ => panic!(),
             },
+            ConstValue::B(v) => match other {
+                ConstValue::B(v1) => *self = (*v == v1).into(),
+                _ => panic!(),
+            }
             _ => panic!(),
         }
     }
