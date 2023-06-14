@@ -2,16 +2,24 @@ use crate::vm::heap::Allocation;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::vm::{ExternFn, VirtualMachine};
-use libc::{c_int, c_void, mprotect, PROT_EXEC, PROT_READ, PROT_WRITE};
 use std::alloc::{alloc, dealloc, Layout};
 use std::arch::asm;
 use std::fs;
 use std::mem::{forget, size_of, transmute};
 use std::ptr::{copy_nonoverlapping, null_mut};
 
+#[cfg(target_os = "windows")]
 pub fn allocateBinFunction(
     machineCode: &mut [u8],
 ) -> extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value {
+    todo!()
+}
+
+#[cfg(target_os = "linux")]
+pub fn allocateBinFunction(
+    machineCode: &mut [u8],
+) -> extern "C" fn(&mut VirtualMachine, &mut StackFrame) -> Value {
+    use libc;
     if machineCode.len() > 4096 {
         todo!()
     }
@@ -23,10 +31,10 @@ pub fn allocateBinFunction(
 
     // todo handle more pages
     unsafe {
-        mprotect(
-            ptr as *mut c_void,
+        libc::mprotect(
+            ptr as *mut libc::c_void,
             layout.size(),
-            PROT_READ | PROT_WRITE | PROT_EXEC,
+            libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
         )
     };
 

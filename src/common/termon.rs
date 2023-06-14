@@ -1,74 +1,14 @@
-use libc::{c_int, ICANON, termios};
 
-pub struct Termon {
-    inputBuf: String,
-    index: usize
-}
-
-impl Termon {
-    pub fn clear(&mut self) {
-        goLeftBy(self.index);
-        clearFromTo(0, self.inputBuf.len());
-        goLeftBy(self.inputBuf.len());
-
-        self.index = 0;
-        self.inputBuf.clear();
-    }
-
-    pub fn moveRight(&mut self) {
-        if self.index == self.inputBuf.len() {
-            return;
-        }
-
-        self.index += 1;
-    }
-
-    pub fn moveLeft(&mut self) {
-        if self.index == 0 {
-            return;
-        }
-
-        self.index -= 1;
-    }
-
-    pub fn insert(&mut self, c: char) {
-        if self.index == self.inputBuf.len() {
-            self.inputBuf.push(c);
-            self.index += 1;
-        }
-        else {
-            let mut save = self.inputBuf.clone();
-            save.insert(self.index, c);
-
-            let save1 = self.index;
-
-            self.clear();
-
-            putStr(&save);
-            self.inputBuf = save;
-
-            self.index = save1+1;
-            goLeftBy(self.inputBuf.len()-self.index);
-        }
-    }
-
-    pub fn write(&mut self, s: &str) {
-        for c in s.chars() {
-            self.insert(c);
-        }
-    }
-
-    pub fn delete(&mut self) {
-        todo!()
-    }
-
-    pub fn getBuf(&self) -> &str {
-        &self.inputBuf
-    }
-}
-
+#[cfg(target_os = "windows")]
 pub fn enableRawMode() {
-    let mut t = termios{
+    eprintln!("unimplemented enableRawMode")
+}
+
+#[cfg(target_os = "linux")]
+pub fn enableRawMode() {
+    use libc;
+
+    let mut t = libc::termios{
         c_iflag: 0,
         c_oflag: 0,
         c_cflag: 0,
@@ -83,7 +23,7 @@ pub fn enableRawMode() {
     unsafe { libc::tcgetattr(0, &mut t) };
 
     // disable ECHO and ICANON mode
-    t.c_lflag &= !(libc::ECHO|ICANON);
+    t.c_lflag &= !(libc::ECHO|libc::ICANON);
 
     unsafe { libc::tcsetattr(0, libc::TCSANOW, &mut t); }
 }
@@ -96,7 +36,7 @@ pub fn getChar() -> char {
 
 pub fn putChar(c: char) {
     unsafe {
-        libc::putchar(c as c_int);
+        libc::putchar(c as libc::c_int);
     }
 }
 

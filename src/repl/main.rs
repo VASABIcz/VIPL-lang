@@ -11,8 +11,6 @@ use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
-use libc::{c_int, ICANON, putchar, termios};
-
 use vipl::ast::{ASTNode, RawStatement, Statement};
 use vipl::bytecodeGen::{Body, ExpressionCtx, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};

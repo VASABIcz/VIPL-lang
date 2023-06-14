@@ -8,7 +8,6 @@ use crate::viplDbg;
 use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
-use libc::THOUSEP;
 use std::collections::HashMap;
 use std::fmt::Pointer;
 use std::mem::size_of;

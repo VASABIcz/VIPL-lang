@@ -9,7 +9,6 @@
 #![feature(allocator_api)]
 #![feature(new_uninit)]
 #![feature(pointer_byte_offsets)]
-#![feature(dir_entry_ext2)]
 #![feature(core_intrinsics)]
 #![feature(adt_const_params)]
 #![feature(generic_const_exprs)]
