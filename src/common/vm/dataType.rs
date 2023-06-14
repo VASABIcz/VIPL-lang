@@ -73,7 +73,6 @@ impl DataType {
         match self {
             Reference(v) => Ok(v),
             _ => {
-                panic!();
                 Err(CodeGenError::ExpectedReference)
             }
         }
@@ -114,6 +113,10 @@ impl DataType {
 
     pub fn isFloat(&self) -> bool {
         matches!(self, Float)
+    }
+
+    pub fn isNumeric(&self) -> bool {
+        matches!(self, Float | Int)
     }
 
     pub fn isFunction(&self) -> bool {

@@ -492,7 +492,16 @@ impl ExpressionCtx<'_> {
             RawExpression::TypeCast(_, t) => Ok(t.clone()),
             RawExpression::FormatStringLiteral(_) => todo!(),
             // FIXME
-            RawExpression::TypeCheck(_, _) => Ok(DataType::Bool)
+            RawExpression::TypeCheck(_, _) => Ok(DataType::Bool),
+            RawExpression::Negate(v) => {
+                let t = self.transfer(v).toDataType()?;
+                if !t.isNumeric() {
+                    Err(CodeGenError::TypeError(TypeError::new(DataType::Int, t, *v.clone())))
+                }
+                else {
+                    Ok(t)
+                }
+            }
         }
     }
 }
@@ -1369,6 +1378,23 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 }
                 else {
                     r.push(PushBool(&src == target))
+                }
+            }
+            RawExpression::Negate(e) => {
+                let t = r.transfer(e).toDataType()?;
+
+                if t.isFloat() {
+                    r.push(OpCode::PushFloat(0.0));
+                    r.transfer(e).genExpression()?;
+                    r.push(Sub(RawDataType::Float));
+                }
+                else if t.isInt() {
+                    r.push(OpCode::PushInt(0));
+                    r.transfer(e).genExpression()?;
+                    r.push(Sub(RawDataType::Int));
+                }
+                else {
+                    unreachable!("invalid type, type should be float or int")
                 }
             }
         }

@@ -54,6 +54,7 @@ pub enum TokenType {
     Comma,
 
     Eq,
+    NotEq,
     Gt,
     Less,
     Not,
@@ -137,7 +138,8 @@ impl Stringable for TokenType {
             TokenType::From => "From",
             TokenType::FormatStringLiteral => "FormatStringLiteral",
             TokenType::Modulo => "%",
-            TokenType::Is => "Is"
+            TokenType::Is => "Is",
+            TokenType::NotEq => "!="
         }
     }
 }
@@ -250,6 +252,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("*=", TokenType::MulAs),
         KeywordLexingUnit::new("/=", TokenType::DivAs),
         KeywordLexingUnit::new("==", TokenType::Eq),
+        KeywordLexingUnit::new("!=", TokenType::NotEq),
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),
         KeywordLexingUnit::new("!", TokenType::Not),

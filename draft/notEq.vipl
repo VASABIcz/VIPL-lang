@@ -1,0 +1,5 @@
+from test import assert
+
+if true != true {
+    assert false
+}

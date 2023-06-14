@@ -1,0 +1,7 @@
+from test import assert
+
+x = 5
+
+x = -x
+
+assert x == -5

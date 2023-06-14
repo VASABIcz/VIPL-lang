@@ -64,7 +64,8 @@ pub enum RawExpression {
     TernaryOperator(Box<Expression>, Box<Expression>, Box<Expression>),
     Null,
     TypeCast(Box<Expression>, DataType),
-    TypeCheck(Box<Expression>, DataType)
+    TypeCheck(Box<Expression>, DataType),
+    Negate(Box<Expression>)
 }
 
 impl RawExpression {
