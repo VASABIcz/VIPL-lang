@@ -285,6 +285,9 @@ impl Value {
 
     #[inline]
     pub fn div(&mut self, value: &Value, typ: &DataType) {
+        if value.getNum() == 0 {
+            panic!();
+        }
         match typ {
             Int => {
                 *self.getRefFlo() = *self.getRefNum() as f64 / value.getNumRef() as f64;

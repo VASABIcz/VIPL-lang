@@ -1,0 +1,13 @@
+from out import print
+
+fn a(): int {
+    if true {
+        return 1
+    }
+    else {
+        // return false
+    }
+    return 1
+}
+
+print a()

@@ -1,0 +1,16 @@
+from out import print
+
+fn grumpy(n: int): String {
+    if n % 2 == 0 {
+        return "UwU"
+    }
+    else {
+        return null
+    }
+}
+
+x = "OwO"
+
+x = grumpy(2)
+
+print x

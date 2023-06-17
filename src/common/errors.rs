@@ -540,7 +540,8 @@ pub enum CodeGenError {
     ExpectedLambda,
     ExpectedCallable,
     VeryBadState,
-    ExpectedRawType
+    ExpectedRawType,
+    InvalidReturns
 }
 
 #[derive(Debug, Clone)]

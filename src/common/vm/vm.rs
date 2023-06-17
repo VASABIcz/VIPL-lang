@@ -663,6 +663,7 @@ impl VirtualMachine {
                 }
                 Div(v) => {
                     let a = self.pop();
+                    println!("diving {:?} {:?}", a, self.getTop());
                     self.getMutTop().div(&a, &v.toType());
                 }
                 Mul(v) => {

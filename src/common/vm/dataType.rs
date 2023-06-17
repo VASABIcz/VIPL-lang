@@ -24,7 +24,7 @@ impl RawDataType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub enum DataType {
     Int,
@@ -140,6 +140,7 @@ impl DataType {
         Reference(ObjectMeta {
             name: "String".to_string(),
             generics: Box::new([]),
+            nullable: false,
         })
     }
 
@@ -147,6 +148,7 @@ impl DataType {
         Reference(ObjectMeta {
             name: "Array".to_string(),
             generics: Box::new([inner]),
+            nullable: false,
         })
     }
 
@@ -154,6 +156,7 @@ impl DataType {
         Reference(ObjectMeta {
             name: name.to_string(),
             generics: Box::new([]),
+            nullable: false,
         })
     }
 
@@ -165,16 +168,22 @@ impl DataType {
             Value => "value".to_string(),
             Reference(x) => {
                 if x.generics.len() == 0 {
-                    return x.name.clone();
+                    if x.nullable {
+                        return format!("{}?", x.name)
+                    }
+                    else {
+                        x.name.clone()
+                    }
                 } else {
                     format!(
-                        "{}<{}>",
+                        "{}<{}>{}",
                         x.name,
                         x.generics
                             .iter()
                             .map(|it| it.toString())
                             .collect::<Vec<_>>()
-                            .join(", ")
+                            .join(", "),
+                        if x.nullable { "?" } else { "" }
                     )
                 }
             }
@@ -201,7 +210,7 @@ impl DataType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub enum Generic {
     Any,
@@ -234,18 +243,36 @@ impl Generic {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct ObjectMeta {
     pub name: String,
     pub generics: Box<[Generic]>,
+    pub nullable: bool
 }
 
 impl ObjectMeta {
-    pub fn new(name: &'static str) -> Self {
+    pub fn new(name: &str, nullable: bool) -> Self {
         Self {
             name: name.to_string(),
             generics: Box::new([]),
+            nullable,
+        }
+    }
+
+    pub fn nullable(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            generics: Box::new([]),
+            nullable: true,
+        }
+    }
+
+    pub fn nunNull(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            generics: Box::new([]),
+            nullable: true,
         }
     }
 }

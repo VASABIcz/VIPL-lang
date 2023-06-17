@@ -91,6 +91,10 @@ impl SymbolManager {
     }
 
     pub fn getFunctionArgs(&self, name: &str, args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
+        if args.len() == 0 {
+            return self.getFunction(&genFunName(name, args))
+        }
+
         // FIXME this is pretty bad
         for pattern in 0..(args.len() * args.len()) {
             let mut buf = vec![];

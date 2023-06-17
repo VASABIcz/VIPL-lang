@@ -8,7 +8,7 @@ use crate::bytecodeGen::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexingUnits::TokenType;
-use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
@@ -376,6 +376,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
+            let prev = parser.pop()?.asExpr()?;
         parser.tokens.getAssert(OSB)?;
         let expr = parser.parseExpr()?;
         parser.tokens.getAssert(CSB)?;
@@ -383,7 +384,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
         Ok(RawExpression::ArrayIndexing(Box::new(
             ArrayAccess {
                 // FIXME
-                expr: parser.pop()?.asExpr()?,
+                expr: prev,
                 index: expr,
             },
         )))
@@ -692,6 +693,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
+            let prev = parser.pop()?.asExpr()?;
         let s2 = unsafe { &mut *(parser as *mut Parser<_, _, _>) };
 
         parser.tokens.getAssert(ORB)?;
@@ -717,7 +719,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CallableParsingUnit {
 
         // FIXME
         Ok(RawExpression::Callable(
-            Box::new(parser.pop()?.asExpr()?),
+            Box::new(prev),
             args,
         ))
     }
@@ -864,12 +866,12 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FieldAccessParsingUni
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
+            let prev = parser.pop()?.asExpr()?;
         parser.tokens.getAssert(Dot)?;
         let fieldName = parser.tokens.getIdentifier()?;
-
-        Ok(RawExpression::FieldAccess(
-            Box::new(parser.pop()?.asExpr()?),
-            fieldName,
+            Ok(RawExpression::FieldAccess(
+                Box::new(prev),
+                fieldName,
         ))
     }
 )
@@ -1519,6 +1521,29 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BitwiseNotParsingUnit
     }
 }
 
+#[derive(Debug)]
+pub struct NullAssertParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NullAssertParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Behind
+    }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.isPrevExp() && parser.tokens.isPeekType(NullAssert)
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
+            let prev = parser.prevPop()?.asExpr()?;
+
+            parser.tokens.getAssert(NullAssert)?;
+
+            Ok(RawExpression::NullAssert(Box::new(prev)))
+        })
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
     let mut x = 0;
 
@@ -1640,6 +1665,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(RepeatParsingUnit),
         Box::new(FormatStringParsingUnit),
         Box::new(NegateParsingUnit),
-        Box::new(BitwiseNotParsingUnit)
+        Box::new(BitwiseNotParsingUnit),
+        Box::new(NullAssertParsingUnit)
     ]
 }

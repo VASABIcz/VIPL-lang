@@ -1,6 +1,6 @@
 use core::slice::sort::quicksort;
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use libc::open;
 use std::error::Error;
@@ -26,7 +26,7 @@ use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I, PushBool, IsStruct, And};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I, PushBool, IsStruct, And, PushFloat};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
 const DEBUG: bool = false;
@@ -88,7 +88,7 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
 
 #[derive(Debug, Clone)]
 pub struct Body {
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 impl Body {
@@ -110,6 +110,140 @@ impl Body {
             genStatement(y)?;
         }
         ctx.symbols.exitScope();
+
+        Ok(())
+    }
+
+    pub fn coverageCheck(&self, mut ctx: SimpleCtx<SymbolicOpcode>, r: &mut HashSet<DataType>) -> Result<bool, CodeGenError> {
+        for s1 in &self.statements {
+            let s = &s1.exp;
+            match s {
+                RawStatement::If(a) => {
+                    let mut covered = a.body.coverageCheck(ctx.transfer(), r)?;
+
+                    if let Some(v) = &a.elseBody {
+                        covered &= v.coverageCheck(ctx.transfer(), r)?;
+                    }
+
+                    for (_, b) in &a.elseIfs {
+                        covered &= b.coverageCheck(ctx.transfer(), r)?;
+                    }
+
+                    if covered {
+                        return Ok(true)
+                    }
+                }
+                RawStatement::Return(e) => {
+                    let t = ctx.inflate(s1).makeExpressionCtx(e, None).toDataType()?;
+                    r.insert(t);
+
+                    return Ok(true)
+                }
+                RawStatement::Loop(b) => {
+                    b.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::StatementExpression(_) => {}
+                RawStatement::Assignable(a, b, c) => {
+                    if let RawExpression::Variable(v) = &a.exp {
+                        let mut ctx1 = ctx.inflate(s1);
+                        let t = ctx1.makeExpressionCtx(b, None).toDataTypeNotVoid()?;
+                        ctx1.registerVariable(v, t);
+                    }
+                }
+                RawStatement::ForLoop(name, e, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.enterScope();
+
+                    let d = ctx1.makeExpressionCtx(e, None).toDataTypeNotVoid()?.getArrayType()?;
+                    ctx1.registerVariable(name, d);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.exitScope()
+                }
+                RawStatement::Repeat(name, _, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.enterScope();
+
+                    ctx1.registerVariable(name, Int);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.exitScope()
+                }
+                RawStatement::While(w) => {
+                    w.body.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::Continue => {}
+                RawStatement::Break => {}
+            }
+        }
+
+        Ok(false)
+    }
+
+    pub fn returnType(&self, mut ctx: SimpleCtx<SymbolicOpcode>, r: &mut HashSet<DataType>) -> Result<(), CodeGenError> {
+        for s1 in &self.statements {
+            let s = &s1.exp;
+            match s {
+                RawStatement::While(w) => {
+                    w.body.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::If(a) => {
+                    a.body.returnType(ctx.transfer(), r)?;
+
+                    if let Some(v) = &a.elseBody {
+                        v.returnType(ctx.transfer(), r)?;
+                    }
+
+                    for (_, b) in &a.elseIfs {
+                        b.returnType(ctx.transfer(), r)?;
+                    }
+                }
+                RawStatement::Return(e) => {
+                    let t = ctx.inflate(s1).makeExpressionCtx(e, None).toDataType()?;
+                    r.insert(t);
+
+                    break;
+                }
+                RawStatement::Loop(b) => {
+                    b.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::StatementExpression(_) => {}
+                RawStatement::Assignable(a, b, c) => {
+                    if let RawExpression::Variable(v) = &a.exp {
+                        let mut ctx1 = ctx.inflate(s1);
+                        let t = ctx1.makeExpressionCtx(b, None).toDataTypeNotVoid()?;
+                        ctx1.registerVariable(v, t);
+                    }
+                }
+                RawStatement::ForLoop(name, e, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.enterScope();
+
+                    let d = ctx1.makeExpressionCtx(e, None).toDataTypeNotVoid()?.getArrayType()?;
+                    ctx1.registerVariable(name, d);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.exitScope()
+                }
+                RawStatement::Repeat(name, _, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+                    ctx1.enterScope();
+                    ctx1.registerVariable(name, Int);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.exitScope()
+                }
+                RawStatement::Continue => {}
+                RawStatement::Break => {}
+            }
+        }
 
         Ok(())
     }
@@ -165,6 +299,17 @@ impl<T> SimpleCtx<'_, T> {
     ) -> StatementCtx<'a, T> {
         StatementCtx {
             statement: &statement,
+            ops: self.ops,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labels: self.labels,
+            symbols: self.symbols,
+        }
+    }
+
+    pub fn transfer<'a>(&mut self) -> SimpleCtx<T> {
+        SimpleCtx {
             ops: self.ops,
             currentNamespace: self.currentNamespace,
             vm: self.vm,
@@ -465,10 +610,7 @@ impl<T> ExpressionCtx<'_, T> {
                     },
                 }
             },
-            RawExpression::StructInit(name, _) => Ok(DataType::Reference(ObjectMeta {
-                name: name.last().unwrap().clone(),
-                generics: Box::new([]),
-            })),
+            RawExpression::StructInit(name, _) => Ok(Reference(ObjectMeta::nunNull(name.last().unwrap()))),
             RawExpression::FieldAccess(prev, fieldName) => {
                 let e = self.transfer(prev).toDataType()?;
                 match e {
@@ -520,6 +662,20 @@ impl<T> ExpressionCtx<'_, T> {
                 }
 
                 Ok(Int)
+            }
+            RawExpression::NullAssert(v) => {
+                let t = self.transfer(v).toDataTypeNotVoid()?;
+
+                let mut r = t.getRef()?;
+
+                if !r.nullable {
+                    // TODO create prpoer error message
+                    panic!()
+                }
+
+                r.nullable = false;
+
+                Ok(Reference(r))
             }
         }
     }
@@ -599,6 +755,14 @@ impl StatementCtx<'_, SymbolicOpcode> {
         self.push(Add(RawDataType::Int));
         self.push(SetLocal { index: localId });
     }
+
+    pub fn enterScope(&mut self) {
+        self.symbols.enterScope();
+    }
+
+    pub fn exitScope(&mut self) {
+        self.symbols.exitScope();
+    }
 }
 
 impl<T> StatementCtx<'_, T> {
@@ -666,6 +830,29 @@ pub fn genFunctionDef(
     let mut errors = vec![];
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
+        let mut s = HashSet::new();
+
+        let a = match body.coverageCheck(ctx.transfer(), &mut s) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(vec![e])
+            }
+        };
+
+        if s.len() > 1 {
+            return Err(vec![CodeGenError::InvalidReturns])
+        }
+
+        if s.is_empty() && !fun.returns() {
+
+        }
+        else {
+            let tt = s.iter().next().unwrap();
+            if *tt != fun.returnType {
+                return Err(vec![CodeGenError::TypeError(TypeError::newNone(tt.clone(), tt.clone()))])
+            }
+        }
+
         for statement in &body.statements {
             if DEBUG {
                 println!("gening {:?}", statement)
@@ -1328,6 +1515,14 @@ fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError>
                 r.transfer(e).genExpression()?;
 
                 r.push(OpCode::BitwiseNot)
+            }
+            RawExpression::NullAssert(e) => {
+                r.transfer(e).genExpression()?;
+
+                r.push(Dup);
+                r.push(PushInt(0));
+                r.push(Div(RawDataType::Int));
+                r.push(Pop);
             }
         }
     }

@@ -195,6 +195,16 @@ impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
         }
     }
 
+    pub fn ifPeekGet(&mut self, typ: T) -> Option<Token<T>> {
+        if self.isPeekType(typ) {
+            Some(self.getAssert(typ).unwrap().clone())
+        }
+        else {
+            None
+        }
+
+    }
+
     pub fn isPeekTypeOf(&self, f: fn(T) -> bool) -> bool {
         let t = self.peekOne();
 

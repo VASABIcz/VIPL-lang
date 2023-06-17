@@ -10,4 +10,3 @@ pub mod nativeObjects;
 pub mod nativeStack;
 pub mod optimizations;
 pub mod variableMetadata;
-pub mod instructions;

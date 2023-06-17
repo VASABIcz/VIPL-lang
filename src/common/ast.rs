@@ -72,7 +72,8 @@ pub enum RawExpression {
     TypeCast(Box<Expression>, DataType),
     TypeCheck(Box<Expression>, DataType),
     Negate(Box<Expression>),
-    BitwiseNot(Box<Expression>)
+    BitwiseNot(Box<Expression>),
+    NullAssert(Box<Expression>)
 }
 
 impl RawExpression {

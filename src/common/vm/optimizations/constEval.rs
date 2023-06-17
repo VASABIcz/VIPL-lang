@@ -219,7 +219,14 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                 None => finaly.push(op),
                 Some(_) => {}
             },
-            OpCode::Dup if !constStack.is_empty() => match constStack.len() {
+            OpCode::Dup => match constStack.pop() {
+                None => finaly.push(op),
+                Some(v) => {
+                    constStack.push(v);
+                    constStack.push(v);
+                },
+            }
+            OpCode::Swap if !constStack.is_empty() => match constStack.len() {
                 2.. => {
                     let a = constStack.pop().unwrap();
                     let b = constStack.pop().unwrap();
@@ -233,10 +240,6 @@ pub fn constEvaluation(ops: Vec<OpCode>) -> Vec<OpCode> {
                     finaly.push(op);
                 }
                 _ => unreachable!(),
-            },
-            OpCode::Swap => match constStack.pop() {
-                None => finaly.push(op),
-                Some(v) => todo!(),
             },
             OpCode::SetLocal { .. } => match constStack.pop() {
                 Some(v) => {

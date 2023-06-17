@@ -272,9 +272,12 @@ pub fn parseDataType(
         }
         tokens.getAssert(TokenType::Less)?;
 
+        let nullable = tokens.ifPeekGet(QuestionMark).is_some();
+
         Ok(DataType::Reference(ObjectMeta {
             name: t,
             generics: generics.into_boxed_slice(),
+            nullable,
         }))
     } else if tokens.isPeekType(TokenType::ORB) {
         tokens.getAssert(ORB)?;
@@ -303,9 +306,12 @@ pub fn parseDataType(
             "value" => Ok(DataType::Value),
             "object" => Ok(DataType::Object),
             c => {
+                let nullable = tokens.ifPeekGet(QuestionMark).is_some();
+
                 Ok(DataType::Reference(ObjectMeta {
                     name: c.to_string(),
                     generics: Box::new([]),
+                    nullable,
                 }))
             }
         }
