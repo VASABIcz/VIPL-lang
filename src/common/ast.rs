@@ -45,7 +45,7 @@ pub enum ArithmeticOp {
     Div,
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum RawExpression {
     BinaryOperation {
         left: Box<Expression>,
@@ -101,7 +101,7 @@ pub struct FunctionCall {
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum RawStatement {
     While(WhileS),
     If(If),
@@ -115,7 +115,7 @@ pub enum RawStatement {
     Repeat(String, usize, Body),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VariableModd {
     pub varName: String,
     pub modType: ModType,
@@ -130,7 +130,7 @@ pub enum ModType {
     Mul,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Return {
     pub exp: Expression,
 }
@@ -161,7 +161,7 @@ impl From<StructDef> for StructMeta {
     }
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum RawNode {
     FunctionDef(FunctionDef),
     StructDef(StructDef),
@@ -200,7 +200,7 @@ pub struct WhileS {
     pub body: Body,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VariableCreate {
     pub name: String,
     pub init: Option<Expression>,
@@ -301,37 +301,29 @@ impl ASTNode {
             ASTNode::Expr(e) => Ok(e),
             _ => {
                 Err(ParserError::InvalidOperation(InvalidOperation {
-                    operation: self.clone(),
+                    operation: self,
                     expected: "Expression".to_string(),
                 }))
             },
         }
     }
 
-    pub fn asExprRef(&self) -> Result<&Expression, ParserError<TokenType>> {
-        match self {
-            ASTNode::Expr(e) => Ok(e),
-            _ => Err(ParserError::InvalidOperation(InvalidOperation {
-                operation: self.clone(),
-                expected: "Expression".to_string(),
-            })),
-        }
-    }
-
     pub fn asStatement(self) -> Result<Statement, ParserError<TokenType>> {
-        let clone = self.clone();
         match self {
             ASTNode::Statement(s) => Ok(s),
             ASTNode::Expr(e) => match e.exp {
                 RawExpression::NamespaceAccess(f) => todo!(),
-                RawExpression::Callable(_, _) => Ok(Statement{ exp: StatementExpression(e.clone()), loc: e.loc.clone() }),
+                RawExpression::Callable(_, _) => {
+                    let loc = e.loc.clone();
+                    Ok(Statement{ exp: StatementExpression(e), loc })
+                },
                 _ => Err(ParserError::InvalidOperation(InvalidOperation {
-                    operation: clone,
+                    operation: ASTNode::Expr(e),
                     expected: String::from("Statement"),
                 })),
             },
             _ => Err(ParserError::InvalidOperation(InvalidOperation {
-                operation: clone,
+                operation: self,
                 expected: String::from("Statement"),
             })),
         }
