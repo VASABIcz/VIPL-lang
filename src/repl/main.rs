@@ -97,7 +97,9 @@ fn handleExpression(ctx: &mut StatementCtx<SymbolicOpcode>, t: DataType) {
         DataType::Function { .. } => ctx.push(Pop),
         DataType::Void => {}
         DataType::Value => ctx.push(Pop),
-        DataType::Object => todo!()
+        // FIXME handle these cases
+        DataType::Object => {},
+        DataType::Null => {}
     }
 }
 
