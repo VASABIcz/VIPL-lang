@@ -63,6 +63,7 @@ impl DataType {
             Char => RawDataType::Char,
             // FIXME this is stupid check if ref is null workaround
             // maybe introduce isnull opcode? idk
+            Reference(_) => RawDataType::Int,
             Null => RawDataType::Int,
             _ => Err(CodeGenError::ExpectedRawType)?
         })
