@@ -26,7 +26,7 @@ use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I, PushBool, IsStruct};
+use crate::vm::vm::OpCode::{Add, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, GetChar, GetField, GetLocal, Greater, Jmp, LCall, Less, Mul, New, Not, Pop, PushChar, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StrNew, StringLength, Sub, Swap, I2F, F2I, PushBool, IsStruct, And};
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 
 const DEBUG: bool = false;
@@ -285,6 +285,16 @@ impl ExpressionCtx<'_> {
 
         if t.isVoid() {
             return Err(UnexpectedVoid(ASTNode::Expr(self.exp.clone())));
+        }
+
+        Ok(t)
+    }
+
+    pub fn toDataTypeAssert(&mut self, t1: DataType) -> Result<DataType, CodeGenError> {
+        let t = self.toDataType()?;
+
+        if t != t1 {
+            return Err(CodeGenError::TypeError(TypeError::new(t1, t, self.exp.clone())));
         }
 
         Ok(t)
@@ -1095,12 +1105,44 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
 
     unsafe {
         match &r.exp.exp {
+            RawExpression::BinaryOperation { left, right, op: BinaryOp::Or } => {
+                r.transfer(right).assertType(Bool)?;
+                r.transfer(left).assertType(Bool)?;
+
+                let endLabel = r.nextLabel();
+
+                r.transfer(left).genExpression()?;
+
+                r.push(Dup);
+                r.opJmp(endLabel, True);
+                r.transfer(right).genExpression()?;
+                r.push(OpCode::Or);
+
+                r.makeLabel(endLabel);
+            }
+
+            RawExpression::BinaryOperation { left, right, op: BinaryOp::And } => {
+                r.transfer(right).assertType(Bool)?;
+                r.transfer(left).assertType(Bool)?;
+
+                let endLabel = r.nextLabel();
+
+                r.transfer(left).genExpression()?;
+
+                r.push(Dup);
+                r.opJmp(endLabel, False);
+                r.transfer(right).genExpression()?;
+                r.push(And);
+
+                r.makeLabel(endLabel);
+            }
+
             RawExpression::BinaryOperation { left, right, op } => {
                 let dat = r.transfer(left).toDataTypeNotVoid()?;
                 let dat1 = r.transfer(right).toDataTypeNotVoid()?;
 
-                genExpression(r.transfer(left))?;
-                genExpression(r.transfer(right))?;
+                r.transfer(left).genExpression()?;
+                r.transfer(right).genExpression()?;
 
                 if dat.isString() {
                     let f = r.findFunction("concat", &[DataType::str(), DataType::str()])?;
@@ -1175,7 +1217,7 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 r.push(ArrayNew);
                 for (ind, exp) in i.iter().enumerate() {
                     r.push(Dup);
-                    genExpression(r.transfer(exp))?;
+                    r.transfer(exp).genExpression()?;
                     r.push(PushInt(ind as isize));
                     r.push(ArrayStore);
                 }
@@ -1184,8 +1226,8 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                 let d = r.transfer(&i.expr).toDataTypeNotVoid()?;
 
                 if d.isString() {
-                    genExpression(r.transfer(&i.expr))?;
-                    genExpression(r.transfer(&i.index))?;
+                    r.transfer(&i.expr).genExpression()?;
+                    r.transfer(&i.index).genExpression()?;
                     r.push(GetChar);
                     return Ok(())
                 }

@@ -108,7 +108,7 @@ impl SymbolManager {
                     return Ok(v)
                 }
                 Err(e) => {
-                    if pattern == args.len() * args.len() {
+                    if pattern == (args.len() * args.len())-1 {
                         return Err(e)
                     }
                 }

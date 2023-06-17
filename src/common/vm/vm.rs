@@ -45,8 +45,8 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = false;
-const TRACE: bool = false;
+const DEBUG: bool = true;
+const TRACE: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -605,7 +605,7 @@ impl VirtualMachine {
                     LCall { namespace, id } => {
                         println!("evaluating {:?} {}", op, self.getNamespace(*namespace as usize).getFunction(*id as usize).0.genName());
                     }
-                    _ => println!("evaluating {:?}", op),
+                    _ => println!("evaluating {:?} {}", op, self.getFrame().programCounter),
                 }
             }
 

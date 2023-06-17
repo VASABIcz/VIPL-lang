@@ -1,0 +1,15 @@
+from test import assert
+
+fn retB(b: bool): bool {
+    assert false
+
+    return b
+}
+
+if false && retB(false) {
+    assert false
+}
+
+if true || retB(false) {
+    assert true
+}

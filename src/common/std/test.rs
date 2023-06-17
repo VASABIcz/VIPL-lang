@@ -9,9 +9,9 @@ pub fn registerTest(vm: &mut VirtualMachine) {
         "assert",
         &[DataType::Bool],
         |_, s| {
-            let a = s.get(0).asBool();
+            let condition = s.get(0).asBool();
 
-            assert!(a)
+            assert!(condition)
         },
         false,
     );
