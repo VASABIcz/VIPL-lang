@@ -33,7 +33,8 @@ pub enum BinaryOp {
     ShiftLeft,
     ShiftRight,
     BitwiseOr,
-    BitwiseAnd
+    BitwiseAnd,
+    Xor
 }
 
 #[derive(Debug, Clone, PartialEq)]

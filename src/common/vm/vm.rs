@@ -110,6 +110,7 @@ pub enum OpCode {
     BitwiseAnd,
     BitwiseOr,
     BitwiseNot,
+    Xor,
 
     Or,
     And,
@@ -847,6 +848,10 @@ impl VirtualMachine {
                 BitwiseOr => {
                     let a = self.pop();
                     self.getMutTop().bitwiseOr(a);
+                }
+                Xor => {
+                    let a = self.pop();
+                    self.getMutTop().bitwiseXor(a);
                 }
                 BitwiseNot => {
                     self.getMutTop().bitwiseNot();

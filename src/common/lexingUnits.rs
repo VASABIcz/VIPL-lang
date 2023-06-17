@@ -76,7 +76,8 @@ pub enum TokenType {
     ShiftLeft,
     BitwiseAnd,
     BitwiseOr,
-    BitwiseNot
+    BitwiseNot,
+    Xor
 }
 
 pub trait Stringable {
@@ -149,7 +150,8 @@ impl Stringable for TokenType {
             TokenType::ShiftLeft => "<<",
             TokenType::BitwiseAnd => "&",
             TokenType::BitwiseOr => "|",
-            TokenType::BitwiseNot => "~"
+            TokenType::BitwiseNot => "~",
+            TokenType::Xor => "^"
         }
     }
 }
@@ -274,6 +276,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new(".", TokenType::Dot),
         KeywordLexingUnit::new("&", TokenType::BitwiseAnd),
         KeywordLexingUnit::new("|", TokenType::BitwiseOr),
+        KeywordLexingUnit::new("^", TokenType::Xor),
         //
         KeywordLexingUnit::new(";", TokenType::Semicolon),
         KeywordLexingUnit::new("=", TokenType::Equals),

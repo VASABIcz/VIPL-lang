@@ -258,6 +258,10 @@ impl Value {
         *self.getRefNum() = !self.getNum();
     }
 
+    pub fn bitwiseXor(&mut self, value: Value) {
+        *self.getRefNum() ^= value.getNum();
+    }
+
     pub fn shiftLeft(&mut self, value: Value) {
         *self.getRefNum() <<= value.getNum();
     }

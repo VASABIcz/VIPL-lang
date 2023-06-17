@@ -329,7 +329,8 @@ impl ExpressionCtx<'_> {
                     BinaryOp::ShiftLeft => Int,
                     BinaryOp::ShiftRight => Int,
                     BinaryOp::BitwiseOr => Int,
-                    BinaryOp::BitwiseAnd => Int
+                    BinaryOp::BitwiseAnd => Int,
+                    BinaryOp::Xor => Int
                 };
 
                 Ok(t)
@@ -1168,6 +1169,7 @@ fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
                     BinaryOp::ShiftRight => vec![OpCode::ShiftRight],
                     BinaryOp::BitwiseOr => vec![OpCode::BitwiseOr],
                     BinaryOp::BitwiseAnd => vec![OpCode::BitwiseAnd],
+                    BinaryOp::Xor => vec![OpCode::Xor]
                 };
                 for t in ts {
                     r.push(t)

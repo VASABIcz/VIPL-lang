@@ -1606,6 +1606,11 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
             priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
+            op: BinaryOp::Xor,
+            typ: TokenType::Xor,
+            priority: {x += 1; x},
+        }),
+        Box::new(ArithmeticParsingUnit {
             op: BinaryOp::BitwiseOr,
             typ: TokenType::BitwiseOr,
             priority: {x += 1; x},
