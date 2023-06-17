@@ -38,12 +38,17 @@ pub enum DataType {
     },
     Void,
     Value,
-    Object
+    Object,
+    Null
 }
 
 impl DataType {
     pub fn isReference(&self) -> bool {
         matches!(self, DataType::Reference(_))
+    }
+
+    pub fn isNullable(&self) -> bool {
+        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: true}))
     }
 
     pub fn isObject(&self) -> bool {
@@ -109,6 +114,10 @@ impl DataType {
 
     pub fn isInt(&self) -> bool {
         matches!(self, Int)
+    }
+
+    pub fn isNull(&self) -> bool {
+        matches!(self, Null)
     }
 
     pub fn isFloat(&self) -> bool {
@@ -197,7 +206,8 @@ impl DataType {
                     .join(", "),
                 ret.toString()
             ),
-            Object => "object".to_string()
+            Object => "object".to_string(),
+            Null => "null".to_string()
         }
     }
 

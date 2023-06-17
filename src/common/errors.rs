@@ -50,7 +50,12 @@ impl VIPLError for CodeGenError {
             CodeGenError::TypeError(a1) => {
                 let mut buf = String::new();
 
-                let loc = a1.exp.clone().unwrap().loc;
+                let loc = match a1.exp.clone() {
+                    None => {
+                        return None
+                    }
+                    Some(v) => v.loc
+                };
 
                 let locations = loc.iter().map(|it| it.location).collect::<Vec<_>>();
                 let row = locations.first().unwrap().row;
@@ -120,7 +125,14 @@ impl VIPLError for CodeGenError {
     fn getBody(&self, src: &str) -> Option<String> {
         Some(match self {
             CodeGenError::TypeError(a1) => {
-                errorBody(src, &[(&a1.exp.clone().unwrap(), Some(&format!("this expression is of type {}", a1.actual.toString())))])
+                let a = a1.exp.clone().map(|it| errorBody(src, &[(&it, Some(&format!("this expression is of type {}", a1.actual.toString())))]));
+
+                match a {
+                    None => {
+                        return None
+                    }
+                    Some(v) => v
+                }
             },
             CodeGenError::SymbolNotFound(b) => format!("symbol \"{}\" of type {} not found", b.name, b.typ),
             CodeGenError::UnexpectedVoid(v) => {
@@ -461,6 +473,7 @@ impl TypeError {
     }
 
     pub fn newNone(expected: DataType, actual: DataType) -> Self {
+        panic!();
         Self {
             expected: expected,
             actual: actual,

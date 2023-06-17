@@ -40,7 +40,7 @@ pub struct GlobalSymbol {
     pub gId: usize
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SymbolManager {
     pub functions: HashMap<String, FunctionSymbol>,
     pub structs: HashMap<String, StructSymbol>,

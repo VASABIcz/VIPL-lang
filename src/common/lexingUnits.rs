@@ -78,7 +78,8 @@ pub enum TokenType {
     BitwiseOr,
     BitwiseNot,
     Xor,
-    NullAssert
+    NullAssert,
+    Elvis
 }
 
 pub trait Stringable {
@@ -153,7 +154,8 @@ impl Stringable for TokenType {
             TokenType::BitwiseOr => "|",
             TokenType::BitwiseNot => "~",
             TokenType::Xor => "^",
-            TokenType::NullAssert => "!!"
+            TokenType::NullAssert => "!!",
+            TokenType::Elvis => "?:"
         }
     }
 }
@@ -272,6 +274,7 @@ pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("::", TokenType::Namespace),
         KeywordLexingUnit::new("->", TokenType::LambdaBegin),
         KeywordLexingUnit::new("!!", TokenType::NullAssert),
+        KeywordLexingUnit::new("?:", TokenType::Elvis),
 
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),

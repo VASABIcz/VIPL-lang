@@ -1,16 +1,9 @@
 from out import print
 
-fn grumpy(n: int): String {
-    if n % 2 == 0 {
-        return "UwU"
-    }
-    else {
-        return null
-    }
-}
+fn rng(n: int): String? = n % 2 == 0 ? "UwU" : "OwO"
 
 x = "OwO"
 
-x = grumpy(2)
+x = rng(2)!!
 
 print x

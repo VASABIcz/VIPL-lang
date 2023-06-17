@@ -20,7 +20,7 @@ use crate::lexingUnits::TokenType::In;
 use crate::parser::*;
 use crate::symbolManager::{FunctionSymbol, SymbolManager};
 use crate::utils::{genFunName, microsSinceEpoch};
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Reference, Value, Void};
+use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Value, Void};
 use crate::vm::dataType::Generic::Any;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
@@ -110,6 +110,49 @@ impl Body {
             genStatement(y)?;
         }
         ctx.symbols.exitScope();
+
+        Ok(())
+    }
+
+    pub fn validate(&self, mut ctx: SimpleCtx<SymbolicOpcode>, fun: &FunctionMeta) -> Result<(), CodeGenError> {
+        let mut s = HashSet::new();
+
+        let isCovered = self.coverageCheck(ctx.transfer(), &mut s)?;
+
+        if fun.returnType.isVoid() && s.len() == 0 {
+            return Ok(())
+        }
+
+        if !isCovered || s.len() == 0 {
+            return Err(CodeGenError::InvalidReturns)
+        }
+
+        if s.len() == 2 && s.contains(&Null) {
+            let t = s.iter().find(|it| !it.isNull()).unwrap().clone();
+            if t.isReference() && fun.returnType.isNullable() {
+                return Ok(())
+            }
+        }
+
+        if s.len() > 1 {
+            return Err(CodeGenError::InvalidReturns)
+        }
+
+        let tt = s.iter().next().unwrap();
+
+        if let Ok(v) = tt.clone().getRef() && let Ok(v1) = fun.returnType.clone().getRef() && v.name == v1.name {
+            if v.nullable && !v1.nullable {
+                return Err(CodeGenError::InvalidReturns)
+            }
+            else {
+                return Ok(())
+            }
+        }
+
+        if *tt != fun.returnType {
+            return Err(CodeGenError::TypeError(TypeError::newNone(tt.clone(), tt.clone())))
+        }
+
 
         Ok(())
     }
@@ -398,7 +441,6 @@ impl<T> ExpressionCtx<'_, T> {
 
     pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
         self.symbols.getLocal(varName)
-        // self.vTable.get(varName).ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::var(varName)))
     }
 
     pub fn hasField(&self, t: DataType) -> bool {
@@ -632,11 +674,26 @@ impl<T> ExpressionCtx<'_, T> {
                     },
                 }
             }
-            RawExpression::Null => Ok(self.typeHint.clone().unwrap_or(Int)),
+            RawExpression::Null => Ok(Null),
             RawExpression::TernaryOperator(cond, tr, fal) => {
-                let b = self.transfer(&fal).toDataType()?;
-                self.transfer(&tr).assertType(b.clone())?;
                 self.transfer(&cond).assertType(Bool)?;
+
+                let a = self.transfer(&tr).toDataType()?;
+                let b = self.transfer(&fal).toDataType()?;
+
+                if b.isNull() && a.isReference() {
+                    let mut t = a.getRef()?;
+                    t.nullable = true;
+
+                    return Ok(Reference(t))
+                }
+
+                if a.isNull() && b.isReference() {
+                    let mut t = b.getRef()?;
+                    t.nullable = true;
+
+                    return Ok(Reference(t))
+                }
 
                 Ok(b)
             }
@@ -667,11 +724,6 @@ impl<T> ExpressionCtx<'_, T> {
                 let t = self.transfer(v).toDataTypeNotVoid()?;
 
                 let mut r = t.getRef()?;
-
-                if !r.nullable {
-                    // TODO create prpoer error message
-                    panic!()
-                }
 
                 r.nullable = false;
 
@@ -830,28 +882,14 @@ pub fn genFunctionDef(
     let mut errors = vec![];
 
     if let FunctionTypeMeta::Runtime(body) = &fun.functionType {
-        let mut s = HashSet::new();
+        // FIXME looks bad it works
+        let b = ctx.symbols.clone();
 
-        let a = match body.coverageCheck(ctx.transfer(), &mut s) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(vec![e])
-            }
-        };
-
-        if s.len() > 1 {
-            return Err(vec![CodeGenError::InvalidReturns])
+        if let Err(e) = body.validate(ctx.transfer(), fun) {
+            return Err(vec![e])
         }
 
-        if s.is_empty() && !fun.returns() {
-
-        }
-        else {
-            let tt = s.iter().next().unwrap();
-            if *tt != fun.returnType {
-                return Err(vec![CodeGenError::TypeError(TypeError::newNone(tt.clone(), tt.clone()))])
-            }
-        }
+        *ctx.symbols = b;
 
         for statement in &body.statements {
             if DEBUG {
@@ -981,6 +1019,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
 
             if let Ok(t) = a {
                 if t != b || t.isVoid() || b.isVoid() {
+                    println!("SUS {:?} {:?}", t, b);
                     return Err(CodeGenError::AssignableTypeError{
                         var: dest.clone(),
                         varType: t,
@@ -1433,10 +1472,6 @@ fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError>
             }
             RawExpression::Null => r.push(OpCode::PushIntZero),
             RawExpression::TernaryOperator(cond, tr, fal) => {
-                let a = r.transfer(tr).toDataType()?;
-                r.transfer(fal).assertType(a)?;
-                r.transfer(cond).assertType(Bool)?;
-
                 let falseLabel = r.nextLabel();
                 let endLabel = r.nextLabel();
 
@@ -1521,6 +1556,7 @@ fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError>
 
                 r.push(Dup);
                 r.push(PushInt(0));
+                r.push(Swap);
                 r.push(Div(RawDataType::Int));
                 r.push(Pop);
             }
