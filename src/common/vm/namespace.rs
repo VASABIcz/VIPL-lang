@@ -2,8 +2,8 @@ use std::arch::asm;
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use crate::ast::{ASTNode, BinaryOp, RawExpression, FunctionDef, RawNode, RawStatement, VariableModd, Statement, Expression};
-use crate::bytecodeGen::{genFunctionDef, Body, ExpressionCtx};
+use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement, VariableModd};
+use crate::bytecodeGen::{Body, ExpressionCtx, genFunctionDef};
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
 use crate::lexer::{LexingUnit, tokenizeSource};

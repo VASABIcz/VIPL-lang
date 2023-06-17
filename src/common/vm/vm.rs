@@ -148,7 +148,6 @@ pub enum OpCode {
         namespaceID: u32,
         globalID: u32,
     },
-    ConstStr(usize),
     MulInt,
     AddInt,
     SubInt,
@@ -929,7 +928,7 @@ impl VirtualMachine {
         alloc
     }
 
-    pub fn link(&mut self, h: fn(&mut StatementCtx, DataType)) -> Result<(), Vec<CodeGenError>> {
+    pub fn link(&mut self, h: fn(&mut StatementCtx<SymbolicOpcode>, DataType)) -> Result<(), Vec<CodeGenError>> {
         let mut mother = self.getNaughty();
         let mut mother2 = self.getNaughty();
         let warCrime: &mut UnsafeCell<VirtualMachine> = unsafe { transmute(self) };
@@ -960,7 +959,7 @@ impl VirtualMachine {
                     .iter_mut()
                     .enumerate()
                 {
-                    let mut ctx = ExpressionCtx {
+                    let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
                         ops: &mut vec![],
                         exp: &g.0.default,
                         typeHint: None,

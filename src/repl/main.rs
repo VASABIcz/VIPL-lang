@@ -12,7 +12,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use vipl::ast::{ASTNode, RawStatement, Statement};
-use vipl::bytecodeGen::{Body, ExpressionCtx, StatementCtx};
+use vipl::bytecodeGen::{Body, ExpressionCtx, StatementCtx, SymbolicOpcode};
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
@@ -43,7 +43,7 @@ fn readInput(history: &[String]) -> Result<String, ()> {
     Ok(buf)
 }
 
-fn handleExpression(ctx: &mut StatementCtx, t: DataType) {
+fn handleExpression(ctx: &mut StatementCtx<SymbolicOpcode>, t: DataType) {
     let vm = unsafe { &mut *ctx.vm.get() };
     let (n, outNamespaceID) = vm.findNamespace("out").unwrap();
 

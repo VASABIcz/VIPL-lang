@@ -38,108 +38,18 @@ pub enum SymbolicOpcode {
     LoopLabel(usize),
 }
 
-#[derive(Debug, Clone)]
-pub struct Body {
-    statements: Vec<Statement>,
-}
-
-impl Body {
-    pub fn push(&mut self, s: Statement) {
-        self.statements.push(s)
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct LabelManager {
-    labelCounter: usize,
-    loopContext: Vec<(usize, usize)>
-}
-
-impl LabelManager {
-    pub fn nextLabel(&mut self) -> usize {
-        let l = self.labelCounter;
-
-        self.labelCounter += 1;
-
-        l
-    }
-
-    pub fn enterLoop(&mut self) -> (usize, usize) {
-        let start = self.nextLabel();
-        let end = self.nextLabel();
-
-        self.loopContext.push((start, end));
-
-        (start, end)
-    }
-
-    pub fn exitLoop(&mut self) {
-        self.loopContext.pop();
-    }
-
-    pub fn getContext(&self) -> Option<(usize, usize)> {
-        self.loopContext.last().map(|it| (it.0, it.1))
-    }
-}
-
-pub struct SimpleCtx<'a> {
-    pub ops: &'a mut Vec<SymbolicOpcode>,
-    pub currentNamespace: &'a mut UnsafeCell<Namespace>,
-    pub vm: &'a mut UnsafeCell<VirtualMachine>,
-    pub handle: fn(&mut StatementCtx, DataType) -> (),
-    pub labels: &'a mut LabelManager,
-    pub symbols: &'a mut SymbolManager
-}
-
-impl SimpleCtx<'_> {
-    pub fn inflate<'a>(
-        &'a mut self,
-        statement: &'a Statement
-    ) -> StatementCtx<'a> {
-        StatementCtx {
-            statement: &statement,
-            ops: self.ops,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            handle: self.handle,
-            labels: self.labels,
-            symbols: self.symbols,
-        }
-    }
-}
-
-impl Body {
-    pub fn new(b: Vec<Statement>) -> Self {
-        Self { statements: b }
-    }
-
-    pub fn generate(
-        &self,
-        mut ctx: SimpleCtx,
-    ) -> Result<(), CodeGenError> {
-        ctx.symbols.enterScope();
-        for statement in &self.statements {
-            let y = ctx.inflate(statement);
-            genStatement(y)?;
-        }
-        ctx.symbols.exitScope();
-
-        Ok(())
-    }
-}
-
-impl From<OpCode> for SymbolicOpcode {
-    fn from(value: OpCode) -> Self {
-        Op(value)
-    }
-}
-
 impl SymbolicOpcode {
     pub fn isOp(&self, op: OpCode) -> bool {
         match self {
             Op(v) => v == &op,
             _ => false,
         }
+    }
+}
+
+impl From<OpCode> for SymbolicOpcode {
+    fn from(value: OpCode) -> Self {
+        Op(value)
     }
 }
 
@@ -176,10 +86,99 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
     Ok(buf)
 }
 
+#[derive(Debug, Clone)]
+pub struct Body {
+    statements: Vec<Statement>,
+}
+
+impl Body {
+    pub fn push(&mut self, s: Statement) {
+        self.statements.push(s)
+    }
+
+    pub fn new(b: Vec<Statement>) -> Self {
+        Self { statements: b }
+    }
+
+    pub fn generate(
+        &self,
+        mut ctx: SimpleCtx<SymbolicOpcode>,
+    ) -> Result<(), CodeGenError> {
+        ctx.symbols.enterScope();
+        for statement in &self.statements {
+            let y = ctx.inflate(statement);
+            genStatement(y)?;
+        }
+        ctx.symbols.exitScope();
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct LabelManager {
+    labelCounter: usize,
+    loopContext: Vec<(usize, usize)>
+}
+
+impl LabelManager {
+    pub fn nextLabel(&mut self) -> usize {
+        let l = self.labelCounter;
+
+        self.labelCounter += 1;
+
+        l
+    }
+
+    pub fn enterLoop(&mut self) -> (usize, usize) {
+        let start = self.nextLabel();
+        let end = self.nextLabel();
+
+        self.loopContext.push((start, end));
+
+        (start, end)
+    }
+
+    pub fn exitLoop(&mut self) {
+        self.loopContext.pop();
+    }
+
+    pub fn getContext(&self) -> Option<(usize, usize)> {
+        self.loopContext.last().map(|it| (it.0, it.1))
+    }
+}
+
 #[derive(Debug)]
-pub struct ExpressionCtx<'a> {
+pub struct SimpleCtx<'a, T> {
+    pub ops: &'a mut Vec<T>,
+    pub currentNamespace: &'a mut UnsafeCell<Namespace>,
+    pub vm: &'a mut UnsafeCell<VirtualMachine>,
+    pub handle: fn(&mut StatementCtx<T>, DataType) -> (),
+    pub labels: &'a mut LabelManager,
+    pub symbols: &'a mut SymbolManager
+}
+
+impl<T> SimpleCtx<'_, T> {
+    pub fn inflate<'a>(
+        &'a mut self,
+        statement: &'a Statement
+    ) -> StatementCtx<'a, T> {
+        StatementCtx {
+            statement: &statement,
+            ops: self.ops,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labels: self.labels,
+            symbols: self.symbols,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ExpressionCtx<'a, T> {
     pub exp: &'a Expression,
-    pub ops: &'a mut Vec<SymbolicOpcode>,
+    pub ops: &'a mut Vec<T>,
     pub typeHint: Option<DataType>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
@@ -187,9 +186,13 @@ pub struct ExpressionCtx<'a> {
     pub symbols: &'a SymbolManager
 }
 
-impl ExpressionCtx<'_> {
-    pub fn isCurrentNamespace(&self, nId: usize) -> bool {
-        unsafe { (*self.currentNamespace.get()).id == nId }
+impl ExpressionCtx<'_, SymbolicOpcode> {
+    pub fn makeLabel(&mut self, id: usize) {
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
+    }
+
+    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
+        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 
     pub fn beginLoop(&mut self) -> (usize, usize) {
@@ -208,16 +211,30 @@ impl ExpressionCtx<'_> {
         Ok(())
     }
 
+    #[inline]
+    pub fn push(&mut self, op: OpCode) {
+        if let LCall { namespace, id } = op {
+            if namespace as usize == self.currentNamespace.get_mut().id {
+                self.ops.push(Op(SCall { id: id as usize }));
+                return;
+            }
+        }
+
+        self.ops.push(Op(op))
+    }
+
+    pub fn genExpression(mut self) -> Result<(), CodeGenError> {
+        genExpression(self)
+    }
+}
+
+impl<T> ExpressionCtx<'_, T> {
+    pub fn isCurrentNamespace(&self, nId: usize) -> bool {
+        unsafe { (*self.currentNamespace.get()).id == nId }
+    }
+
     pub fn nextLabel(&mut self) -> usize {
         self.labelCounter.nextLabel()
-    }
-
-    pub fn makeLabel(&mut self, id: usize) {
-        self.ops.push(SymbolicOpcode::LoopLabel(id));
-    }
-
-    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
-        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 
     pub fn findFunction(&self, name: &str, args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
@@ -239,27 +256,6 @@ impl ExpressionCtx<'_> {
         // self.vTable.get(varName).ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::var(varName)))
     }
 
-    pub fn genExpression(mut self) -> Result<(), CodeGenError> {
-        genExpression(self)
-    }
-}
-
-impl PartialExprCtx<'_> {
-    pub fn lookupFunctionByBaseName(&mut self, name: &str) -> Result<String, CodeGenError> {
-        for (k, v) in &self.symbols.functions {
-            if k.as_str().starts_with(&name) {
-                return Ok(k.to_string());
-            }
-        }
-        Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))
-    }
-
-    pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
-        self.symbols.getLocal(varName)
-    }
-}
-
-impl ExpressionCtx<'_> {
     pub fn hasField(&self, t: DataType) -> bool {
         todo!()
     }
@@ -268,7 +264,7 @@ impl ExpressionCtx<'_> {
         Ok(*self.symbols.getFunctionsByName(name).first().ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?)
     }
 
-    pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
+    pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
             ops: self.ops,
@@ -530,150 +526,19 @@ impl ExpressionCtx<'_> {
 }
 
 #[derive(Debug)]
-struct OpCodeManager<'a> {
-    pub ops: &'a mut Vec<OpCode>,
-}
-
-impl OpCodeManager<'_> {
-    pub fn push(&mut self, op: OpCode) {
-        self.ops.push(op)
-    }
-}
-
-pub struct PartialExprCtx<'a> {
-    pub ops: &'a mut Vec<SymbolicOpcode>,
-    pub typeHint: Option<DataType>,
-    pub currentNamespace: &'a mut UnsafeCell<Namespace>,
-    pub vm: &'a mut UnsafeCell<VirtualMachine>,
-    pub labelCounter: &'a mut LabelManager,
-    pub symbols: &'a SymbolManager
-}
-
-impl PartialExprCtx<'_> {
-    #[inline(always)]
-    pub fn push(&mut self, op: OpCode) {
-        self.ops.push(Op(op))
-    }
-
-    pub fn beginLoop(&mut self) -> (usize, usize) {
-        let (start, end) = self.labelCounter.enterLoop();
-        self.makeLabel(start);
-
-        (start, end)
-    }
-
-    pub fn endLoop(&mut self) -> Result<(), CodeGenError> {
-        let ctx = self.labelCounter.getContext().ok_or_else(|| CodeGenError::VeryBadState)?;
-
-        self.makeLabel(ctx.1);
-        self.labelCounter.exitLoop();
-
-        Ok(())
-    }
-
-    pub fn nextLabel(&mut self) -> usize {
-        self.labelCounter.nextLabel()
-    }
-
-    pub fn makeLabel(&mut self, id: usize) {
-        self.ops.push(SymbolicOpcode::LoopLabel(id));
-    }
-
-    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
-        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
-    }
-}
-
-impl StatementCtx<'_> {
-    pub fn specify(&mut self) -> PartialExprCtx {
-        PartialExprCtx {
-            ops: self.ops,
-            typeHint: None,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            labelCounter: self.labels,
-            symbols: self.symbols,
-        }
-    }
-}
-
-impl PartialExprCtx<'_> {
-    pub fn constructCtx<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
-        ExpressionCtx {
-            exp,
-            ops: self.ops,
-            typeHint: None,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            labelCounter: self.labelCounter,
-            symbols: self.symbols,
-        }
-    }
-}
-
-impl ExpressionCtx<'_> {
-    pub fn reduce(&mut self) -> (&Expression, PartialExprCtx<'_>) {
-        let p = PartialExprCtx {
-            ops: self.ops,
-            typeHint: self.typeHint.clone(),
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            labelCounter: self.labelCounter,
-            symbols: self.symbols,
-        };
-        let e = self.exp;
-
-        (e, p)
-    }
-}
-
-#[derive(Debug)]
-pub struct StatementCtx<'a> {
+pub struct StatementCtx<'a, T> {
     pub statement: &'a Statement,
-    pub ops: &'a mut Vec<SymbolicOpcode>,
+    pub ops: &'a mut Vec<T>,
     pub currentNamespace: &'a mut UnsafeCell<Namespace>,
     pub vm: &'a mut UnsafeCell<VirtualMachine>,
-    pub handle: fn(&mut StatementCtx, DataType) -> (),
+    pub handle: fn(&mut StatementCtx<T>, DataType) -> (),
     pub labels: &'a mut LabelManager,
     pub symbols: &'a mut SymbolManager
 }
 
-impl StatementCtx<'_> {
-    pub fn decrementLocal(&mut self, localId: usize) {
-        self.push(GetLocal { index: localId });
-        self.push(PushInt(1));
-        self.push(Sub(RawDataType::Int));
-        self.push(SetLocal { index: localId });
-    }
-
-    pub fn incrementLocal(&mut self, localId: usize) {
-        self.push(GetLocal { index: localId });
-        self.push(PushInt(1));
-        self.push(Add(RawDataType::Int));
-        self.push(SetLocal { index: localId });
-    }
-
-    pub fn deflate(&mut self) -> SimpleCtx {
-        SimpleCtx {
-            ops: self.ops,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            handle: self.handle,
-            labels: self.labels,
-            symbols: self.symbols,
-        }
-    }
-
-    pub fn transfer<'a>(&'a mut self, statement: &'a Statement) -> StatementCtx {
-        StatementCtx {
-            statement,
-            ops: self.ops,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            handle: self.handle,
-            labels: self.labels,
-            symbols: self.symbols,
-        }
+impl StatementCtx<'_, SymbolicOpcode> {
+    pub fn makeLabel(&mut self, id: usize) {
+        self.ops.push(SymbolicOpcode::LoopLabel(id));
     }
 
     pub fn beginLoop(&mut self) -> (usize, usize) {
@@ -690,6 +555,10 @@ impl StatementCtx<'_> {
         self.labels.exitLoop();
 
         Ok(())
+    }
+
+    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
+        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
     }
 
     pub fn opContinue(&mut self) -> Result<(), CodeGenError> {
@@ -712,12 +581,48 @@ impl StatementCtx<'_> {
         self.labels.nextLabel()
     }
 
-    pub fn makeLabel(&mut self, id: usize) {
-        self.ops.push(SymbolicOpcode::LoopLabel(id));
+    #[inline]
+    pub fn push(&mut self, op: OpCode) {
+        self.ops.push(Op(op))
     }
 
-    pub fn opJmp(&mut self, label: usize, jmpType: JmpType) {
-        self.ops.push(SymbolicOpcode::Jmp(label, jmpType))
+    pub fn decrementLocal(&mut self, localId: usize) {
+        self.push(GetLocal { index: localId });
+        self.push(PushInt(1));
+        self.push(Sub(RawDataType::Int));
+        self.push(SetLocal { index: localId });
+    }
+
+    pub fn incrementLocal(&mut self, localId: usize) {
+        self.push(GetLocal { index: localId });
+        self.push(PushInt(1));
+        self.push(Add(RawDataType::Int));
+        self.push(SetLocal { index: localId });
+    }
+}
+
+impl<T> StatementCtx<'_, T> {
+    pub fn deflate(&mut self) -> SimpleCtx<T> {
+        SimpleCtx {
+            ops: self.ops,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labels: self.labels,
+            symbols: self.symbols,
+        }
+    }
+
+    pub fn transfer<'a>(&'a mut self, statement: &'a Statement) -> StatementCtx<T> {
+        StatementCtx {
+            statement,
+            ops: self.ops,
+            currentNamespace: self.currentNamespace,
+            vm: self.vm,
+            handle: self.handle,
+            labels: self.labels,
+            symbols: self.symbols,
+        }
     }
 
     pub fn registerVariable(&mut self, name: &str, t: DataType) -> usize {
@@ -732,47 +637,12 @@ impl StatementCtx<'_> {
             self.symbols.registerLocal(name, t)
         }
     }
-}
-
-impl ExpressionCtx<'_> {
-    pub fn copy<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx {
-        ExpressionCtx {
-            exp,
-            ops: self.ops,
-            typeHint: None,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            labelCounter: self.labelCounter,
-            symbols: self.symbols,
-        }
-    }
-}
-
-impl ExpressionCtx<'_> {
-    #[inline]
-    pub fn push(&mut self, op: OpCode) {
-        if let LCall { namespace, id } = op {
-            if namespace as usize == self.currentNamespace.get_mut().id {
-                self.ops.push(Op(SCall { id: id as usize }));
-                return;
-            }
-        }
-
-        self.ops.push(Op(op))
-    }
-}
-
-impl StatementCtx<'_> {
-    #[inline]
-    pub fn push(&mut self, op: OpCode) {
-        self.ops.push(SymbolicOpcode::Op(op))
-    }
 
     pub fn makeExpressionCtx<'a>(
         &'a mut self,
         exp: &'a Expression,
         typeHint: Option<DataType>,
-    ) -> ExpressionCtx {
+    ) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
             ops: self.ops,
@@ -784,22 +654,14 @@ impl StatementCtx<'_> {
         }
     }
 
-    pub fn copy<'a>(&'a mut self, statement: &'a Statement) -> StatementCtx {
-        StatementCtx {
-            statement,
-            ops: self.ops,
-            currentNamespace: self.currentNamespace,
-            vm: self.vm,
-            handle: self.handle,
-            labels: self.labels,
-            symbols: self.symbols,
-        }
+    pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
+        self.symbols.getLocal(varName)
     }
 }
 
 pub fn genFunctionDef(
     fun: &FunctionMeta,
-    ctx: &mut SimpleCtx,
+    ctx: &mut SimpleCtx<SymbolicOpcode>,
 ) -> Result<(), Vec<CodeGenError>> {
     let mut errors = vec![];
 
@@ -832,7 +694,7 @@ pub fn genFunctionDef(
     }
 }
 
-pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
+pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     match &ctx.statement.exp {
         RawStatement::While(w) => {
             ctx.makeExpressionCtx(&w.exp, None)
@@ -945,7 +807,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             match &dest.exp {
                 RawExpression::Variable(v) => {
-                    match ctx.specify().getVariable(v) {
+                    match ctx.getVariable(v) {
                         Ok(v) => {
                             let d = v.0.clone();
                             ctx.makeExpressionCtx(value, None).assertType(d)?;
@@ -989,7 +851,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
 
             match &dest.exp {
                 RawExpression::Variable(v) => {
-                    let var = ctx.specify().getVariable(v)?.1;
+                    let var = ctx.getVariable(v)?.1;
 
                     ctx.push(SetLocal { index: var })
                 }
@@ -1101,7 +963,7 @@ pub fn genStatement(mut ctx: StatementCtx) -> Result<(), CodeGenError> {
     Ok(())
 }
 
-fn genExpression(ctx: ExpressionCtx) -> Result<(), CodeGenError> {
+fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     let mut r = ctx;
 
     unsafe {
