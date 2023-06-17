@@ -103,10 +103,6 @@ impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JObjectParsingUnit {
     fn getPriority(&self) -> usize {
         todo!()
     }
-
-    fn setPriority(&mut self, priority: usize) {
-        todo!()
-    }
 }
 
 #[derive(Debug)]
@@ -138,10 +134,6 @@ impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JArrayParsingUnit {
     }
 
     fn getPriority(&self) -> usize {
-        todo!()
-    }
-
-    fn setPriority(&mut self, priority: usize) {
         todo!()
     }
 }
@@ -186,10 +178,6 @@ impl ParsingUnit<JSON, JsonToken, JSONParsingState> for JKeywordParsingUnit {
     }
 
     fn getPriority(&self) -> usize {
-        todo!()
-    }
-
-    fn setPriority(&mut self, priority: usize) {
         todo!()
     }
 }

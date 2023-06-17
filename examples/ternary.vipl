@@ -1,0 +1,7 @@
+from out import print
+
+x = 2
+
+y = x == 1 ? "UwU" : (x == 2) ? "OwO" : "OnO"
+
+print y

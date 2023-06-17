@@ -247,10 +247,6 @@ pub trait ParsingUnit<OUT: Debug, IN: PartialEq + Clone + Debug, STATE: Debug>: 
     fn getPriority(&self) -> usize {
         todo!()
     }
-
-    fn setPriority(&mut self, priority: usize) {
-        todo!()
-    }
 }
 
 #[derive(Debug)]

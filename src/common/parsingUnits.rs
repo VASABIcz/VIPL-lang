@@ -49,8 +49,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BoolParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -82,8 +80,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for VariableParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -115,8 +111,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ReturnParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -155,8 +149,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for WhileParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -215,8 +207,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -249,8 +239,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BracketsParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -295,10 +283,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for CharParsingUnit {
     }
 )
     }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
-    }
 }
 
 #[derive(Debug)]
@@ -329,8 +313,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StringParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -372,8 +354,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayLiteralParsingUn
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -413,8 +393,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArrayIndexingParsingU
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -441,10 +419,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ContinueParsingUnit {
         Ok(RawStatement::Continue)
     }
 )
-    }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
     }
 }
 
@@ -473,10 +447,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for BreakParsingUnit {
     }
 )
     }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
-    }
 }
 
 #[derive(Debug)]
@@ -504,10 +474,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LoopParsingUnit {
         Ok(RawStatement::Loop(body))
     }
 )
-    }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
     }
 }
 
@@ -538,10 +504,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NotParsingUnit {
         Ok(RawExpression::NotExpression(Box::new(expr), t))
     }
 )
-    }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
     }
 }
 
@@ -591,10 +553,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructParsingUnit {
         Ok(RawNode::StructDef(StructDef { name, fields }))
     }
 )
-    }
-
-    fn setPriority(&mut self, _priority: usize) {
-        todo!()
     }
 }
 
@@ -1153,7 +1111,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
 }
 
 #[derive(Debug)]
-struct TernaryOperatorParsingUnit;
+struct TernaryOperatorParsingUnit {
+    pub priority: usize
+}
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsingUnit {
     fn getType(&self) -> ParsingUnitSearchType {
@@ -1188,6 +1148,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TernaryOperatorParsin
         ))
     }
 )
+    }
+
+    fn getPriority(&self) -> usize {
+        self.priority
     }
 }
 
@@ -1304,8 +1268,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -1380,10 +1342,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ArithmeticParsingUnit
     fn getPriority(&self) -> usize {
         self.priority
     }
-
-    fn setPriority(&mut self, priority: usize) {
-        self.priority = priority
-    }
 }
 
 #[derive(Debug)]
@@ -1448,8 +1406,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NumericParsingUnit {
     fn getPriority(&self) -> usize {
         usize::MAX
     }
-
-    fn setPriority(&mut self, _priority: usize) {}
 }
 
 #[derive(Debug)]
@@ -1675,7 +1631,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(ForParsingUnit),
         Box::new(LambdaParsingUnit),
         Box::new(TwoArgFunctionParsintUnit),
-        Box::new(TernaryOperatorParsingUnit),
+        Box::new(TernaryOperatorParsingUnit{ priority: {x+= 1; x} }),
         Box::new(RepeatParsingUnit),
         Box::new(FormatStringParsingUnit),
         Box::new(NegateParsingUnit),
