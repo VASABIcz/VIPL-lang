@@ -4,7 +4,7 @@ use crate::ast;
 use crate::ast::RawExpression::NamespaceAccess;
 use crate::ast::RawStatement::Assignable;
 use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, WhileS, Statement, Expression};
-use crate::bytecodeGen::Body;
+use crate::codeGenCtx::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexingUnits::TokenType;

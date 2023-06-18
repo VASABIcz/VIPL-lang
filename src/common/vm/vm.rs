@@ -10,7 +10,9 @@ use std::mem::{size_of, transmute};
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::FunctionDef;
-use crate::bytecodeGen::{emitOpcodes, ExpressionCtx, genFunctionDef, LabelManager, SimpleCtx, StatementCtx, SymbolicOpcode};
+use crate::bytecodeGen::{emitOpcodes, genFunctionDef, SymbolicOpcode};
+use crate::codeGenCtx;
+use crate::codeGenCtx::{ExpressionCtx, SimpleCtx, StatementCtx};
 use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
 use crate::ffi::{allocateObject, NativeWrapper};
@@ -959,14 +961,17 @@ impl VirtualMachine {
                     .iter_mut()
                     .enumerate()
                 {
-                    let mut simpleCtx = SimpleCtx{
-                        ops: &mut vec![],
-                        currentNamespace: anotherWarCrime,
-                        vm: warCrime,
-                        handle: h,
-                        labels: &mut Default::default(),
-                        symbols: &mut symbols,
-                    };
+                    let mut a = Default::default();
+                    let mut b = vec![];
+
+                    let mut simpleCtx = SimpleCtx::new(
+                        anotherWarCrime,
+                        warCrime,
+                        h,
+                        &mut symbols,
+                        &mut a,
+                        &mut b,
+                    );
 
                     let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
                         exp: &g.0.default,
@@ -992,14 +997,15 @@ impl VirtualMachine {
 
                         let mut ops = vec![];
 
-                        let mut ctx = SimpleCtx {
-                            ops: &mut ops,
-                            currentNamespace: anotherWarCrime,
-                            handle: h,
-                            vm: warCrime,
-                            labels: &mut Default::default(),
-                            symbols: &mut symbols,
-                        };
+                        let mut manager = Default::default();
+                        let mut ctx = SimpleCtx::new(
+                            anotherWarCrime,
+                            warCrime,
+                            h,
+                            &mut symbols,
+                            &mut manager,
+                            &mut ops,
+                        );
 
                         match genFunctionDef(f, &mut ctx) {
                             Ok(v) => {}
@@ -1010,14 +1016,15 @@ impl VirtualMachine {
                         };
 
 
-                        if ctx.symbols.locals.len() > f.localsMeta.len() {
+                        let cLocals = ctx.getLocals();
+                        if cLocals.len() > f.localsMeta.len() {
                             let mut buf = f.localsMeta.clone().into_vec();
 
                             let s = f.localsMeta.len();
-                            let e = ctx.symbols.locals.len();
+                            let e = cLocals.len();
 
                             for i in s..e {
-                                buf.push(ctx.symbols.locals[i].clone())
+                                buf.push(cLocals[i].clone())
                             }
 
                             f.localsMeta = buf.into_boxed_slice();

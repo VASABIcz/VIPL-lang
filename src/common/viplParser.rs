@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::ast::{ASTNode, Expression, Node, RawExpression, RawNode, RawStatement, Statement};
-use crate::bytecodeGen::Body;
+use crate::codeGenCtx::Body;
 use crate::errors::{CodeGenError, NoSuchParsingUnit, ParserError, SymbolType};
 
 use crate::lexer::Token;

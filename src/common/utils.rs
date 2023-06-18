@@ -1,6 +1,4 @@
 #![allow(unused_assignments)]
-use crate::bytecodeGen::SymbolicOpcode;
-use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::errors::LoadFileError;
 use crate::parser::{TokenProvider};
 use crate::vm;
@@ -16,6 +14,8 @@ use std::{env, fs};
 use std::ops::Range;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::ast::{Expression, Statement};
+use crate::bytecodeGen::SymbolicOpcode;
+use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::lexer::{LexingUnit, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;

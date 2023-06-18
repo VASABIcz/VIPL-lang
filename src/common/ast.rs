@@ -1,10 +1,10 @@
 use crate::ast::RawStatement::StatementExpression;
-use crate::bytecodeGen::Body;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::{Index, Range};
 use strum_macros::Display;
+use crate::codeGenCtx::Body;
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
 use crate::fastAccess::FastAccess;

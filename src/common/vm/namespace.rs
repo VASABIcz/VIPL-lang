@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::mem::transmute;
 
 use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement, VariableModd};
-use crate::bytecodeGen::{Body, ExpressionCtx, genFunctionDef};
+use crate::codeGenCtx::Body;
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
 use crate::lexer::{LexingUnit, tokenizeSource};

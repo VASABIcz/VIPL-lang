@@ -1,0 +1,7 @@
+from test import assert
+
+fn cd(): String? = null
+
+x = cd() ?: "hello"
+
+assert x == "hello"

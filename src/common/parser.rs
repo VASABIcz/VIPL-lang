@@ -8,7 +8,6 @@ use crate::ast;
 use crate::ast::RawExpression::{IntLiteral, NamespaceAccess};
 use crate::ast::RawStatement::{Assignable, StatementExpression};
 use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, VariableCreate, VariableModd, WhileS};
-use crate::bytecodeGen::Body;
 
 use crate::errors::{CodeGenError, InvalidToken, LexerError, NoSuchParsingUnit, ParserError, SymbolType};
 
