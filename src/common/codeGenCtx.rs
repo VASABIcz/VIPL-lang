@@ -72,6 +72,14 @@ pub struct SimpleCtx<'a, T> {
 }
 
 impl<T> SimpleCtx<'_, T> {
+    pub fn getVMMut(&mut self) -> &mut VirtualMachine {
+        self.vm.get_mut()
+    }
+
+    pub fn getVM(&self) -> &VirtualMachine {
+        unsafe { &*self.vm.get() }
+    }
+
     pub fn enterLoop(&mut self) -> (usize, usize) {
         self.labels.enterLoop()
     }
