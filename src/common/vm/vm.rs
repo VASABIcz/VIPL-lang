@@ -959,14 +959,19 @@ impl VirtualMachine {
                     .iter_mut()
                     .enumerate()
                 {
-                    let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
+                    let mut simpleCtx = SimpleCtx{
                         ops: &mut vec![],
-                        exp: &g.0.default,
-                        typeHint: None,
                         currentNamespace: anotherWarCrime,
                         vm: warCrime,
-                        labelCounter: &mut Default::default(),
+                        handle: h,
+                        labels: &mut Default::default(),
                         symbols: &mut symbols,
+                    };
+
+                    let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
+                        exp: &g.0.default,
+                        typeHint: None,
+                        ctx: simpleCtx
                     };
                     g.0.typ = ctx.toDataType().map_err(|it| vec![it])?;
                 }

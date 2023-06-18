@@ -17,7 +17,7 @@ use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
-use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw};
+use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw, testRead};
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::{DataType, Generic};
 use vipl::vm::namespace::{loadSourceFile, Namespace, NamespaceState};
@@ -44,7 +44,7 @@ fn readInput(history: &[String]) -> Result<String, ()> {
 }
 
 fn handleExpression(ctx: &mut StatementCtx<SymbolicOpcode>, t: DataType) {
-    let vm = unsafe { &mut *ctx.vm.get() };
+    let vm = unsafe { &mut *ctx.ctx.vm.get() };
     let (n, outNamespaceID) = vm.findNamespace("out").unwrap();
 
     let printInt = n.findFunction("print(int)").unwrap();

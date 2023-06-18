@@ -72,8 +72,7 @@ fn main() -> Result<(), ()> {
     let ptr = Box::into_raw(xd.into_boxed_slice());
 
     unsafe {
-        f.as_ref().unwrap().call(
-            &mut *vm1,
+        f.as_ref().unwrap().call(&mut *vm1,
             StackFrame {
                 localVariables: ptr.as_mut_ptr(),
                 programCounter: 0,

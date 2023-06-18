@@ -1,3 +1,4 @@
+use libc::{getchar, ioctl};
 
 #[cfg(target_os = "windows")]
 pub fn enableRawMode() {
@@ -104,6 +105,20 @@ fn goLeftBy(n: usize) {
 pub fn putStr(s: &str) {
     for b in s.bytes() {
         putChar(b as char);
+    }
+}
+
+pub fn testRead() {
+    loop {
+        let mut n = 0;
+        let mut buf = String::new();
+
+        if unsafe { ioctl(0, libc::FIONREAD, &n) == 0 && n > 0 } {
+            for _ in 0..n {
+                unsafe { buf += &format!(" {}", getchar() as usize); }
+            }
+            println!("{}", buf)
+        }
     }
 }
 
@@ -239,7 +254,7 @@ pub fn readRaw(prev: &[String]) -> String {
                     putChar(8 as char);
                     index -= 1;
                 }
-                _ => {}
+                _ => println!("code: {}", code as usize)
             }
             continue
         }

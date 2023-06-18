@@ -291,6 +291,6 @@ impl Regix {
 fn te() {
     let simpleRegix = Regix::parse("(UwU|OwO+)").unwrap();
     let mut buf = vec![];
-    let res = simpleRegix.matchStr("UwUOwO", &mut buf);
-    println!("{:?} {:?}", res, buf)
+    let res = simpleRegix.matchStr("UwUOwO", &mut buf).unwrap();
+    println!("{} {:?}", res, buf)
 }
