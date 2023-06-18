@@ -473,7 +473,6 @@ impl TypeError {
     }
 
     pub fn newNone(expected: DataType, actual: DataType) -> Self {
-        panic!();
         Self {
             expected: expected,
             actual: actual,

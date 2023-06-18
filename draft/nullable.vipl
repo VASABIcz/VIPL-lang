@@ -1,9 +1,0 @@
-from out import print
-
-fn rng(n: int): String? = n % 2 == 0 ? "UwU" : "OwO"
-
-x = "OwO"
-
-x = rng(2)!!
-
-print x

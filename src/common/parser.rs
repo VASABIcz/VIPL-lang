@@ -327,7 +327,7 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
 
         let row = self.tokens.peekOneRes()?.location.row;
 
-        let u = self.getParsingUnit(typ.clone()).ok_or(
+        let u = self.getParsingUnit(typ).ok_or(
             ParserError::NoSuchParsingUnit(NoSuchParsingUnit {
                 typ,
                 token: self.tokens.peekOne().cloned(),
@@ -341,6 +341,35 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
         }
 
         if let Some(v) = self.getParsingUnit(Around) && self.tokens.peekOneRes()?.location.row == row {
+            self.previousBuf.push(v.parse(s2)?);
+        }
+
+        Ok(self.prevPop().unwrap())
+    }
+
+    pub fn parseOneOneLineLimitPriority(
+        &mut self,
+        typ: ParsingUnitSearchType,
+        limit: usize
+    ) -> Result<OUT, ParserError<IN>> {
+        let s2 = unsafe { &mut *(self as *mut Parser<_, _, _>) };
+
+        let row = self.tokens.peekOneRes()?.location.row;
+
+        let u = self.getParsingUnit(typ).ok_or(
+            ParserError::NoSuchParsingUnit(NoSuchParsingUnit {
+                typ,
+                token: self.tokens.peekOne().cloned(),
+            }),
+        )?;
+
+        self.previousBuf.push(u.parse(s2)?);
+
+        while let Some(v) = self.getParsingUnit(Behind) && self.tokens.peekOneRes()?.location.row == row {
+            self.previousBuf.push(v.parse(s2)?);
+        }
+
+        if let Some(v) = self.getParsingUnit(Around) && self.tokens.peekOneRes()?.location.row == row &&  v.getPriority() < limit {
             self.previousBuf.push(v.parse(s2)?);
         }
 

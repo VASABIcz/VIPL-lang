@@ -1,0 +1,9 @@
+from out import print
+
+fn rng(n: int): String? = n % 2 == 0 ? "UwU" : null
+
+x = "OwO"
+
+x = rng 3 ?: "hello"
+
+print x

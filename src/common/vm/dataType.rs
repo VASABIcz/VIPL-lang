@@ -84,6 +84,15 @@ impl DataType {
         }
     }
 
+    pub fn getReff(&self) -> Result<&ObjectMeta, CodeGenError> {
+        match self {
+            Reference(v) => Ok(v),
+            _ => {
+                Err(CodeGenError::ExpectedReference)
+            }
+        }
+    }
+
     pub fn getFunction(self) -> Result<(Vec<DataType>, DataType), CodeGenError> {
         match self {
             Function { args, ret } => Ok((args, *ret)),

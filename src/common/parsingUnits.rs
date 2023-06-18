@@ -8,7 +8,7 @@ use crate::bytecodeGen::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexingUnits::TokenType;
-use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
+use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Elvis, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
@@ -16,6 +16,8 @@ use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPL
 use crate::viplParser::ParsingContext::Condition;
 use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
+
+static mut TERNARY_PRIORITY: usize = 0;
 
 #[derive(Debug)]
 pub struct BoolParsingUnit;
@@ -1061,17 +1063,19 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for OneArgFunctionParsint
         &self,
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
-        parser.parseWrappedExpression(|parser| {
-        let prev = parser.pop()?.asExpr()?;
+        unsafe {
+            parser.parseWrappedExpression(|parser| {
+                let prev = parser.pop()?.asExpr()?;
 
-        let arg = parser.parseExprOneLine()?;
+                let arg = parser.parseOneOneLineLimitPriority(Ahead, TERNARY_PRIORITY)?.asExpr()?;
 
-        Ok(RawExpression::Callable(
-            Box::new(prev),
-            vec![arg],
-        ))
-    }
-)
+                Ok(RawExpression::Callable(
+                    Box::new(prev),
+                    vec![arg],
+                ))
+            }
+            )
+        }
     }
 }
 
@@ -1544,6 +1548,46 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NullAssertParsingUnit
     }
 }
 
+#[derive(Debug)]
+struct ElvisParsingUnit {
+    pub priority: usize
+}
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ElvisParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Around
+    }
+
+    fn canParse(
+        &self,
+        parser: &VIPLParser
+    ) -> bool {
+        parser.tokens.isPeekType(Elvis) && parser.isPrevExp()
+    }
+
+    fn parse(
+        &self,
+        parser: &mut VIPLParser
+    ) -> Result<ASTNode, ParserError<TokenType>> {
+        parser.parseWrappedExpression(|parser| {
+            let prev = parser.pop()?.asExpr()?;
+            parser.tokens.getAssert(Elvis)?;
+
+            let a = parser.parseExpr()?;
+
+            Ok(RawExpression::Elvis(
+                Box::new(prev),
+                Box::new(a)
+            ))
+        }
+        )
+    }
+
+    fn getPriority(&self) -> usize {
+        self.priority
+    }
+}
+
 pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
     let mut x = 0;
 
@@ -1570,6 +1614,7 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(SymbolImport),
         Box::new(NullParsingUnit),
         // https://en.cppreference.com/w/c/language/operator_precedence
+        // https://docs.python.org/3/reference/expressions.html#operator-precedence
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Mul,
             typ: TokenType::Mul,
@@ -1606,6 +1651,21 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
             priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
+            op: BinaryOp::BitwiseAnd,
+            typ: TokenType::BitwiseAnd,
+            priority: {x += 1; x},
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: BinaryOp::Xor,
+            typ: TokenType::Xor,
+            priority: {x += 1; x},
+        }),
+        Box::new(ArithmeticParsingUnit {
+            op: BinaryOp::BitwiseOr,
+            typ: TokenType::BitwiseOr,
+            priority: {x += 1; x},
+        }),
+        Box::new(ArithmeticParsingUnit {
             op: BinaryOp::Less,
             typ: TokenType::Less,
             priority: {x += 1; x},
@@ -1623,21 +1683,6 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(ArithmeticParsingUnit {
             op: BinaryOp::NotEq,
             typ: TokenType::NotEq,
-            priority: {x += 1; x},
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: BinaryOp::BitwiseAnd,
-            typ: TokenType::BitwiseAnd,
-            priority: {x += 1; x},
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: BinaryOp::Xor,
-            typ: TokenType::Xor,
-            priority: {x += 1; x},
-        }),
-        Box::new(ArithmeticParsingUnit {
-            op: BinaryOp::BitwiseOr,
-            typ: TokenType::BitwiseOr,
             priority: {x += 1; x},
         }),
         Box::new(ArithmeticParsingUnit {
@@ -1661,11 +1706,16 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
         Box::new(ForParsingUnit),
         Box::new(LambdaParsingUnit),
         Box::new(TwoArgFunctionParsintUnit),
-        Box::new(TernaryOperatorParsingUnit{ priority: {x+= 1; x} }),
+        Box::new(TernaryOperatorParsingUnit{ priority: {
+            x += 1;
+            unsafe { TERNARY_PRIORITY = x; }
+            x
+        } }),
         Box::new(RepeatParsingUnit),
         Box::new(FormatStringParsingUnit),
         Box::new(NegateParsingUnit),
         Box::new(BitwiseNotParsingUnit),
-        Box::new(NullAssertParsingUnit)
+        Box::new(NullAssertParsingUnit),
+        Box::new(ElvisParsingUnit{ priority: {x+= 1; x} })
     ]
 }

@@ -73,7 +73,8 @@ pub enum RawExpression {
     TypeCheck(Box<Expression>, DataType),
     Negate(Box<Expression>),
     BitwiseNot(Box<Expression>),
-    NullAssert(Box<Expression>)
+    NullAssert(Box<Expression>),
+    Elvis(Box<Expression>, Box<Expression>)
 }
 
 impl RawExpression {

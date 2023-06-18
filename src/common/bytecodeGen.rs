@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::ops::Deref;
+use std::ptr::null;
 
 use crate::ast::{ArithmeticOp, BinaryOp, RawExpression, FunctionDef, ModType, RawNode, RawStatement, StructDef, Statement, Expression, ASTNode};
 use crate::bytecodeGen::SymbolicOpcode::Op;
@@ -695,7 +696,9 @@ impl<T> ExpressionCtx<'_, T> {
                     return Ok(Reference(t))
                 }
 
-                Ok(b)
+                self.transfer(tr).assertType(b)?;
+
+                Ok(a)
             }
             // FIXME check if cast is possible
             RawExpression::TypeCast(_, t) => Ok(t.clone()),
@@ -728,6 +731,34 @@ impl<T> ExpressionCtx<'_, T> {
                 r.nullable = false;
 
                 Ok(Reference(r))
+            }
+            RawExpression::Elvis(nullable, otherwise) => {
+                let a = self.transfer(nullable).toDataTypeNotVoid()?;
+                let b = self.transfer(otherwise).toDataTypeNotVoid()?;
+
+                if a.isNullable() && b.isNull() {
+                    return Ok(a)
+                }
+
+                if a.isNullable() && b.isReference() {
+                    let a1 = a.getReff()?;
+                    let b1 = b.getReff()?;
+
+                    if a1.name == b1.name {
+                        return Ok(Reference(b1.clone()))
+                    }
+                }
+
+                if a.isReference() && b.isReference() && !a.isNullable() && !b.isNullable() {
+                    let a1 = a.getReff()?;
+                    let b1 = b.getReff()?;
+
+                    if a1.name == b1.name {
+                        return Ok(Reference(b1.clone()))
+                    }
+                }
+
+                Err(CodeGenError::ExpectedReference)
             }
         }
     }
@@ -1559,6 +1590,19 @@ fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError>
                 r.push(Swap);
                 r.push(Div(RawDataType::Int));
                 r.push(Pop);
+            }
+            RawExpression::Elvis(a, b) => {
+                let endLabel = r.nextLabel();
+
+                r.transfer(a).genExpression()?;
+
+                r.push(Dup);
+                r.push(PushInt(0));
+                r.push(OpCode::Equals(RawDataType::Int));
+                r.opJmp(endLabel, False);
+                r.push(Pop);
+                r.transfer(b).genExpression()?;
+                r.makeLabel(endLabel);
             }
         }
     }
