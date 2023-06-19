@@ -88,6 +88,10 @@ pub fn parseDataTypeFromStr(s: &str, units: &mut [Box<dyn LexingUnit<TokenType>>
     Ok(parseDataType(&mut TokenProvider::new(p))?)
 }
 
+pub fn genNamespaceName(s: &[String]) -> String {
+    s.join("::")
+}
+
 pub fn namespacePath(path: &str) -> Vec<String> {
     let mut con123 = fs::canonicalize(path).unwrap();
     let mut con = con123.iter();

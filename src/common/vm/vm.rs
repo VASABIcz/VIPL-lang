@@ -18,7 +18,7 @@ use crate::fastAccess::FastAccess;
 use crate::ffi::{allocateObject, NativeWrapper};
 use crate::naughtyBox::Naughty;
 use crate::symbolManager::SymbolManager;
-use crate::utils::{FastVec, genFunName, printOps, readNeighbours, transform};
+use crate::utils::{FastVec, genFunName, genNamespaceName, printOps, readNeighbours, transform};
 use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
@@ -266,9 +266,7 @@ impl VirtualMachine {
         &self,
         parts: &[String],
     ) -> Result<(&Namespace, usize), CodeGenError> {
-        let namespaceName = parts.join("::");
-
-        self.findNamespace(&namespaceName)
+        self.findNamespace(&genNamespaceName(parts))
     }
 
     #[inline]

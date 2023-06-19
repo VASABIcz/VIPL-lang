@@ -53,7 +53,7 @@ impl Body {
 
         let isCovered = self.coverageCheck(ctx.transfer(), &mut s)?;
 
-        if fun.returnType.isVoid() && s.len() == 0 {
+        if fun.returnType.isVoid() && s.is_empty() {
             return Ok(())
         }
 
@@ -88,7 +88,7 @@ impl Body {
         }
 
         if *tt != fun.returnType {
-            return Err(CodeGenError::TypeError(TypeError::newNone(tt.clone(), fun.returnType.clone())))
+            return Err(CodeGenError::TypeError(TypeError::newNone(fun.returnType.clone(), tt.clone())))
         }
 
 
@@ -124,11 +124,17 @@ impl Body {
                     b.returnType(ctx.transfer(), r)?
                 }
                 RawStatement::StatementExpression(_) => {}
-                RawStatement::Assignable(a, b, c) => {
+                RawStatement::Assignable(a, b, c, typeHint) => {
                     if let RawExpression::Variable(v) = &a.exp {
                         let mut ctx1 = ctx.inflate(s1);
                         let t = ctx1.ctx.makeExpressionCtx(b, None).toDataTypeNotVoid()?;
-                        ctx1.ctx.registerVariable(v, t);
+
+                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
+                            ctx1.ctx.registerVariable(v, DataType::Reference(r.clone()));
+                        }
+                        else {
+                            ctx1.ctx.registerVariable(v, t);
+                        }
                     }
                 }
                 RawStatement::ForLoop(name, e, b) => {
@@ -162,6 +168,18 @@ impl Body {
             }
         }
 
+/*
+FIXME this is commented bcs it breaks tests on simple for
+if let Some(v) = self.statements.last() {
+            if let RawStatement::StatementExpression(e) = &v.exp {
+                let t = ctx.makeExpressionCtx(e, None).toDataType()?;
+
+                r.insert(t);
+
+                return Ok(true)
+            }
+        }*/
+
         Ok(false)
     }
 
@@ -193,11 +211,17 @@ impl Body {
                     b.returnType(ctx.transfer(), r)?
                 }
                 RawStatement::StatementExpression(_) => {}
-                RawStatement::Assignable(a, b, c) => {
+                RawStatement::Assignable(a, b, c, typeHint) => {
                     if let RawExpression::Variable(v) = &a.exp {
                         let mut ctx1 = ctx.inflate(s1);
                         let t = ctx1.ctx.makeExpressionCtx(b, None).toDataTypeNotVoid()?;
-                        ctx1.ctx.registerVariable(v, t);
+
+                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
+                            ctx1.ctx.registerVariable(v, DataType::Reference(r.clone()));
+                        }
+                        else {
+                            ctx1.ctx.registerVariable(v, t);
+                        }
                     }
                 }
                 RawStatement::ForLoop(name, e, b) => {
@@ -506,13 +530,13 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 (ctx.ctx.getHandle())(&mut ctx, ret);
             }
         }
-        RawStatement::Assignable(dest, value, t) => {
+        RawStatement::Assignable(dest, value, t, typeHint) => {
             let a = ctx.ctx.makeExpressionCtx(dest, None).toDataType();
 
             let b = ctx.ctx.makeExpressionCtx(value, None).toDataType()?;
 
             if let Ok(t) = a {
-                if t != b || t.isVoid() || b.isVoid() {
+                if !t.canAssign(&b) || t.isVoid() || b.isVoid() {
                     println!("SUS {:?} {:?}", t, b);
                     return Err(CodeGenError::AssignableTypeError{
                         var: dest.clone(),
@@ -534,7 +558,13 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                         }
                         Err(_) => {
                             let t = ctx.ctx.makeExpressionCtx(value, None).toDataType()?;
-                            ctx.ctx.registerVariable(v, t);
+
+                            if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
+                                ctx.ctx.registerVariable(v, DataType::Reference(r.clone()));
+                            }
+                            else {
+                                ctx.ctx.registerVariable(v, t);
+                            }
                         }
                     }
                 }
@@ -968,8 +998,6 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::TernaryOperator(cond, tr, fal) => {
                 let falseLabel = r.ctx.nextLabel();
                 let endLabel = r.ctx.nextLabel();
-
-                println!("condition {:?}", cond);
 
                 r.transfer(cond).genExpression()?;
 

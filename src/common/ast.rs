@@ -79,15 +79,15 @@ pub enum RawExpression {
 
 impl RawExpression {
     pub fn isCallable(&self) -> bool {
-        return matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..));
+        matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..))
     }
 
     pub fn isAssignable(&self) -> bool {
-        return matches!(self, RawExpression::Variable(..) | RawExpression::ArrayIndexing(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..));
+        matches!(self, RawExpression::Variable(..) | RawExpression::ArrayIndexing(..) | RawExpression::NamespaceAccess(..) | RawExpression::FieldAccess(..))
     }
 
     pub fn isConstructable(&self) -> bool {
-        return matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..));
+        matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..))
     }
 }
 
@@ -112,7 +112,7 @@ pub enum RawStatement {
     Break,
     Loop(Body),
     StatementExpression(Expression),
-    Assignable(Expression, Expression, Option<ArithmeticOp>),
+    Assignable(Expression, Expression, Option<ArithmeticOp>, Option<DataType>),
     ForLoop(String, Expression, Body),
     Repeat(String, usize, Body),
 }
@@ -218,6 +218,10 @@ pub struct Expression {
 impl Expression {
     pub fn isNull(&self) -> bool {
         matches!(self.exp,  RawExpression::Null)
+    }
+
+    pub fn isVariable(&self) -> bool {
+        matches!(self.exp, RawExpression::Variable(_))
     }
 
     pub fn getRanges(&self, row: usize) -> Vec<Range<usize>> {

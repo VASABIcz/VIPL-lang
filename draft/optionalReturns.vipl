@@ -1,0 +1,7 @@
+from out import print
+
+fn idk(): int {
+    5
+}
+
+print idk()

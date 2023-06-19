@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::errors::{CodeGenError, SymbolNotFoundE};
 use crate::errors::CodeGenError::SymbolNotFound;
-use crate::utils::genFunName;
+use crate::utils::{genFunName, genNamespaceName};
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::{FunctionMeta, GlobalMeta, StructMeta};
 use crate::vm::variableMetadata::VariableMetadata;
@@ -79,15 +79,11 @@ impl SymbolManager {
     }
 
     pub fn getFunctionParts(&self, name: &[String]) -> Result<&FunctionSymbol, CodeGenError> {
-        let j = name.join("::");
-
-        self.getFunction(&j)
+        self.getFunction(&genNamespaceName(name))
     }
 
     pub fn getFunctionPartsArgs(&self, name: &[String], args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
-        let j = name.join("::");
-
-        self.getFunction(&genFunName(&j, args))
+        self.getFunction(&genFunName(&genNamespaceName(name), args))
     }
 
     pub fn getFunctionArgs(&self, name: &str, args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {

@@ -25,7 +25,8 @@ pub const VALID_EXPRESSION_TOKENS: [TokenType; 7] = [
 pub enum ParsingContext {
     TopLevel,
     Body,
-    Condition
+    Condition,
+    Expression
 }
 
 pub type VIPLParser<'a> = Parser<'a, TokenType, ASTNode, VIPLParsingState>;
@@ -50,6 +51,20 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
         match self.state.parsingContext.last() {
             None => false,
             Some(v) => v == &ctx
+        }
+    }
+
+    pub fn isNotContext(&self, ctx: ParsingContext) -> bool {
+        match self.state.parsingContext.last() {
+            None => true,
+            Some(v) => v != &ctx
+        }
+    }
+
+    pub fn isNotContextOf(&self, ctx: &[ParsingContext]) -> bool {
+        match self.state.parsingContext.last() {
+            None => true,
+            Some(v) => !ctx.contains(v)
         }
     }
 
@@ -173,7 +188,9 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     pub fn parseExprOneLine(
         &mut self
     ) -> Result<Expression, ParserError<TokenType>> {
+        self.state.parsingContext.push(ParsingContext::Expression);
         let res = self.parseOneOneLine(Ahead)?;
+        self.state.parsingContext.pop();
         res.asExpr()
     }
 
@@ -186,7 +203,9 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     pub fn parseExpr(
         &mut self
     ) -> Result<Expression, ParserError<TokenType>> {
+        self.state.parsingContext.push(ParsingContext::Expression);
         let res = self.parseOne(Ahead)?;
+        self.state.parsingContext.pop();
         res.asExpr()
     }
 
@@ -197,9 +216,11 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
         self.tokens.getAssert(TokenType::OCB)?;
 
+        self.state.parsingContext.push(ParsingContext::Body);
         while !self.tokens.isPeekType(CCB) {
             statements.push(self.parseOne(Ahead)?.asStatement()?);
         }
+        self.state.parsingContext.pop();
 
         self.tokens.getAssert(TokenType::CCB)?;
 
@@ -208,7 +229,7 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
     pub fn parseCondition(&mut self) -> Result<Expression, ParserError<TokenType>> {
         self.state.parsingContext.push(ParsingContext::Condition);
-        let res = self.parseExpr();
+        let res = self.parseOne(Ahead)?.asExpr();
         self.state.parsingContext.pop();
         res
     }

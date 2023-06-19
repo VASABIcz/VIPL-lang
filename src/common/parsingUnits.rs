@@ -12,12 +12,13 @@ use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Col
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
-use crate::viplParser::{parseDataType, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
+use crate::viplParser::{parseDataType, ParsingContext, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
 use crate::viplParser::ParsingContext::Condition;
 use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
 static mut TERNARY_PRIORITY: usize = 0;
+static EXPR_CONTEXTS: [ParsingContext; 2] = [ParsingContext::Expression, ParsingContext::Condition];
 
 #[derive(Debug)]
 pub struct BoolParsingUnit;
@@ -892,12 +893,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
         &self,
         parser: &VIPLParser
     ) -> bool {
-        parser.tokens.isPeekType(Equals)
+        (parser.tokens.isPeekType(Equals)
+            || parser.tokens.isPeekType(Colon)
             || parser.tokens.isPeekType(AddAs)
             || parser.tokens.isPeekType(SubAs)
             || parser.tokens.isPeekType(DivAs)
-            || parser.tokens.isPeekType(MulAs)
+            || parser.tokens.isPeekType(MulAs))
                 && parser.isPrevAssignable()
+                && parser.isNotContextOf(&EXPR_CONTEXTS)
     }
 
     fn parse(
@@ -906,6 +909,14 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedStatement(|parser| {
         let prev = parser.pop()?.asExpr()?;
+
+            let typeHint = if prev.isVariable() && parser.tokens.isPeekType(Colon) {
+                parser.tokens.getAssert(Colon)?;
+                Some(parser.parseDataType()?)
+            }
+            else {
+                None
+            };
 
         let mut typ = None;
 
@@ -927,6 +938,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for AssignableParsingUnit
             prev,
             next,
             typ,
+            typeHint
         ))
     }
 )
@@ -1107,10 +1119,10 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TwoArgFunctionParsint
         let arg = parser.parseExprOneLine()?;
 
             // FIXME
-        return Ok(RawExpression::Callable(
+        Ok(RawExpression::Callable(
             Box::new(Expression{ exp: RawExpression::Variable(name), loc: vec![] }),
             vec![prev, arg],
-        ));
+        ))
     }
 )
     }

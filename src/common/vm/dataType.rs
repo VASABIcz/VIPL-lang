@@ -43,6 +43,21 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn canAssign(&self, other: &DataType) -> bool {
+        match self {
+            Reference(r) => if let Reference(r1) = other {
+                r.name == r1.name && (r.nullable == r1.nullable || r.nullable)
+            }
+            else {
+                false
+            }
+            Object => todo!("what is this?? :D"),
+            Void => false,
+            Value => true,
+            _ => self == other
+        }
+    }
+
     pub fn isReference(&self) -> bool {
         matches!(self, DataType::Reference(_))
     }

@@ -5,6 +5,7 @@ use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, RawStatement, Sta
 use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
 use crate::errors::CodeGenError::UnexpectedVoid;
 use crate::symbolManager::{FunctionSymbol, GlobalSymbol, StructSymbol, SymbolManager};
+use crate::utils::genNamespaceName;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
 use crate::vm::dataType::Generic::Any;
@@ -117,7 +118,7 @@ impl<T> SimpleCtx<'_, T> {
     }
 
     pub fn findGlobalParts(&self, name: &[String]) -> Result<&GlobalSymbol, CodeGenError> {
-        self.symbols.getGlobal(&name.join("::"))
+        self.symbols.getGlobal(&genNamespaceName(name))
     }
 
     pub fn new<'b>(
@@ -244,7 +245,8 @@ impl<T> ExpressionCtx<'_, T> {
     pub fn assertType(&mut self, t: DataType) -> Result<(), CodeGenError> {
         let t1 = self.toDataType()?;
 
-        if t != t1 {
+        // FIXME not sure if this is the right thing to do
+        if !t.canAssign(&t1) {
             return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())))
         }
 
@@ -388,7 +390,7 @@ impl<T> ExpressionCtx<'_, T> {
                 Ok(Bool)
             }
             RawExpression::NamespaceAccess(n) => {
-                let g = self.ctx.symbols.getGlobal(&n.join("::"))?;
+                let g = self.ctx.symbols.getGlobal(&genNamespaceName(n))?;
 
                 Ok(g.typ.clone())
             }

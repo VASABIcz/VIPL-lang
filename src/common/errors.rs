@@ -465,6 +465,7 @@ pub struct TypeError {
 
 impl TypeError {
     pub fn new(expected: DataType, actual: DataType, exp: Expression) -> Self {
+        panic!();
         Self {
             expected: expected,
             actual: actual,
@@ -473,6 +474,7 @@ impl TypeError {
     }
 
     pub fn newNone(expected: DataType, actual: DataType) -> Self {
+        panic!();
         Self {
             expected: expected,
             actual: actual,
