@@ -38,6 +38,7 @@ pub enum DataType {
     },
     Void,
     Value,
+    // TODO meke it nullable
     Object,
     Null
 }
@@ -51,7 +52,9 @@ impl DataType {
             else {
                 false
             }
-            Object => todo!("what is this?? :D"),
+            // FIXME should be something like matches!(other, DataType::Object | DataType::Reference(_) | DataType::Null)
+            // but that would require making object nullable
+            Object => matches!(other, DataType::Object),
             Void => false,
             Value => true,
             _ => self == other
