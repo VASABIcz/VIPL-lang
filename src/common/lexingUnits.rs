@@ -176,7 +176,7 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
     }
 
     fn parse(
-        &mut self,
+        &self,
         lexer: &mut SourceProvider,
     ) -> Result<Option<Token<TokenType>>, LexerError> {
         let mut buf = String::new();

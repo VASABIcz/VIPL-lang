@@ -235,7 +235,7 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     }
 }
 
-pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &mut [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
+pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
     let tokens = TokenProvider::new(toks);
 
     let mut parser = Parser{
@@ -325,7 +325,15 @@ pub fn parseDataType(
             "int" => Ok(DataType::Int),
             "float" => Ok(DataType::Float),
             "value" => Ok(DataType::Value),
-            "object" => Ok(DataType::Object),
+            "object" => {
+                if tokens.isPeekType(QuestionMark) {
+                    tokens.getAssert(QuestionMark)?;
+                    Ok(DataType::Object(true))
+                }
+                else {
+                    Ok(DataType::Object(false))
+                }
+            },
             c => {
                 let nullable = tokens.ifPeekGet(QuestionMark).is_some();
 

@@ -1,4 +1,5 @@
 #![feature(slice_ptr_get)]
+#![allow(non_snake_case)]
 
 use std::{env, fs};
 use std::mem::size_of;
@@ -9,7 +10,7 @@ use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
 use vipl::std::std::bootStrapVM;
-use vipl::utils::namespacePath;
+use vipl::utils::{genNamespaceName, namespacePath};
 use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::value::Value;
@@ -19,15 +20,13 @@ use vipl::vm::vm::OpCode::Pop;
 fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
 
-    let mut lexingUnits = lexingUnits();
-    let mut parsingUnits = parsingUnits();
+    vm.loadNamespace("/home/vasabi/programing/rust/vm-rust-test/draft/core.vipl", &["core".into()]).unwrap();
 
     let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
     let file = fs::read_to_string(&sourceFile).unwrap();
 
-
-    let res = match loadSourceFile(&file, &mut vm, &mut lexingUnits, &mut parsingUnits) {
+    let id = match vm.loadNamespaceFromString(&file, &name) {
         Ok(v) => v,
         Err(e) => {
             match e {
@@ -37,12 +36,6 @@ fn main() -> Result<(), ()> {
             return Err(())
         }
     };
-
-    // println!("AST: {:#?}", res);
-
-    let n = Namespace::constructNamespace(res, &name.join("::"), &mut vm, vec![]);
-    let id = vm.registerNamespace(n);
-
 
     if let Err(ret) = vm.link(|c, t| {
         if !t.isVoid() {
@@ -73,13 +66,12 @@ fn main() -> Result<(), ()> {
 
     unsafe {
         f.as_ref().unwrap().call(&mut *vm1,
-            StackFrame {
-                localVariables: ptr.as_mut_ptr(),
-                programCounter: 0,
-                namespaceId: nn.id,
-                functionId: nn.getFunctions().len() - 1,
-            },
-            false,
+                                 StackFrame::new(
+                                     ptr.as_mut_ptr(),
+                                     nn.id,
+                                     nn.getFunctions().len() - 1,
+                                 ),
+                                 false,
         );
     }
     let elapsed = now.elapsed();

@@ -1,4 +1,5 @@
 from out import print
+from strings import *
 
 fn rng(n: int): String? = n % 2 == 0 ? "UwU" : null
 
@@ -7,3 +8,9 @@ x = "OwO"
 x = rng 3 ?: "hello"
 
 print x
+
+fn hello(name: String?): String {
+    return "hello " + (name ?: "null")
+}
+
+print(hello(null))

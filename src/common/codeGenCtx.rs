@@ -73,6 +73,18 @@ pub struct SimpleCtx<'a, T> {
 }
 
 impl<T> SimpleCtx<'_, T> {
+    pub fn isVariableParts(&mut self, name: &[String]) -> bool {
+        if name.is_empty() {
+            return false;
+        }
+
+        if name.len() > 1 {
+            return self.findGlobalParts(name).is_ok()
+        }
+
+        return self.getLocal(&name[0]).is_ok() || self.findGlobalParts(name).is_ok()
+    }
+
     pub fn getVMMut(&mut self) -> &mut VirtualMachine {
         self.vm.get_mut()
     }
@@ -176,7 +188,7 @@ impl<T> SimpleCtx<'_, T> {
         self.symbols.getFunctionPartsArgs(name, args)
     }
 
-    pub fn getVariable(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
+    pub fn getLocal(&self, varName: &str) -> Result<&(DataType, usize), CodeGenError> {
         self.symbols.getLocal(varName)
     }
 
@@ -185,7 +197,7 @@ impl<T> SimpleCtx<'_, T> {
     }
 
     pub fn lookupFunctionByBaseName(&self, name: &str) -> Result<(&String, &FunctionSymbol), CodeGenError> {
-        Ok(*self.symbols.getFunctionsByName(name).first().ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?)
+        Ok(*self.symbols.getFunctionsByBaseName(name).first().ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?)
     }
 
     pub fn registerVariable(&mut self, name: &str, t: DataType) -> usize {
@@ -203,13 +215,11 @@ impl<T> SimpleCtx<'_, T> {
 
     pub fn makeExpressionCtx<'a>(
         &'a mut self,
-        exp: &'a Expression,
-        typeHint: Option<DataType>,
+        exp: &'a Expression
     ) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
             ctx: self.transfer(),
-            typeHint
         }
     }
 
@@ -237,7 +247,6 @@ impl<T> SimpleCtx<'_, T> {
 #[derive(Debug)]
 pub struct ExpressionCtx<'a, T> {
     pub exp: &'a Expression,
-    pub typeHint: Option<DataType>,
     pub ctx: SimpleCtx<'a, T>
 }
 
@@ -253,10 +262,9 @@ impl<T> ExpressionCtx<'_, T> {
         Ok(())
     }
 
-    pub fn transfer<'a>(&'a mut self, exp: &'a Expression) -> ExpressionCtx<T> {
+    pub fn transfer<'a>(&'a mut self, exp: &'a Expression, /*typeHint: Option<DataType>*/) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
-            typeHint: None,
             ctx: self.ctx.transfer()
         }
     }
@@ -292,34 +300,52 @@ impl<T> ExpressionCtx<'_, T> {
                 let rightT = self.transfer(right).toDataType()?;
 
                 if !left.isNull() && !right.isNull() && leftT != rightT {
-                    return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())))
+                    return Err(CodeGenError::TypeError( TypeError::new(leftT, rightT, self.exp.clone())))
                 }
 
                 let t = match o {
-                    BinaryOp::Gt => Bool,
-                    BinaryOp::Less => Bool,
-                    BinaryOp::Eq => Bool,
-                    BinaryOp::And => Bool,
-                    BinaryOp::Or => Bool,
-                    BinaryOp::Add => leftT,
-                    BinaryOp::Sub => leftT,
-                    BinaryOp::Mul => leftT,
-                    BinaryOp::Div => Float,
-                    BinaryOp::Modulo => leftT,
-                    BinaryOp::NotEq => Bool,
-                    BinaryOp::ShiftLeft => Int,
-                    BinaryOp::ShiftRight => Int,
-                    BinaryOp::BitwiseOr => Int,
-                    BinaryOp::BitwiseAnd => Int,
-                    BinaryOp::Xor => Int
+                    BinaryOp::Gt | BinaryOp::Less => {
+                        assert!(rightT.supportsComparisson());
+
+                        Bool
+                    }
+                    BinaryOp::Eq | BinaryOp::NotEq => {
+                        assert!(rightT.supportsEquals());
+
+                        Bool
+                    }
+                    BinaryOp::And | BinaryOp::Or => {
+                        assert!(rightT.isBoolLike());
+
+                        Bool
+                    }
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Modulo  => {
+                        if o == &BinaryOp::Add && rightT.isString() {
+                            return Ok(DataType::str())
+                        }
+
+                        assert!(rightT.supportsArithmetics());
+
+                        leftT.toUnboxedType()
+                    },
+                    BinaryOp::Div => {
+                        assert!(rightT.supportsArithmetics());
+
+                        Float
+                    },
+                    BinaryOp::BitwiseAnd | BinaryOp::Xor | BinaryOp::BitwiseOr | BinaryOp::ShiftRight | BinaryOp::ShiftLeft => {
+                        assert!(rightT.isBoolLike());
+
+                        Int
+                    }
                 };
 
                 Ok(t)
             }
-            RawExpression::IntLiteral(_) => Ok(DataType::Int),
-            RawExpression::FloatLiteral(_) => Ok(DataType::Float),
+            RawExpression::IntLiteral(_) => Ok(Int),
+            RawExpression::FloatLiteral(_) => Ok(Float),
             RawExpression::StringLiteral(_) => Ok(DataType::str()),
-            RawExpression::Variable(name) => match self.ctx.getVariable(name) {
+            RawExpression::Variable(name) => match self.ctx.getLocal(name) {
                 Err(_) => {
                     let (funcName, fun) = self.ctx.lookupFunctionByBaseName(name)?;
 
@@ -329,41 +355,14 @@ impl<T> ExpressionCtx<'_, T> {
                     Ok(v.0.clone())
                 },
             },
-            RawExpression::BoolLiteral(_) => Ok(DataType::Bool),
+            RawExpression::BoolLiteral(_) => Ok(Bool),
             RawExpression::CharLiteral(_) => Ok(Char),
             RawExpression::ArrayLiteral(e) => {
-                if e.is_empty() {
-                    let l = &self.typeHint;
-                    let c = l.clone().ok_or_else(||CodeGenError::UntypedEmptyArray)?;
-                    match c {
-                        Reference(o) => {
-                            if o.name.as_str() == "Array" {
-                                let e = o
-                                    .generics
-                                    .first()
-                                    .ok_or_else(||CodeGenError::ArrayWithoutGenericParameter)?;
-                                Ok(DataType::arr(e.clone()))
-                            } else {
-                                Err(CodeGenError::TypeError(TypeError::new(
-                                    DataType::arr(Any),
-                                    Reference(o.clone()),
-                                    e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()
-                                )))
-                            }
-                        }
-                        v => Err(CodeGenError::TypeError(TypeError::new(
-                            DataType::arr(Any),
-                            v.clone(),
-                            e.first().ok_or_else(||CodeGenError::VeryBadState)?.clone()
-                        ))),
-                    }
-                } else {
-                    let t = self
-                        .transfer(e.get(0).ok_or_else(||CodeGenError::UntypedEmptyArray)?)
-                        .toDataTypeNotVoid()?;
+                let t = self
+                    .transfer(e.get(0).ok_or_else(||CodeGenError::UntypedEmptyArray)?)
+                    .toDataTypeNotVoid()?;
 
-                    Ok(DataType::arr(Generic::Type(t)))
-                }
+                Ok(DataType::arr(Generic::Type(t)))
             }
             RawExpression::ArrayIndexing(i) => {
                 let e = self.transfer(&i.expr).toDataTypeNotVoid()?;
@@ -403,7 +402,7 @@ impl<T> ExpressionCtx<'_, T> {
             RawExpression::Callable(prev, args) => unsafe {
                 match &prev.exp {
                     RawExpression::Variable(v) => {
-                        if self.ctx.getVariable(v).is_err() {
+                        if self.ctx.getLocal(v).is_err() {
                             let gz = args
                                 .iter()
                                 .map(|it| self.transfer(it).toDataType())
@@ -414,7 +413,7 @@ impl<T> ExpressionCtx<'_, T> {
                         }
 
 
-                        let var = self.ctx.getVariable(v)?;
+                        let var = self.ctx.getLocal(v)?;
                         match &var.0 {
                             DataType::Function { ret, .. } => Ok(*ret.clone()),
                             _ => Err(CodeGenError::ExpectedLambda),
@@ -536,6 +535,14 @@ impl<T> ExpressionCtx<'_, T> {
                 let a = self.transfer(nullable).toDataTypeNotVoid()?;
                 let b = self.transfer(otherwise).toDataTypeNotVoid()?;
 
+                if a.canAssign(&b) && let Ok(mut v) = a.getRef() {
+                    v.nullable = false;
+
+                    return Ok(Reference(v));
+                }
+
+                panic!();
+
                 if a.isNullable() && b.isNull() {
                     return Ok(a)
                 }
@@ -557,7 +564,7 @@ impl<T> ExpressionCtx<'_, T> {
                         return Ok(Reference(b1.clone()))
                     }
                 }
-
+                panic!("{:?} {:?}", a, b);
                 Err(CodeGenError::ExpectedReference)
             }
         }

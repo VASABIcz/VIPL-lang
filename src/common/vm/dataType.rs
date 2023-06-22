@@ -38,39 +38,99 @@ pub enum DataType {
     },
     Void,
     Value,
-    // TODO meke it nullable
-    Object,
+    Object(bool),
     Null
 }
 
 impl DataType {
     pub fn canAssign(&self, other: &DataType) -> bool {
-        match self {
-            Reference(r) => if let Reference(r1) = other {
-                r.name == r1.name && (r.nullable == r1.nullable || r.nullable)
-            }
-            else {
-                false
-            }
-            // FIXME should be something like matches!(other, DataType::Object | DataType::Reference(_) | DataType::Null)
-            // but that would require making object nullable
-            Object => matches!(other, DataType::Object),
-            Void => false,
-            Value => true,
-            _ => self == other
+        if self.isVoid() || other.isVoid() {
+            return false;
         }
+
+        if self == other || self.isValue() {
+            return true;
+        }
+
+        if self.isObjectNonNullable() && other.isNonNullable() {
+            return true
+        }
+
+        if self.isObjectNullable() && other.isReference() {
+            return true;
+        }
+
+        if let Reference(r) = self && let Reference(r1) = other {
+            return r.name == r1.name && (r.nullable == r1.nullable || r.nullable)
+        }
+
+        if self.isNullable() && other.isNull() {
+            return true
+        }
+
+        if self.isInt() && other.isRefNamed("Int") {
+            return true
+        }
+
+        if self.isFloat() && other.isRefNamed("Float") {
+            return true
+        }
+
+        if self.isBool() && other.isRefNamed("Bool") {
+            return true
+        }
+
+        if self.isChar() && other.isRefNamed("Char") {
+            return true
+        }
+
+        if other.isInt() && self.isRefNamed("Int") {
+            return true
+        }
+
+        if other.isFloat() && self.isRefNamed("Float") {
+            return true
+        }
+
+        if other.isBool() && self.isRefNamed("Bool") {
+            return true
+        }
+
+        if other.isChar() && self.isRefNamed("Char") {
+            return true
+        }
+        todo!("tgt {:?} val {:?}", self, other)
     }
 
     pub fn isReference(&self) -> bool {
         matches!(self, DataType::Reference(_))
     }
 
+    pub fn isRefNamed(&self, name: &str) -> bool {
+        match self {
+            Reference(r) => r.name == name,
+            _ => false
+        }
+    }
+
     pub fn isNullable(&self) -> bool {
         matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: true}))
     }
 
+    pub fn isNonNullable(&self) -> bool {
+        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: false}))
+    }
+
+    pub fn isObjectNullable(&self) -> bool {
+        matches!(self, DataType::Object(true))
+    }
+
+    pub fn isObjectNonNullable(&self) -> bool {
+        matches!(self, DataType::Object(false))
+    }
+
     pub fn isObject(&self) -> bool {
-        matches!(self, DataType::Object)
+        matches!(self, DataType::Object(_))
     }
 
     pub fn toRawType(self) -> Result<RawDataType, CodeGenError> {
@@ -84,6 +144,16 @@ impl DataType {
             Reference(_) => RawDataType::Int,
             Null => RawDataType::Int,
             _ => Err(CodeGenError::ExpectedRawType)?
+        })
+    }
+
+    pub fn toRawTypeWeak(self) -> Result<RawDataType, CodeGenError> {
+        Ok(match self {
+            Int => RawDataType::Int,
+            Float => RawDataType::Float,
+            Bool => RawDataType::Bool,
+            Char => RawDataType::Char,
+            _ => todo!()
         })
     }
 
@@ -106,6 +176,7 @@ impl DataType {
         match self {
             Reference(v) => Ok(v),
             _ => {
+                panic!();
                 Err(CodeGenError::ExpectedReference)
             }
         }
@@ -152,6 +223,22 @@ impl DataType {
         matches!(self, Float)
     }
 
+    pub fn isBool(&self) -> bool {
+        matches!(self, Bool)
+    }
+
+    pub fn isBoolLike(&self) -> bool {
+        self.isBool() || self.isRefNamed("Bool")
+    }
+
+    pub fn isIntLIke(&self) -> bool {
+        self.isInt() || self.isRefNamed("Int")
+    }
+
+    pub fn isChar(&self) -> bool {
+        matches!(self, Char)
+    }
+
     pub fn isNumeric(&self) -> bool {
         matches!(self, Float | Int)
     }
@@ -189,12 +276,12 @@ impl DataType {
         })
     }
 
-    pub fn obj(name: &'static str) -> Self {
-        Reference(ObjectMeta {
-            name: name.to_string(),
-            generics: Box::new([]),
-            nullable: false,
-        })
+    pub fn obj(name: &str) -> Self {
+        Reference(ObjectMeta::nunNull(name))
+    }
+
+    pub fn nullObj(name: &str) -> Self {
+        Reference(ObjectMeta::nullable(name))
     }
 
     pub fn toString(&self) -> String {
@@ -234,7 +321,7 @@ impl DataType {
                     .join(", "),
                 ret.toString()
             ),
-            Object => "object".to_string(),
+            Object(n) => if !n { "object".to_string() } else { "object?".to_string() },
             Null => "null".to_string()
         }
     }
@@ -244,6 +331,81 @@ impl DataType {
         match self {
             Void => unreachable!(),
             _ => Value::null()
+        }
+    }
+
+    pub fn toCompatibleTypesIncluding(&self) -> Vec<DataType> {
+        let mut buf = vec![];
+        buf.push(self.clone());
+
+        match self {
+            Int => {
+                buf.push(DataType::obj("Int"));
+                buf.push(DataType::nullObj("Int"));
+            }
+            Float => {
+                buf.push(DataType::obj("Float"));
+                buf.push(DataType::nullObj("Float"));
+            }
+            Bool => {
+                buf.push(DataType::obj("Bool"));
+                buf.push(DataType::nullObj("Bool"));
+            }
+            Char => {
+                buf.push(DataType::obj("Char"));
+                buf.push(DataType::nullObj("Char"));
+            }
+            // FIXME missing case that we want to convert boxed value into primitive
+            Reference(meta) => {
+                if !meta.nullable {
+                    let mut clon = meta.clone();
+                    clon.nullable = true;
+                    buf.push(Reference(clon))
+                }
+            }
+            Void => {
+                return vec![]
+            }
+            _ => {}
+        }
+
+        buf.push(DataType::Value);
+
+        buf
+    }
+
+    pub fn supportsEquals(&self) -> bool {
+        !matches!(self, Void | Value)
+    }
+
+    pub fn supportsComparisson(&self) -> bool {
+        self.isPrimitiveType() || self.isBoxedValue()
+    }
+
+    pub fn isPrimitiveType(&self) -> bool {
+        matches!(self, Int | Float | Bool | Char)
+    }
+
+    pub fn isBoxedValue(&self) -> bool {
+        self.isRefNamed("Int") || self.isRefNamed("Float") || self.isRefNamed("Bool") || self.isRefNamed("Char")
+    }
+
+    pub fn supportsArithmetics(&self) -> bool {
+        self.isPrimitiveType() || self.isBoxedValue()
+    }
+
+    pub fn toUnboxedType(self) -> DataType {
+        if self.isBoxedValue() {
+            match self.getRef().unwrap().name.as_str() {
+                "Int" => Int,
+                "Float" => Float,
+                "Bool" => Bool,
+                "Char" => Char,
+                _ => unreachable!()
+            }
+        }
+        else {
+            self
         }
     }
 }

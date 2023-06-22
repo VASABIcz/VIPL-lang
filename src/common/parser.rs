@@ -254,14 +254,14 @@ pub trait ParsingUnit<OUT: Debug, IN: PartialEq + Clone + Debug, STATE: Debug>: 
     ) -> Result<OUT, ParserError<IN>>;
 
     fn getPriority(&self) -> usize {
-        todo!()
+        unreachable!()
     }
 }
 
 #[derive(Debug)]
 pub struct Parser<'a, IN: Clone + PartialEq + Debug + 'static, OUT: Debug, STATE: Debug> {
     pub tokens: TokenProvider<IN>,
-    pub units: &'a mut [Box<dyn ParsingUnit<OUT, IN, STATE>>],
+    pub units: &'a [Box<dyn ParsingUnit<OUT, IN, STATE>>],
     pub state: STATE,
     pub previousBuf: Vec<OUT>
 }
@@ -277,7 +277,7 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
     ) -> Result<bool, ParserError<IN>> {
         let s2 = unsafe { &mut *(self as *mut Parser<_, _, _>) };
 
-        for unit in &mut *self.units {
+        for unit in self.units {
             let parserType = unit.getType();
 
             if parserType != typ {

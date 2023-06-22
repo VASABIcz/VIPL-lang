@@ -72,7 +72,7 @@ impl SymbolManager {
         self.usedLocals -= f.len();
     }
     
-    pub fn getFunctionsByName(&self, name: &str) -> Vec<(&String, &FunctionSymbol)> {
+    pub fn getFunctionsByBaseName(&self, name: &str) -> Vec<(&String, &FunctionSymbol)> {
         let n = format!("{}(", name);
         
         self.functions.iter().filter(|it| it.0.starts_with(&n)).collect::<Vec<_>>()
@@ -83,38 +83,41 @@ impl SymbolManager {
     }
 
     pub fn getFunctionPartsArgs(&self, name: &[String], args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
-        self.getFunction(&genFunName(&genNamespaceName(name), args))
+        self.getFunctionArgs(&genNamespaceName(name), args)
     }
 
     pub fn getFunctionArgs(&self, name: &str, args: &[DataType]) -> Result<&FunctionSymbol, CodeGenError> {
-        if args.len() == 0 {
+        if args.is_empty() {
             return self.getFunction(&genFunName(name, args))
         }
 
-        // FIXME this is pretty bad
-        for pattern in 0..(args.len() * args.len()) {
-            let mut buf = vec![];
+        let first = self.getFunction(&genFunName(name, args));
+        if let Ok(v) = first {
+            return Ok(v);
+        }
 
-            for o in 0..args.len() {
-                if (pattern & (1 << o)) != 0 {
-                    buf.push(DataType::Value)
-                } else {
-                    buf.push(args[o].clone())
-                }
+        let funcs = self.getFunctionsByBaseName(name);
+
+        if funcs.is_empty() {
+            return first;
+        }
+
+        let possibilities = args.iter().map(|it| it.toCompatibleTypesIncluding()).collect::<Vec<_>>();
+
+        for (_, fMeta) in funcs {
+            if args.len() != fMeta.args.len() {
+                continue
             }
 
-            match self.getFunction(&genFunName(name, &buf)) {
-                Ok(v) => {
-                    return Ok(v)
+            for (i, arg) in fMeta.args.iter().enumerate() {
+                if !possibilities[i].iter().any(|it| arg.canAssign(&it)) {
+                    continue
                 }
-                Err(e) => {
-                    if pattern == (args.len() * args.len())-1 {
-                        return Err(e)
-                    }
-                }
+                return Ok(fMeta)
             }
         }
-        unreachable!()
+
+        first
     }
 
     pub fn getFunction(&self, name: &str) -> Result<&FunctionSymbol, CodeGenError> {

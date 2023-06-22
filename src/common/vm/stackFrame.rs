@@ -19,6 +19,15 @@ pub struct StackFrame {
 }
 
 impl StackFrame {
+    pub fn new(locals: *mut Value, nId: usize, fId: usize) -> Self {
+        Self {
+            localVariables: locals,
+            programCounter: 0,
+            namespaceId: nId,
+            functionId: fId,
+        }
+    }
+
     pub fn get(&self, index: usize) -> Value {
         unsafe { self.localVariables.add(index).read() }
     }

@@ -1,4 +1,4 @@
-import out
+ import out
 
 struct MyStruct {
   x: int

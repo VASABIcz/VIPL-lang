@@ -1,11 +1,17 @@
 struct String {}
 
-struct Array<T> {}
+struct Int {
+    value: int
+}
 
-x = [1, 2, 3]
+struct Bool {
+    value: bool
+}
 
-assert x is Array<int>
+struct Char {
+    value: char
+}
 
-c = x as object
-
-assert !(c as Array<char>)
+struct Float {
+    value: float
+}

@@ -1,4 +1,4 @@
-use std::{intrinsics, ptr};
+use std::{fs, intrinsics, ptr};
 use std::alloc::{alloc, dealloc, Layout};
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
@@ -9,20 +9,25 @@ use std::intrinsics::{read_via_copy, unlikely};
 use std::mem::{size_of, transmute};
 
 use crate::asm::jitCompiler::JITCompiler;
-use crate::ast::FunctionDef;
+use crate::ast::{ASTNode, FunctionDef};
 use crate::bytecodeGen::{emitOpcodes, genFunctionDef, SymbolicOpcode};
 use crate::codeGenCtx;
 use crate::codeGenCtx::{ExpressionCtx, SimpleCtx, StatementCtx};
-use crate::errors::{CodeGenError, SymbolNotFoundE, SymbolType};
+use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
 use crate::ffi::{allocateObject, NativeWrapper};
+use crate::lexer::LexingUnit;
+use crate::lexingUnits::{lexingUnits, TokenType};
 use crate::naughtyBox::Naughty;
+use crate::parser::ParsingUnit;
+use crate::parsingUnits::parsingUnits;
 use crate::symbolManager::SymbolManager;
 use crate::utils::{FastVec, genFunName, genNamespaceName, printOps, readNeighbours, transform};
+use crate::viplParser::VIPLParsingState;
 use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
-use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, Namespace};
+use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, loadSourceFile, Namespace};
 use crate::vm::namespace::LoadedFunction::Native;
 use crate::vm::namespace::NamespaceState::{FailedToLoad, Loaded};
 use crate::vm::namespaceLoader::NamespaceLoader;
@@ -48,7 +53,7 @@ pub enum ImportHints {
 
 // FIXME DEBUG is faster than default
 const DEBUG: bool = false;
-const TRACE: bool = false;
+const TRACE: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -212,6 +217,9 @@ pub struct VirtualMachine {
     namespaces: FastAccess<String, Namespace>,
 
     jitCompiler: JITCompiler,
+
+    lexingUnits: Vec<Box<dyn LexingUnit<TokenType>>>,
+    parsingUnits: Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>>
 }
 
 impl VirtualMachine {
@@ -366,12 +374,16 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn pop(&mut self) -> Value {
-        unsafe {
-            self
-                .stack
-                .pop()
-                .unwrap()
+        let v = self
+            .stack
+            .pop()
+            .unwrap();
+
+        if TRACE {
+            println!("poped {:?}", v);
         }
+
+        v
     }
 
     #[inline(always)]
@@ -394,6 +406,7 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn push(&mut self, value: Value) {
+        println!("pushed {:?}", value);
         self.stack.push(value)
     }
 
@@ -439,9 +452,6 @@ impl VirtualMachine {
         let s = self.stack.len();
         unsafe { self.stack.get_unchecked(s - 1) }
     }
-}
-
-impl VirtualMachine {
     #[inline(always)]
     pub fn getFrame(&self) -> &StackFrame {
         if DEBUG || TRACE {
@@ -898,6 +908,7 @@ impl VirtualMachine {
 
     pub fn allocateObject(&mut self, nId: usize, sId: usize) -> *mut UntypedObject {
         let n = self.getNamespace(nId);
+
         let s = n.getStruct(sId);
 
         let mut l = Layout::new::<()>();
@@ -973,7 +984,6 @@ impl VirtualMachine {
 
                     let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
                         exp: &g.0.default,
-                        typeHint: None,
                         ctx: simpleCtx
                     };
                     g.0.typ = ctx.toDataType().map_err(|it| vec![it])?;
@@ -1066,6 +1076,29 @@ impl VirtualMachine {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn loadNamespace(&mut self, path: &str, name: &[String]) -> Result<usize, LoadFileError<TokenType>> {
+        // TODO create more complex logic for loading namespaces
+        let file = fs::read_to_string(path).unwrap();
+
+        self.loadNamespaceFromString(&file, name)
+    }
+
+    pub fn loadNamespaceFromString(&mut self, data: &str, name: &[String]) -> Result<usize, LoadFileError<TokenType>> {
+        let res = loadSourceFile(&data, &self.lexingUnits, &self.parsingUnits)?;
+
+        let n = Namespace::constructNamespace(res, &genNamespaceName(name), self, vec![]);
+
+        Ok(self.registerNamespace(n))
+    }
+
+    pub fn getLexingUnits(&self) -> &[Box<dyn LexingUnit<TokenType>>] {
+        &self.lexingUnits
+    }
+
+    pub fn getParsingUnits(&self) -> &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>] {
+        &self.parsingUnits
+    }
 }
 
 impl Default for VirtualMachine {
@@ -1077,6 +1110,8 @@ impl Default for VirtualMachine {
             frames: Vec::with_capacity(32),
             namespaces: Default::default(),
             jitCompiler: Default::default(),
+            lexingUnits: lexingUnits(),
+            parsingUnits: parsingUnits(),
         }
     }
 }

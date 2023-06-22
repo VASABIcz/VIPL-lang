@@ -1,0 +1,9 @@
+from out import print
+from core import *
+from strings import *
+
+fn addInt(a: Int?, b: Int?): int {
+    return (a ?: 0) + (b ?: 0)
+}
+
+print addInt(null, null)

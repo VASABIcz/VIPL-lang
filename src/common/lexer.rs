@@ -10,13 +10,13 @@ use crate::lexingUnits::TokenType;
 const DEBUG: bool = false;
 
 pub fn tokenize<T: Debug + Send + Sync + PartialEq + Clone>(
-    lexingUnits: &mut [Box<dyn LexingUnit<T>>],
+    lexingUnits: &[Box<dyn LexingUnit<T>>],
     mut source: SourceProvider,
 ) -> Result<Vec<Token<T>>, LexerError> {
     let mut buf = vec![];
 
     'main: while !source.isDone() {
-        for unit in lexingUnits.iter_mut() {
+        for unit in lexingUnits.iter() {
             if unit.canParse(&source) {
                 if DEBUG {
                     println!("lexer working on {:?}", unit);
@@ -36,7 +36,7 @@ pub fn tokenize<T: Debug + Send + Sync + PartialEq + Clone>(
     Ok(buf)
 }
 
-pub fn tokenizeSource(src: &str, units: &mut [Box<dyn LexingUnit<TokenType>>]) -> Result<Vec<Token<TokenType>>, LexerError> {
+pub fn tokenizeSource(src: &str, units: &[Box<dyn LexingUnit<TokenType>>]) -> Result<Vec<Token<TokenType>>, LexerError> {
     let source: SourceProvider = SourceProvider {
         data: src,
         index: 0,
@@ -230,7 +230,7 @@ pub struct Token<T: PartialEq + Clone + Clone> {
 pub trait LexingUnit<T: Debug + PartialEq + Clone>: Send + Sync + Debug {
     fn canParse(&self, lexer: &SourceProvider) -> bool;
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError>;
+    fn parse(&self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError>;
 }
 
 #[derive(Debug)]
@@ -250,7 +250,7 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T>
             )
     }
 
-    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+    fn parse(&self, source: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
         let token = source.assertAmount(self.keyword.len(), self.tokenType)?;
 
         Ok(Some(token))
@@ -282,7 +282,7 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for RangeL
         lexer.isPeek(self.start)
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+    fn parse(&self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
         let loc = lexer.getLocation();
 
         lexer.consumeMany(self.start.len());
@@ -350,7 +350,7 @@ impl<T: Debug + Clone + Sync + Send + PartialEq> LexingUnit<T> for IdentifierLex
         lexer.isPeekChar(|it| it.is_ascii_alphabetic() || it == '_')
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+    fn parse(&self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
         lexer.consumeWhileMatches(
             |it| it.is_alphanumeric() || it == '_',
             Some(self.tokenType.clone()),
@@ -373,7 +373,7 @@ impl<T: Debug + Send + Sync + PartialEq + Clone> LexingUnit<T> for WhitespaceLex
         lexer.isPeekChar(|it| it.is_whitespace())
     }
 
-    fn parse(&mut self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+    fn parse(&self, lexer: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
         lexer.consumeWhileMatches::<T>(|it| it.is_whitespace(), None)?;
 
         Ok(None)
@@ -385,7 +385,7 @@ impl<T: Debug + Send + Sync + Clone + Copy + PartialEq> LexingUnit<T> for Keywor
         lexer.isPeek(self.keyword)
     }
 
-    fn parse(&mut self, source: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
+    fn parse(&self, source: &mut SourceProvider) -> Result<Option<Token<T>>, LexerError> {
         let t = source.assertAmount(self.keyword.len(), self.tokenType)?;
 
         Ok(Some(t))
