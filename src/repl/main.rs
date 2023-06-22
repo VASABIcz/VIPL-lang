@@ -99,7 +99,7 @@ fn handleExpression(ctx: &mut StatementCtx<SymbolicOpcode>, t: DataType) {
         DataType::Void => {}
         DataType::Value => ctx.push(Pop),
         // FIXME handle these cases
-        DataType::Object => {},
+        DataType::Object(_) => {},
         DataType::Null => {}
     }
 }
@@ -137,7 +137,7 @@ fn main() -> Result<(), ()> {
 
         historyBuf.push(userInput.clone());
 
-        let v = match loadSourceFile(&userInput, &mut vm, &mut lexingUnits, &mut parsingUnits) {
+        let v = match loadSourceFile(&userInput, &mut lexingUnits, &mut parsingUnits) {
             Ok(v) => v,
             Err(e) => {
                 match e {
