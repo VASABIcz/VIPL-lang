@@ -20,7 +20,7 @@ use vipl::vm::vm::OpCode::Pop;
 fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
 
-    vm.loadNamespace("/home/vasabi/programing/rust/vm-rust-test/draft/core.vipl", &["core".into()]).unwrap();
+    vm.loadNamespace("draft/core.vipl", &["core".into()]).unwrap();
 
     let sourceFile = env::args().nth(1).expect("expected source field");
     let name = namespacePath(&sourceFile);
