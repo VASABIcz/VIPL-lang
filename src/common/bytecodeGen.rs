@@ -818,7 +818,7 @@ pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionC
         return exp.genExpressionBox();
     }
 
-    todo!()
+    todo!("src: {src:?}, tgt: {tgt:?}")
 }
 
 pub fn genExpressionExpecting(mut ctx: ExpressionCtx<SymbolicOpcode>, expect: Option<DataType>) -> Result<(), CodeGenError> {
@@ -1128,11 +1128,12 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
                 r.ctx.opJmp(falseLabel, False);
 
-                r.transfer(tr).genExpressionExpecting(t.clone())?;
+                // FIXME this should propably be gen expecting but it causes segfault investigate
+                r.transfer(tr).genExpression()?;
                 r.ctx.opJmp(endLabel, JmpType::Jmp);
 
                 r.ctx.makeLabel(falseLabel);
-                r.transfer(fal).genExpressionExpecting(t)?;
+                r.transfer(fal).genExpression()?;
 
                 r.ctx.makeLabel(endLabel);
             }

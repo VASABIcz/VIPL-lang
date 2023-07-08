@@ -126,7 +126,7 @@ impl DataType {
     }
 
     pub fn isReferenceNonNullable(&self) -> bool {
-        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: true}))
+        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: false}))
     }
 
     pub fn isObjectNullable(&self) -> bool {
