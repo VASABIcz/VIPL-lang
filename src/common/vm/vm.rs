@@ -164,7 +164,9 @@ pub enum OpCode {
     IsStruct {
         namespaceId: usize,
         structId: usize,
-    }
+    },
+    PushNull,
+    AssertNotNull
 }
 
 #[derive(Debug, Clone)]
@@ -872,6 +874,14 @@ impl VirtualMachine {
                 ShiftLeft => {
                     let a = self.pop();
                     self.getMutTop().shiftLeft(a);
+                }
+                AssertNotNull => {
+                    if self.pop().getNum() == 0 {
+                        panic!()
+                    }
+                }
+                PushNull => {
+                    self.push(0.into())
                 }
                 o => {
                     if DEBUG || TRACE {

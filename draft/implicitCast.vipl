@@ -1,0 +1,6 @@
+from out import print
+from core import *
+
+x = 2 % 2 == 0 ? 6 : null
+
+print (x ?: 0)

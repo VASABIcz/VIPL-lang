@@ -22,6 +22,14 @@ impl RawDataType {
             RawDataType::Char => DataType::Char
         }
     }
+
+    pub fn isFloat(&self) -> bool {
+        matches!(self, RawDataType::Float)
+    }
+
+    pub fn isBool(&self) -> bool {
+        matches!(self, RawDataType::Bool)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -52,7 +60,7 @@ impl DataType {
             return true;
         }
 
-        if self.isObjectNonNullable() && other.isNonNullable() {
+        if self.isObjectNonNullable() && other.isReferenceNonNullable() {
             return true
         }
 
@@ -64,7 +72,7 @@ impl DataType {
             return r.name == r1.name && (r.nullable == r1.nullable || r.nullable)
         }
 
-        if self.isNullable() && other.isNull() {
+        if self.isReferenceNullable() && other.isNull() {
             return true
         }
 
@@ -99,7 +107,7 @@ impl DataType {
         if other.isChar() && self.isRefNamed("Char") {
             return true
         }
-        todo!("tgt {:?} val {:?}", self, other)
+        return false
     }
 
     pub fn isReference(&self) -> bool {
@@ -113,12 +121,12 @@ impl DataType {
         }
     }
 
-    pub fn isNullable(&self) -> bool {
+    pub fn isReferenceNullable(&self) -> bool {
         matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: true}))
     }
 
-    pub fn isNonNullable(&self) -> bool {
-        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: false}))
+    pub fn isReferenceNonNullable(&self) -> bool {
+        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: true}))
     }
 
     pub fn isObjectNullable(&self) -> bool {
@@ -379,23 +387,48 @@ impl DataType {
     }
 
     pub fn supportsComparisson(&self) -> bool {
-        self.isPrimitiveType() || self.isBoxedValue()
+        self.isPrimitiveType() || self.isBoxed()
     }
 
     pub fn isPrimitiveType(&self) -> bool {
         matches!(self, Int | Float | Bool | Char)
     }
 
-    pub fn isBoxedValue(&self) -> bool {
+    pub fn isBoxed(&self) -> bool {
         self.isRefNamed("Int") || self.isRefNamed("Float") || self.isRefNamed("Bool") || self.isRefNamed("Char")
     }
 
+    pub fn isBoxedNonNull(&self) -> bool {
+        self.isBoxed() && self.isReferenceNonNullable()
+    }
+
     pub fn supportsArithmetics(&self) -> bool {
-        self.isPrimitiveType() || self.isBoxedValue()
+        self.isPrimitiveType() || self.isBoxed()
+    }
+
+    pub fn toBoxedType(self) -> DataType {
+        match self {
+            Int => DataType::obj("Int"),
+            Float => DataType::obj("Float"),
+            Bool => DataType::obj("Bool"),
+            Char => DataType::obj("Char"),
+            _ => panic!()
+        }
+    }
+
+    pub fn toNullable(self) -> DataType {
+        match self {
+            Reference(mut o) => {
+                o.nullable = true;
+
+                Reference(o)
+            }
+            t => panic!("expected reference got {:?}", t)
+        }
     }
 
     pub fn toUnboxedType(self) -> DataType {
-        if self.isBoxedValue() {
+        if self.isBoxed() {
             match self.getRef().unwrap().name.as_str() {
                 "Int" => Int,
                 "Float" => Float,
@@ -404,8 +437,11 @@ impl DataType {
                 _ => unreachable!()
             }
         }
-        else {
+        else if self.isPrimitiveType() {
             self
+        }
+        else {
+            unreachable!()
         }
     }
 }

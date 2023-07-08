@@ -149,7 +149,7 @@ impl Object for Str {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Array {
-    pub internal: Vec<Value>
+      pub internal: Vec<Value>
 }
 
 impl Array {

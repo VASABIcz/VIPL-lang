@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::{Index, Range};
 use strum_macros::Display;
-use crate::codeGenCtx::Body;
+use crate::codeGenCtx::{Body, SimpleCtx};
 
 use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
 use crate::fastAccess::FastAccess;
@@ -13,7 +13,7 @@ use crate::lexingUnits::TokenType;
 use crate::utils::{genFunName, getRanges};
 use crate::vm::dataType::DataType::{Bool, Char, Reference};
 use crate::vm::dataType::Generic::Any;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
 use crate::vm::namespace::StructMeta;
 use crate::vm::variableMetadata::VariableMetadata;
 
@@ -35,6 +35,92 @@ pub enum BinaryOp {
     BitwiseOr,
     BitwiseAnd,
     Xor
+}
+
+impl BinaryOp {
+    pub fn toDataType(&self, a: RawDataType) -> RawDataType {
+        match self {
+            BinaryOp::Add => {
+                if a.isFloat() {
+                    RawDataType::Float
+                }
+                else {
+                    RawDataType::Int
+                }
+            }
+            BinaryOp::Sub => {
+                if a.isFloat() {
+                    RawDataType::Float
+                }
+                else {
+                    RawDataType::Int
+                }
+            }
+            BinaryOp::Mul => {
+                if a.isFloat() {
+                    RawDataType::Float
+                }
+                else {
+                    RawDataType::Int
+                }
+            }
+            BinaryOp::Div => {
+                RawDataType::Float
+            }
+            BinaryOp::Gt => {
+                RawDataType::Bool
+            }
+            BinaryOp::Less => {
+                RawDataType::Bool
+            }
+            BinaryOp::Eq => {
+                RawDataType::Bool
+            }
+            BinaryOp::NotEq => {
+                RawDataType::Bool
+            }
+            BinaryOp::And => {
+                assert!(a.isBool());
+
+                RawDataType::Bool
+            }
+            BinaryOp::Or => {
+                assert!(a.isBool());
+
+                RawDataType::Bool
+            }
+            BinaryOp::Modulo => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+            BinaryOp::ShiftLeft => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+            BinaryOp::ShiftRight => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+            BinaryOp::BitwiseOr => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+            BinaryOp::BitwiseAnd => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+            BinaryOp::Xor => {
+                assert!(!a.isFloat());
+
+                RawDataType::Int
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -115,21 +201,6 @@ pub enum RawStatement {
     Assignable(Expression, Expression, Option<ArithmeticOp>, Option<DataType>),
     ForLoop(String, Expression, Body),
     Repeat(String, usize, Body),
-}
-
-#[derive(Debug)]
-pub struct VariableModd {
-    pub varName: String,
-    pub modType: ModType,
-    pub expr: Expression,
-}
-
-#[derive(Debug, Clone)]
-pub enum ModType {
-    Add,
-    Sub,
-    Div,
-    Mul,
 }
 
 #[derive(Debug)]
@@ -282,24 +353,15 @@ impl ASTNode {
 
 impl ASTNode {
     pub fn isExpr(&self) -> bool {
-        match self {
-            ASTNode::Expr(_) => true,
-            _ => false,
-        }
+        matches!(self, ASTNode::Expr(_))
     }
 
     pub fn isStatement(&self) -> bool {
-        match self {
-            ASTNode::Statement(_) => true,
-            _ => false,
-        }
+        matches!(self, ASTNode::Statement(_))
     }
 
     pub fn isGlobal(&self) -> bool {
-        match self {
-            ASTNode::Global(_) => true,
-            _ => false,
-        }
+        matches!(self, ASTNode::Global(_))
     }
 
     pub fn asExpr(self) -> Result<Expression, ParserError<TokenType>> {
@@ -334,4 +396,59 @@ impl ASTNode {
             })),
         }
     }
+}
+
+fn muateAST(expectedType: DataType, actualType: DataType, exp: Expression) -> Result<Expression, ()> {
+    todo!()
+}
+
+fn ASTMutator<T>(node: ASTNode, ctx: SimpleCtx<T>, f: fn(ASTNode, SimpleCtx<T>) -> Result<ASTNode, ()>) -> ASTNode {
+    match node {
+        ASTNode::Global(g) => match g.exp {
+            RawNode::FunctionDef(_) => {}
+            RawNode::StructDef(_) => {}
+            RawNode::GlobalVarDef(_, _) => {}
+            RawNode::NamespaceImport(_, _) => {}
+            RawNode::Import(_, _) => {}
+        }
+        ASTNode::Statement(s) => match s.exp {
+            RawStatement::While(_) => {}
+            RawStatement::If(_) => {}
+            RawStatement::Return(_) => {}
+            RawStatement::Continue => {}
+            RawStatement::Break => {}
+            RawStatement::Loop(_) => {}
+            StatementExpression(_) => {}
+            RawStatement::Assignable(_, _, _, _) => {}
+            RawStatement::ForLoop(_, _, _) => {}
+            RawStatement::Repeat(_, _, _) => {}
+        }
+        ASTNode::Expr(e) => match e.exp {
+            RawExpression::BinaryOperation { .. } => {}
+            RawExpression::IntLiteral(_) => {}
+            RawExpression::FloatLiteral(_) => {}
+            RawExpression::StringLiteral(_) => {}
+            RawExpression::FormatStringLiteral(_) => {}
+            RawExpression::BoolLiteral(_) => {}
+            RawExpression::Variable(_) => {}
+            RawExpression::CharLiteral(_) => {}
+            RawExpression::ArrayLiteral(_) => {}
+            RawExpression::ArrayIndexing(_) => {}
+            RawExpression::NotExpression(_, _) => {}
+            RawExpression::NamespaceAccess(_) => {}
+            RawExpression::Lambda(_, _, _) => {}
+            RawExpression::Callable(_, _) => {}
+            RawExpression::StructInit(_, _) => {}
+            RawExpression::FieldAccess(_, _) => {}
+            RawExpression::TernaryOperator(_, _, _) => {}
+            RawExpression::Null => {}
+            RawExpression::TypeCast(_, _) => {}
+            RawExpression::TypeCheck(_, _) => {}
+            RawExpression::Negate(_) => {}
+            RawExpression::BitwiseNot(_) => {}
+            RawExpression::NullAssert(_) => {}
+            RawExpression::Elvis(_, _) => {}
+        }
+    }
+    todo!()
 }

@@ -2,7 +2,7 @@ use std::arch::asm;
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement, VariableModd};
+use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement};
 use crate::codeGenCtx::Body;
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
@@ -25,6 +25,39 @@ use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};
 use crate::wss::WhySoSlow;
+
+/*
+function = object
+fn idk(): () -> () -> ! {}
+    x = 5
+
+    return [this] () {}
+        return [this] () {
+            return x
+        }
+    }
+}
+
+fn idk(): () -> () -> ! {}
+    x = 5
+
+    // take snapshot of
+    $g = [x]
+    return [this] () {}
+        return [this] () {
+            return x
+        }
+    }
+}
+
+struct Lambda {
+    nId: usize
+    sId: usize
+    ctx: Array<value>
+}
+
+
+ */
 
 #[derive(Debug, PartialEq)]
 pub enum NamespaceState {
@@ -240,6 +273,13 @@ pub fn callNative(
 }
 
 impl LoadedFunction {
+    pub fn getBytecode(&self) -> Option<&Vec<OpCode>> {
+        match self {
+            LoadedFunction::Virtual(v) => Some(v),
+            _ => None
+        }
+    }
+
     #[inline]
     pub fn call(&self, vm: &mut VirtualMachine, frame: StackFrame, returns: bool) -> Value {
         let mut vm2 = vm.getNaughty();

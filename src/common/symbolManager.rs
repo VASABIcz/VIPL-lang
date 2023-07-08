@@ -74,8 +74,13 @@ impl SymbolManager {
     
     pub fn getFunctionsByBaseName(&self, name: &str) -> Vec<(&String, &FunctionSymbol)> {
         let n = format!("{}(", name);
-        
-        self.functions.iter().filter(|it| it.0.starts_with(&n)).collect::<Vec<_>>()
+
+        let mut res = self.functions.iter().filter(|it| it.0.starts_with(&n)).collect::<Vec<_>>();
+
+        // FIXME needed due to undefined function selection now its atleast consistently wrong :D
+        res.sort_by(|a, b| a.0.cmp(b.0));
+
+        res
     }
 
     pub fn getFunctionParts(&self, name: &[String]) -> Result<&FunctionSymbol, CodeGenError> {
@@ -90,6 +95,8 @@ impl SymbolManager {
         if args.is_empty() {
             return self.getFunction(&genFunName(name, args))
         }
+
+
 
         let first = self.getFunction(&genFunName(name, args));
         if let Ok(v) = first {

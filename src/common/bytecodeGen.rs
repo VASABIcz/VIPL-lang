@@ -9,7 +9,7 @@ use std::ptr::null;
 
 use libc::open;
 
-use crate::ast::{ArithmeticOp, ASTNode, BinaryOp, Expression, FunctionDef, ModType, RawExpression, RawNode, RawStatement, Statement, StructDef};
+use crate::ast::{ArithmeticOp, ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement, StructDef};
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::codeGenCtx::{Body, ExpressionCtx, SimpleCtx, StatementCtx};
 use crate::errors::{
@@ -30,7 +30,7 @@ use crate::vm::optimizations::constEval::ConstValue::B;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, Jmp, LCall, Less, Mul, New, Not, Pop, PushBool, PushChar, PushFloat, PushFunction, PushInt, PushIntOne, PushIntZero, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub, Swap};
+use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, Jmp, LCall, Less, Mul, New, Not, Pop, PushBool, PushChar, PushFloat, PushFunction, PushInt, PushIntOne, PushIntZero, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub, Swap};
 
 const DEBUG: bool = false;
 
@@ -64,7 +64,7 @@ impl Body {
 
         if s.len() == 2 && s.contains(&Null) {
             let t = s.iter().find(|it| !it.isNull()).unwrap().clone();
-            if t.isReference() && fun.returnType.isNullable() {
+            if t.isReference() && fun.returnType.isReferenceNullable() {
                 return Ok(())
             }
         }
@@ -75,7 +75,7 @@ impl Body {
 
         let tt = s.iter().next().unwrap();
 
-        if fun.returnType.isNullable() && tt.isNull() {
+        if fun.returnType.isReferenceNullable() && tt.isNull() {
             return Ok(())
         }
 
@@ -343,10 +343,10 @@ impl SimpleCtx<'_, SymbolicOpcode> {
     }
 
     pub fn implicitConversion(&mut self, src: DataType, tgt: DataType, exp: &Expression) -> Result<(), CodeGenError> {
-        if src.isPrimitiveType() && tgt.isBoxedValue() {
+        if src.isPrimitiveType() && tgt.isBoxed() {
             self.makeExpressionCtx(exp).genExpressionBox()?;
         }
-        else if src.isBoxedValue() && tgt.isPrimitiveType() {
+        else if src.isBoxed() && tgt.isPrimitiveType() {
             self.makeExpressionCtx(exp).genExpressionUnbox()?;
         }
         else {
@@ -438,7 +438,7 @@ impl ExpressionCtx<'_, SymbolicOpcode> {
         let t = self.toDataType()?;
         self.transfer(self.exp).genExpression()?;
 
-        if t.isBoxedValue() {
+        if t.isBoxed() {
            self.push(GetField { fieldID: 0 });
         }
 
@@ -454,6 +454,14 @@ impl ExpressionCtx<'_, SymbolicOpcode> {
         else {
             self.genExpression()
         }
+    }
+
+    pub fn genExpressionExpecting(mut self, t: DataType) -> Result<(), CodeGenError> {
+        genExpressionExpecting(self, Some(t))
+    }
+
+    pub fn genCondition(mut self) -> Result<(), CodeGenError> {
+        self.genExpressionExpecting(Bool)
     }
 
     pub fn push(&mut self, c: OpCode) {
@@ -776,41 +784,95 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
     Ok(())
 }
 
+pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
+    if src.isReferenceNonNullable() && tgt.isReference() {
+        return Ok(())
+    }
+    if src.isReferenceNonNullable() && tgt.isObject() {
+        return Ok(())
+    }
+    if src.isReferenceNullable() && tgt.isObjectNullable() {
+        return Ok(())
+    }
+    if src.isNull() && tgt.isReferenceNullable() {
+        return Ok(())
+    }
+    if src.isNull() && tgt.isObjectNullable() {
+        return Ok(())
+    }
+    if src.isObjectNonNullable() && tgt.isObject() {
+        return Ok(())
+    }
+
+    if src.clone().isBoxedNonNull() {
+        let unboxed = src.toUnboxedType();
+        assert_eq!(unboxed, tgt);
+
+        return exp.genExpressionUnbox();
+    }
+    
+    if src.clone().isPrimitiveType() {
+        let unboxed = tgt.clone().toUnboxedType();
+        assert!(unboxed == src);
+
+        return exp.genExpressionBox();
+    }
+
+    todo!()
+}
+
+pub fn genExpressionExpecting(mut ctx: ExpressionCtx<SymbolicOpcode>, expect: Option<DataType>) -> Result<(), CodeGenError> {
+    if let Some(tgt) = expect {
+        let src = ctx.clone().toDataType()?;
+        if src != tgt {
+            return generateImplicitConversion(src, tgt, ctx.clone())
+        }
+    }
+
+    genExpression(ctx)
+}
+
 pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     let mut r = ctx;
 
     unsafe {
         match &r.exp.exp {
-            RawExpression::BinaryOperation { left, right, op: BinaryOp::Or } => {
+            RawExpression::BinaryOperation { left, right, op } if matches!(op, BinaryOp::And | BinaryOp::Or) => {
                 r.transfer(right).assertType(Bool)?;
                 r.transfer(left).assertType(Bool)?;
+                let isAnd = op == &BinaryOp::And;
 
                 let endLabel = r.ctx.nextLabel();
 
-                r.transfer(left).genExpressionUnbox()?;
+                r.transfer(left).genExpressionExpecting(Bool)?;
 
-                r.ctx.push(Dup);
-                r.ctx.opJmp(endLabel, True);
-                r.transfer(right).genExpressionUnbox()?;
-                r.ctx.push(OpCode::Or);
+                r.push(Dup);
+                r.ctx.opJmp(endLabel, if isAnd { False } else { True });
+                r.transfer(right).genExpressionExpecting(Bool)?;
+               if isAnd {
+                   r.push(And);
+               }
+               else {
+                    r.push(OpCode::Or);
+                }
 
                 r.ctx.makeLabel(endLabel);
             }
 
-            RawExpression::BinaryOperation { left, right, op: BinaryOp::And } => {
-                r.transfer(right).assertType(Bool)?;
-                r.transfer(left).assertType(Bool)?;
+            RawExpression::BinaryOperation { left, right, op } if matches!(op, BinaryOp::Xor | BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr | BinaryOp::ShiftRight | BinaryOp::ShiftLeft) => {
+                r.transfer(left).genExpressionExpecting(Int)?;
+                r.transfer(right).genExpressionExpecting(Int)?;
 
-                let endLabel = r.ctx.nextLabel();
+                let op = match op {
+                    BinaryOp::ShiftLeft => OpCode::ShiftLeft,
+                    BinaryOp::ShiftRight => OpCode::ShiftRight,
+                    BinaryOp::BitwiseOr => OpCode::BitwiseOr,
+                    BinaryOp::BitwiseAnd => OpCode::BitwiseAnd,
+                    BinaryOp::Xor => OpCode::Xor,
+                    _ => unreachable!()
+                };
 
-                r.transfer(left).genExpressionUnbox()?;
-
-                r.push(Dup);
-                r.ctx.opJmp(endLabel, False);
-                r.transfer(right).genExpressionUnbox()?;
-                r.push(And);
-
-                r.ctx.makeLabel(endLabel);
+                r.push(op)
             }
 
             RawExpression::BinaryOperation { left, right, op } => {
@@ -847,15 +909,9 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
                         vec![OpCode::Equals(rawT)]
                     },
-                    BinaryOp::And => vec![OpCode::And],
-                    BinaryOp::Or => vec![OpCode::Or],
                     BinaryOp::Modulo => vec![OpCode::Modulo(rawT)],
                     BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not],
-                    BinaryOp::ShiftLeft => vec![OpCode::ShiftLeft],
-                    BinaryOp::ShiftRight => vec![OpCode::ShiftRight],
-                    BinaryOp::BitwiseOr => vec![OpCode::BitwiseOr],
-                    BinaryOp::BitwiseAnd => vec![OpCode::BitwiseAnd],
-                    BinaryOp::Xor => vec![OpCode::Xor]
+                    _ => unreachable!()
                 };
                 for t in ts {
                     r.push(t)
@@ -997,6 +1053,8 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
 
                 for ((src, dest), exp) in argTypes.into_iter().zip(expectedTypes).zip(argExpressions) {
+                    // FIXME
+                    // todo!()
                     r.ctx.implicitConversion(src, dest, &exp)?;
                 }
 
@@ -1059,20 +1117,22 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     fieldID: fiel.1
                 });
             }
-            RawExpression::Null => r.push(OpCode::PushIntZero),
+            RawExpression::Null => r.push(PushNull),
             RawExpression::TernaryOperator(cond, tr, fal) => {
+                let t = r.toDataType()?;
+
                 let falseLabel = r.ctx.nextLabel();
                 let endLabel = r.ctx.nextLabel();
 
-                r.transfer(cond).genExpression()?;
+                r.transfer(cond).genCondition()?;
 
                 r.ctx.opJmp(falseLabel, False);
 
-                r.transfer(tr).genExpression()?;
+                r.transfer(tr).genExpressionExpecting(t.clone())?;
                 r.ctx.opJmp(endLabel, JmpType::Jmp);
 
                 r.ctx.makeLabel(falseLabel);
-                r.transfer(fal).genExpression()?;
+                r.transfer(fal).genExpressionExpecting(t)?;
 
                 r.ctx.makeLabel(endLabel);
             }
@@ -1093,7 +1153,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     r.push(F2I);
                 }
 
-                else if src.isNonNullable() && target.isObjectNonNullable() {
+                else if src.isReferenceNonNullable() && target.isObjectNonNullable() {
                     r.transfer(exp).genExpression()?;
                 }
 
@@ -1134,7 +1194,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 }
             }
             RawExpression::BitwiseNot(e) => {
-                r.transfer(e).genExpression()?;
+                r.transfer(e).genExpressionExpecting(Int)?;
 
                 r.push(OpCode::BitwiseNot)
             }
@@ -1142,10 +1202,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 r.transfer(e).genExpression()?;
 
                 r.push(Dup);
-                r.push(PushInt(0));
-                r.push(Swap);
-                r.push(Div(RawDataType::Int));
-                r.push(Pop);
+                r.push(AssertNotNull);
             }
             RawExpression::Elvis(a, b) => {
                 let endLabel = r.ctx.nextLabel();

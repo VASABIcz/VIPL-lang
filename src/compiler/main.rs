@@ -78,6 +78,7 @@ fn main() -> Result<(), ()> {
     unsafe { Box::from_raw(ptr) };
     println!("Elapsed: {:.2?}", elapsed);
     if vm.stackSize() != 0 {
+        println!("bytecode: {:?}", f.as_ref().unwrap().getBytecode().unwrap());
         panic!("something went wrong :(")
     }
 

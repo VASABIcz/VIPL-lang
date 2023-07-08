@@ -251,6 +251,13 @@ pub struct ExpressionCtx<'a, T> {
 }
 
 impl<T> ExpressionCtx<'_, T> {
+    pub fn clone(&mut self) -> ExpressionCtx<T> {
+        ExpressionCtx {
+            exp: self.exp,
+            ctx: self.ctx.transfer(),
+        }
+    }
+
     pub fn assertType(&mut self, t: DataType) -> Result<(), CodeGenError> {
         let t1 = self.toDataType()?;
 
@@ -495,6 +502,14 @@ impl<T> ExpressionCtx<'_, T> {
                     return Ok(Reference(t))
                 }
 
+                if a.isPrimitiveType() && b.isNull() {
+                    return Ok(a.toBoxedType().toNullable())
+                }
+
+                if a.isNull() && b.isPrimitiveType() {
+                    return Ok(b.toBoxedType().toNullable())
+                }
+
                 self.transfer(tr).assertType(b)?;
 
                 Ok(a)
@@ -543,11 +558,11 @@ impl<T> ExpressionCtx<'_, T> {
 
                 panic!();
 
-                if a.isNullable() && b.isNull() {
+                if a.isReferenceNullable() && b.isNull() {
                     return Ok(a)
                 }
 
-                if a.isNullable() && b.isReference() {
+                if a.isReferenceNullable() && b.isReference() {
                     let a1 = a.getReff()?;
                     let b1 = b.getReff()?;
 
@@ -556,7 +571,7 @@ impl<T> ExpressionCtx<'_, T> {
                     }
                 }
 
-                if a.isReference() && b.isReference() && !a.isNullable() && !b.isNullable() {
+                if a.isReference() && b.isReference() && !a.isReferenceNullable() && !b.isReferenceNullable() {
                     let a1 = a.getReff()?;
                     let b1 = b.getReff()?;
 
