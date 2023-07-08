@@ -41,5 +41,5 @@ crate-type = ["staticlib", "dylib", "rlib"]
 [dependencies]
 libc = "0.2"
 offset = "0.1.4"
-strum = "0.24"
-strum_macros = "0.24"
+strum = "0.25"
+strum_macros = "0.25"
