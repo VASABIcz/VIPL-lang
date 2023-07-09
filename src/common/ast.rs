@@ -193,7 +193,7 @@ pub struct FunctionCall {
 pub enum RawStatement {
     While(WhileS),
     If(If),
-    Return(Expression),
+    Return(Option<Expression>),
     Continue,
     Break,
     Loop(Body),

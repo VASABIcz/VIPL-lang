@@ -211,12 +211,7 @@ impl JSON {
     pub fn parse(s: &str) -> Result<JSON, LoadFileError<JsonToken>> {
         let res = tokenize(
             &mut jsonTokenizingUnits(),
-            SourceProvider {
-                data: s,
-                index: 0,
-                row: 0,
-                col: 0,
-            },
+            SourceProvider::new(s)
         )?;
         let mut units = jsonParsingUnits();
 

@@ -119,8 +119,13 @@ impl Body {
                     }
                 }
                 RawStatement::Return(e) => {
-                    let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
-                    r.insert(t);
+                    if let Some(e) = e {
+                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
+                        r.insert(t);
+                    }
+                    else {
+                        r.insert(Void);
+                    }
 
                     return Ok(true)
                 }
@@ -206,9 +211,13 @@ if let Some(v) = self.statements.last() {
                     }
                 }
                 RawStatement::Return(e) => {
-                    let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
-                    r.insert(t);
-
+                    if let Some(e) = e {
+                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
+                        r.insert(t);
+                    }
+                    else {
+                        r.insert(Void);
+                    }
                     break;
                 }
                 RawStatement::Loop(b) => {
@@ -582,7 +591,9 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.ctx.makeLabel(endLabel);
         }
         RawStatement::Return(ret) => {
-            ctx.ctx.makeExpressionCtx(&ret).genExpression()?;
+            if let Some(ret) = ret {
+                ctx.ctx.makeExpressionCtx(&ret).genExpression()?;
+            }
             ctx.ctx.push(Return)
         }
         RawStatement::Continue => ctx.opContinue()?,

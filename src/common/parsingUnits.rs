@@ -12,6 +12,7 @@ use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Col
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
+use crate::utils::unEscapeChars;
 use crate::viplParser::{parseDataType, ParsingContext, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
 use crate::viplParser::ParsingContext::Condition;
 use crate::vm::dataType::{Generic, ObjectMeta};
@@ -106,7 +107,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ReturnParsingUnit {
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedStatement(|parser| {
         parser.tokens.getAssert(Return)?;
-        let exp = parser.parseExpr()?;
+        let exp = parser.parseExpr().ok();
         Ok(RawStatement::Return(exp))
     }
 )
@@ -308,11 +309,11 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StringParsingUnit {
         parser: &mut VIPLParser
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
-        let str = parser.tokens.getAssert(StringLiteral)?;
-        Ok(RawExpression::StringLiteral(str.str.strip_suffix('\"').unwrap().strip_prefix('\"').unwrap().to_string()))
+            let str = parser.tokens.getAssert(StringLiteral)?;
+            Ok(RawExpression::StringLiteral(unEscapeChars(str.str.strip_suffix('\"').unwrap().strip_prefix('\"').unwrap())))
+        })
     }
-)
-    }
+
     fn getPriority(&self) -> usize {
         usize::MAX
     }
@@ -778,7 +779,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
 
         let body = if parser.tokens.isPeekType(Equals) {
             parser.tokens.getAssert(Equals)?;
-            Body::new(vec![Statement{ exp: ast::RawStatement::Return(parser.parseExpr()?), loc: vec![] }])
+            Body::new(vec![Statement{ exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }])
         } else {
             parser.parseBody()?
         };
@@ -1266,7 +1267,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
             parser.tokens.getAssert(Equals)?;
             isOneLine = true;
             // FIXME
-            Body::new(vec![Statement{ exp: ast::RawStatement::Return(parser.parseExpr()?), loc: vec![] }])
+            Body::new(vec![Statement{ exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }])
         } else {
             parser.parseBody()?
         };

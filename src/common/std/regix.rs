@@ -151,12 +151,7 @@ impl Regix {
     pub fn parse(str: &str) -> Result<Regix, LexerError> {
         let mut regixes = vec![];
         let mut groups = 0usize;
-        let mut l = SourceProvider {
-            data: str,
-            index: 0,
-            row: 0,
-            col: 0,
-        };
+        let mut l = SourceProvider::new(str);
 
         while !l.isDone() {
             Regix::parseRaw(&mut l, &mut regixes, &mut groups)?;

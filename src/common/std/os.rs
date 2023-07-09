@@ -17,10 +17,10 @@ pub fn registerOs(vm: &mut VirtualMachine) {
         let c = b.getString(0);
         let idk = CString::new(c.clone()).unwrap();
 
-        unsafe { libc::system(idk.as_ptr()); }
+        let retCode = unsafe { libc::system(idk.as_ptr()) };
 
-        return Value::null();
-    }, DataType::Void, false);
+        return retCode.into();
+    }, Int, false);
 
     vm.registerNamespace(namespace);
 }

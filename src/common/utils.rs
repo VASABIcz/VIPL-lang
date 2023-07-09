@@ -16,7 +16,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::ast::{Expression, Statement};
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;
-use crate::lexer::{LexingUnit, Token, tokenizeSource};
+use crate::lexer::{LexingUnit, SourceProvider, Token, tokenizeSource};
 use crate::lexingUnits::TokenType;
 use crate::viplParser::parseDataType;
 
@@ -519,4 +519,43 @@ pub fn microsSinceEpoch() -> u128 {
 
 pub fn indent(count: usize) -> String {
     String::from(' ').repeat(count)
+}
+
+pub fn unEscapeChars(input: &str) -> String {
+    let mut s = String::with_capacity(input.bytes().len());
+
+    let mut source = SourceProvider::new(input);
+
+    while !source.isDone() {
+        if source.isPeekConsume("\\") {
+            if source.isPeekConsume("n") {
+                s.push('\n');
+            }
+            else if source.isPeekConsume("\\") {
+                s.push('\\');
+            }
+            else if source.isPeekConsume("r") {
+                s.push('\r');
+            }
+            else if source.isPeekConsume("e") {
+                s.push('\x1B');
+            }
+            else if source.isPeekConsume("O") {
+                todo!("implement octal based chars")
+            }
+            else if source.isPeekConsume("x") {
+                todo!("implement hex based chars")
+            }
+            else {
+                todo!("unimplemented char for string escape {:?}", source.assertChar())
+            }
+        }
+        else {
+            s.push(source.assertChar().unwrap());
+        }
+    }
+
+    s.shrink_to_fit();
+
+    s
 }

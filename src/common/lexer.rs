@@ -37,12 +37,7 @@ pub fn tokenize<T: Debug + Send + Sync + PartialEq + Clone>(
 }
 
 pub fn tokenizeSource(src: &str, units: &[Box<dyn LexingUnit<TokenType>>]) -> Result<Vec<Token<TokenType>>, LexerError> {
-    let source: SourceProvider = SourceProvider {
-        data: src,
-        index: 0,
-        row: 0,
-        col: 0,
-    };
+    let source: SourceProvider = SourceProvider::new(src);
 
     tokenize(units, source)
 }
@@ -56,6 +51,15 @@ pub struct SourceProvider<'a> {
 }
 
 impl SourceProvider<'_> {
+    pub fn new(s: &str) -> SourceProvider {
+        SourceProvider {
+            data: s,
+            index: 0,
+            row: 0,
+            col: 0,
+        }
+    }
+
     fn getRemaing(&self) -> String {
         let mut buf = String::new();
 
@@ -184,6 +188,16 @@ impl SourceProvider<'_> {
             .ok_or(LexerError::ReachedEOF(self.getLocation()))?;
         self.consumeOne();
         Ok(c)
+    }
+
+    pub fn isPeekConsume(&mut self, s: &str) -> bool {
+        if self.isPeek(s) {
+            self.assertConsume(s).unwrap();
+            true
+        }
+        else {
+            false
+        }
     }
 
     pub fn consumeWhileMatches<T: Debug + PartialEq + Clone>(
