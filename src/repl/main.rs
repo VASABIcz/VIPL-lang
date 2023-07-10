@@ -17,7 +17,7 @@ use vipl::codeGenCtx::{Body, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
-use vipl::std::std::bootStrapVM;
+use vipl::std::bootStrapVM;
 use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw, testRead};
 use vipl::utils::namespacePath;
 use vipl::vm::dataType::{DataType, Generic};

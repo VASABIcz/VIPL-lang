@@ -53,7 +53,7 @@ pub enum ImportHints {
 
 // FIXME DEBUG is faster than default
 const DEBUG: bool = false;
-const TRACE: bool = true;
+const TRACE: bool = false;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -408,7 +408,9 @@ impl VirtualMachine {
 
     #[inline(always)]
     pub fn push(&mut self, value: Value) {
-        println!("pushed {:?}", value);
+        if TRACE {
+            println!("pushed {:?}", value);
+        }
         self.stack.push(value)
     }
 

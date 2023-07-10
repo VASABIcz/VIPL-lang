@@ -1,5 +1,8 @@
 use std::ffi::{CStr, CString};
+use std::process::exit;
+use std::time::{Instant, SystemTime};
 use crate::ast::RawExpression;
+use crate::utils::microsSinceEpoch;
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 use crate::vm::dataType::{DataType, Generic};
 use crate::vm::namespace::NamespaceState::Loaded;
@@ -20,6 +23,14 @@ pub fn registerOs(vm: &mut VirtualMachine) {
         let retCode = unsafe { libc::system(idk.as_ptr()) };
 
         return retCode.into();
+    }, Int, false);
+
+    namespace.makeNativeNoRat("exit", &[Int], |vm, s| {
+        exit(s.get(0).getNum() as i32)
+    }, false);
+
+    namespace.makeNative("time", &[], |vm, s| {
+        ((microsSinceEpoch()/1000) as isize).into()
     }, Int, false);
 
     vm.registerNamespace(namespace);

@@ -93,7 +93,7 @@ pub fn genNamespaceName(s: &[String]) -> String {
 }
 
 pub fn namespacePath(path: &str) -> Vec<String> {
-    let mut con123 = fs::canonicalize(path).unwrap();
+    let mut con123 = fs::canonicalize(path).expect(path);
     let mut con = con123.iter();
     let mut cwd123 = env::current_dir().unwrap();
     let mut cwd = cwd123.iter();

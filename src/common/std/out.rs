@@ -19,6 +19,27 @@ pub fn registerOut(vm: &mut VirtualMachine) {
     );
 
     namespace.makeNativeNoRat(
+        "println",
+        &[Int],
+        |_a, b| println!("{}", b.get(0).getNumRef()),
+        false,
+    );
+
+    namespace.makeNativeNoRat(
+        "println",
+        &[Float],
+        |_a, b| println!("{}", b.get(0).getFlo()),
+        false,
+    );
+
+    namespace.makeNativeNoRat(
+        "println",
+        &[DataType::str()],
+        |_a, b| println!("{}", b.get(0).getString()),
+        false,
+    );
+
+    namespace.makeNativeNoRat(
         "print",
         &[Bool],
         |_a, b| println!("{}", b.get(0).getBool()),

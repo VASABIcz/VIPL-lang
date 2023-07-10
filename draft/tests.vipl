@@ -1,0 +1,57 @@
+from out import *
+from os import *
+from fs import *
+from strings import *
+from core import *
+
+CLEAR_COLOR = "\e[0m"
+RED_COLOR = "\e[91m"
+GREEN_COLOR = "\e[92m"
+
+EXECUTABLES = [
+    ["release", "target/release/compiler"],
+    ["debug", "target/debug/compiler"]
+]
+
+TEST_FOLDERS = ["examples"]
+
+buildRes = exec "cargo build --package vipl --release --bin compiler"
+
+if buildRes != 0 {
+    println RED_COLOR+"build failed"
+    exit(-1)
+}
+
+buildRes = exec "cargo build --package vipl --bin repl"
+
+// todo or assignment |=
+if buildRes != 0 {
+    println RED_COLOR+"build failed"
+    exit(-1)
+}
+
+for folder in TEST_FOLDERS {
+    for file in ls(folder) {
+        if !endsWith(file, ".vipl") {
+            continue
+        }
+
+        for item in EXECUTABLES {
+            executable = item[1]
+            name = item[0]
+            start = time()
+            res = exec "RUST_BACKTRACE=1 ./"+executable+" "+folder+"/"+file
+            end = time()
+            duration = (end - start)
+
+            if res != 0 {
+            // BUG         println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+res.toString()+", took "+duration.toString()+"ms"+CLEAR_COLOR
+                println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+toString(res)+", took "+duration.toString()+"ms"+CLEAR_COLOR
+                exit(-1)
+            }
+            else {
+                println GREEN_COLOR + "[OK] "+name+" ./"+executable+" "+folder+"/"+file+", took "+toString(duration)+"ms"+CLEAR_COLOR
+            }
+        }
+    }
+}

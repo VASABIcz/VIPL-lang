@@ -5,7 +5,7 @@ use std::fmt::{Debug, Formatter};
 use std::mem::forget;
 use std::ptr;
 use std::time::Duration;
-use crate::std::std::bootStrapVM;
+use crate::std::bootStrapVM;
 
 use crate::vm::heap::Hay;
 use crate::vm::namespace::{callNative, LoadedFunction, Namespace};

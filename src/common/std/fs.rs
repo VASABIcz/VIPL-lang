@@ -1,81 +1,60 @@
 use std::fs;
+use crate::vm::dataType::{DataType, Generic};
+use crate::vm::namespace::Namespace;
+use crate::vm::value::Value;
 
 use crate::vm::vm::VirtualMachine;
 
-pub fn setupFs(vm: &mut VirtualMachine) {
-    todo!("needs to be ported to namespaces");
-    /*
-    vm.makeNative(
-        "ls".to_string(),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::str(),
-        }]),
-        #[inline(always)] |vm, locals| {
-            let path = locals.localVariables.first().unwrap().getString();
+pub fn registerFs(vm: &mut VirtualMachine) {
+    let mut n = Namespace::new("fs", vm);
 
+    n.makeNative("ls", &[DataType::str()], |vm, s| {
+        let path = s.getString(0);
+        println!("path {}", path);
 
-            match fs::read_dir(path) {
-                Ok(v) => unsafe {
-                    let arr = v.map(#[inline(always)] |it|{
-                        let refName = it.unwrap();
-                        Value::makeString(String::from(refName.file_name_ref().to_str().unwrap()), vm)
-                    }).collect();
-                    let a = Value::makeArray(arr, DataType::str(), vm);
-                    vm.stack.push(a)
-                }
-                Err(e) => panic!("{}", e)
+        match fs::read_dir(&path) {
+            Ok(v) => unsafe {
+                let arr = v.map(#[inline(always)] |it|{
+                    let refName = it.unwrap();
+                    Value::makeString(String::from(refName.file_name().as_os_str().to_str().unwrap()), vm)
+                }).collect();
+                Value::makeArray(arr, vm)
             }
-        },
-        Some(DataType::arr(Generic::Type(DataType::str()))),
-    );
+            Err(e) => panic!("{} {}", e, path)
+        }
+    }, DataType::arr(Generic::Type(DataType::str())), false);
 
-    vm.makeNative(
-        "readFile".to_string(),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::str(),
-        }]),
-        |vm, locals| {
-            let path = locals.localVariables.first().unwrap().getString();
 
-            let str = fs::read_to_string(path).unwrap_or_default();
-            let a = Value::makeString(str, vm);
-            vm.stack.push(a)
-        },
-        Some(DataType::str()),
-    );
+    n.makeNative("readFile", &[DataType::str()], |vm, s| {
+        let path = s.getString(0);
 
-    vm.makeNative(
-        "fileType".to_string(),
-        Box::new([VariableMetadata {
-            name: MyStr::Static(""),
-            typ: DataType::str(),
-        }]),
-        |vm, locals| {
-            let path = locals.localVariables.first().unwrap().getString();
+        let str = fs::read_to_string(path).unwrap_or_default();
 
-            let val = match fs::metadata(path) {
-                Ok(v) => {
-                    let mut buf = 0;
-                    if v.is_file() {
-                        buf = 1
-                    }
-                    else if v.is_dir() {
-                        buf = 2
-                    }
-                    else if v.is_symlink() {
-                        buf = 4
-                    }
-                    buf
+        Value::makeString(str, vm)
+    }, DataType::str(), false);
+
+    n.makeNative("fileType", &[DataType::str()], |vm, s| {
+        let path = s.getString(0);
+
+        let val = match fs::metadata(path) {
+            Ok(v) => {
+                let mut buf = 0;
+                if v.is_file() {
+                    buf = 1
                 }
-                Err(_) => 0,
-            };
+                else if v.is_dir() {
+                    buf = 2
+                }
+                else if v.is_symlink() {
+                    buf = 4
+                }
+                buf
+            }
+            Err(_) => 0,
+        };
 
-            vm.stack.push(Value::from(val))
-        },
-        Some(DataType::Int),
-    );
+        Value::from(val)
+    }, DataType::Int, false);
 
-     */
+    vm.registerNamespace(n);
 }

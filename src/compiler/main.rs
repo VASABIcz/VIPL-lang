@@ -9,7 +9,7 @@ use std::time::Instant;
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::lexingUnits::{lexingUnits, TokenType};
 use vipl::parsingUnits::parsingUnits;
-use vipl::std::std::bootStrapVM;
+use vipl::std::bootStrapVM;
 use vipl::utils::{genNamespaceName, namespacePath};
 use vipl::vm::namespace::{loadSourceFile, Namespace};
 use vipl::vm::stackFrame::StackFrame;

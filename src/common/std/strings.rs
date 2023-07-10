@@ -104,5 +104,12 @@ pub fn registerStrings(vm: &mut VirtualMachine) {
         false
     );
 
+    n.makeNative("endsWith", &[DataType::str(), DataType::str()], |vm, s| {
+        let a = s.getString(0);
+        let b = s.getString(1);
+
+        a.ends_with(b).into()
+    }, DataType::Bool, true);
+
     vm.registerNamespace(n);
 }
