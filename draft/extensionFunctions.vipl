@@ -1,3 +1,4 @@
+from out import println
 
 fn sum(arr: Array<int>): int {
     s = 0
@@ -15,4 +16,4 @@ a = [1, 2, 3, 4]
 
 x = a.sum()
 
-out::print(x)
+println x

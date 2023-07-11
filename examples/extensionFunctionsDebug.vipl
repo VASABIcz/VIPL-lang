@@ -1,0 +1,5 @@
+from out import println
+
+fn inc(a: int): int = a + 1
+
+println(5.inc())

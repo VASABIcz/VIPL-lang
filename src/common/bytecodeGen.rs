@@ -353,16 +353,14 @@ impl SimpleCtx<'_, SymbolicOpcode> {
 
     pub fn implicitConversion(&mut self, src: DataType, tgt: DataType, exp: &Expression) -> Result<(), CodeGenError> {
         if src.isPrimitiveType() && tgt.isBoxed() {
-            self.makeExpressionCtx(exp).genExpressionBox()?;
+            self.makeExpressionCtx(exp).genExpressionBox()
         }
         else if src.isBoxed() && tgt.isPrimitiveType() {
-            self.makeExpressionCtx(exp).genExpressionUnbox()?;
+            self.makeExpressionCtx(exp).genExpressionUnbox()
         }
         else {
-            self.makeExpressionCtx(exp).genExpression()?;
+            self.makeExpressionCtx(exp).genExpression()
         }
-
-        Ok(())
     }
 
     pub fn decrementLocal(&mut self, localId: usize) {
@@ -996,9 +994,9 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 todo!();
             }
             RawExpression::Callable(prev, args) => unsafe {
-                let mut argExpressions = vec![];
+                let mut argExpressions = args.clone();
 
-                let argTypes = args
+                let mut argTypes = args
                     .iter()
                     .map(|it| r.transfer(it).toDataType())
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1007,7 +1005,6 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
                 let expectedTypes = match &prev.exp {
                     RawExpression::Variable(v) => {
-                        argExpressions.extend(args.clone());
                         if r.ctx.isVariableParts(&[v.clone()]) {
                             let (args, prevT) = r.transfer(prev).toDataType()?.getFunction()?;
 
@@ -1021,9 +1018,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                             func.args.clone()
                         }
                     }
-
                     RawExpression::NamespaceAccess(n) => {
-                        argExpressions.extend(args.clone());
                         if r.ctx.isVariableParts(n) {
                             let (args, prevT) = r.transfer(prev).toDataType()?.getFunction()?;
 
@@ -1045,14 +1040,11 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                         else {
                             let prevT = r.transfer(obj).toDataTypeNotVoid()?;
 
-                            argExpressions.push(*prev.clone());
-                            argExpressions.extend(args.clone());
+                            argExpressions.insert(0, *obj.clone());
 
-                            let mut argsB = vec![];
-                            argsB.push(prevT);
-                            argsB.extend(argTypes.clone());
+                            argTypes.insert(0, prevT);
 
-                            let func = r.ctx.findFunction(fieldName, &argsB)?;
+                            let func = r.ctx.findFunction(fieldName, &argTypes)?;
 
                             funcMeta = Some(func.clone());
 
@@ -1062,10 +1054,8 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     _ => panic!()
                 };
 
-
                 for ((src, dest), exp) in argTypes.into_iter().zip(expectedTypes).zip(argExpressions) {
                     // FIXME
-                    // todo!()
                     r.ctx.implicitConversion(src, dest, &exp)?;
                 }
 

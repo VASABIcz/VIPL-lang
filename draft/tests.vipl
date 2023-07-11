@@ -45,12 +45,12 @@ for folder in TEST_FOLDERS {
             duration = (end - start)
 
             if res != 0 {
-            // BUG         println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+res.toString()+", took "+duration.toString()+"ms"+CLEAR_COLOR
-                println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+toString(res)+", took "+duration.toString()+"ms"+CLEAR_COLOR
+                println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+res.toString()+", took "+duration.toString()+"ms"+CLEAR_COLOR
+                // println RED_COLOR + "[ERR] "+ name +" ./"+executable+" "+folder+"/"+file+" exited with "+toString(res)+", took "+duration.toString()+"ms"+CLEAR_COLOR
                 exit(-1)
             }
             else {
-                println GREEN_COLOR + "[OK] "+name+" ./"+executable+" "+folder+"/"+file+", took "+toString(duration)+"ms"+CLEAR_COLOR
+                println GREEN_COLOR + "[OK] "+name+" ./"+executable+" "+folder+"/"+file+", took "+duration.toString()+"ms"+CLEAR_COLOR
             }
         }
     }

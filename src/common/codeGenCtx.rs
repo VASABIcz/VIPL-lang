@@ -419,7 +419,6 @@ impl<T> ExpressionCtx<'_, T> {
                             return Ok(funcId.returnType.clone());
                         }
 
-
                         let var = self.ctx.getLocal(v)?;
                         match &var.0 {
                             DataType::Function { ret, .. } => Ok(*ret.clone()),
