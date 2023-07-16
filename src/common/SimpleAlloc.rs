@@ -1,7 +1,3 @@
-use std::alloc::{alloc, Layout};
-use std::ops::DerefMut;
-use std::ptr;
-
 struct AllocBlock<const SIZE: usize> {
     next: Option<Box<AllocBlock<SIZE>>>,
     data: [u8; SIZE]

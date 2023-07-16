@@ -1,14 +1,12 @@
 use crate::asm::asmLib::Register::{
-    Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp, R10, R11, R12, R13, R14, R15,
+    Rax, Rbx, Rcx, Rdi, Rdx, Rsi, Rsp, R14, R15,
 };
 use crate::asm::asmLib::{AsmGen, AsmLocation, AsmValue, Concrete, Register};
 use crate::asm::registerManager::RegisterManager;
 use crate::ffi::NativeWrapper;
-use crate::viplDbg;
-use crate::vm::dataType::{DataType, RawDataType};
+use crate::vm::dataType::RawDataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
-use std::collections::HashMap;
 use std::fmt::Pointer;
 use std::mem::size_of;
 use offset::{Offset, offset_of};

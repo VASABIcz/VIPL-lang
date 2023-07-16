@@ -1,11 +1,8 @@
-use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::namespace::Namespace;
-use crate::vm::nativeObjects::{ObjectType, ViplObject};
-use crate::vm::objects::Str;
+use crate::vm::heap::{Allocation, HayCollector};
+use crate::vm::nativeObjects::ViplObject;
 use crate::vm::value::Value;
 use crate::vm::vm::VirtualMachine;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 #[derive(Debug)]
 #[repr(C)]

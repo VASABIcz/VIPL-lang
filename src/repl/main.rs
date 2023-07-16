@@ -2,31 +2,23 @@
 #![allow(non_snake_case)]
 #![deny(unused_assignments)]
 
-use std::{env, io};
-use std::collections::HashMap;
-use std::error::Error;
-use std::io::{BufRead, repeat, stdout, Write};
-use std::mem::{size_of, transmute};
 use std::process::exit;
-use std::thread::sleep;
-use std::time::Duration;
 
 use vipl::ast::{ASTNode, RawStatement, Statement};
 use vipl::bytecodeGen::SymbolicOpcode;
 use vipl::codeGenCtx::{Body, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};
-use vipl::lexingUnits::{getLexingUnits, lexingUnits, TokenType};
-use vipl::parsingUnits::{getParsingUnits, parsingUnits};
+use vipl::lexingUnits::getLexingUnits;
+use vipl::parsingUnits::getParsingUnits;
 use vipl::std::bootStrapVM;
-use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw, testRead};
-use vipl::utils::namespacePath;
+use vipl::termon::{clearScreen, enableRawMode, putStr, readRaw};
 use vipl::vm::dataType::{DataType, Generic};
 use vipl::vm::namespace::{loadSourceFile, Namespace, NamespaceState};
 use vipl::vm::namespace::FunctionTypeMeta::Runtime;
 use vipl::vm::stackFrame::StackFrame;
 use vipl::vm::value::Value;
-use vipl::vm::vm::{OpCode, VirtualMachine};
-use vipl::vm::vm::OpCode::{LCall, Pop, SCall};
+use vipl::vm::vm::OpCode::{LCall, Pop};
+use vipl::vm::vm::VirtualMachine;
 
 fn readInput(history: &[String]) -> Result<String, ()> {
     putStr(">>> ");
@@ -34,11 +26,11 @@ fn readInput(history: &[String]) -> Result<String, ()> {
     let buf = readRaw(history);
 
     if buf == "exit" {
-        return Err(())
+        return Err(());
     } else if buf == "clear" {
         clearScreen();
 
-        return Ok(String::new())
+        return Ok(String::new());
     }
 
     Ok(buf)
@@ -94,12 +86,12 @@ fn handleExpression(ctx: &mut StatementCtx<SymbolicOpcode>, t: DataType) {
             } else {
                 ctx.push(Pop)
             }
-        },
+        }
         DataType::Function { .. } => ctx.push(Pop),
         DataType::Void => {}
         DataType::Value => ctx.push(Pop),
         // FIXME handle these cases
-        DataType::Object(_) => {},
+        DataType::Object(_) => {}
         DataType::Null => {}
     }
 }
@@ -127,12 +119,12 @@ fn main() -> Result<(), ()> {
         let userInput = match readInput(&historyBuf) {
             Ok(v) => v,
             Err(_) => {
-                return Ok(())
+                return Ok(());
             }
         };
 
         if userInput.trim().is_empty() {
-            continue
+            continue;
         }
 
         historyBuf.push(userInput.clone());
@@ -171,7 +163,7 @@ fn main() -> Result<(), ()> {
             if let Err(e) = (*d).buildSymbolTable(nn.getImportHints()) {
                 nn.getImportHintsMut().clear();
                 e.printUWU(&userInput, None);
-                continue
+                continue;
             }
         }
 

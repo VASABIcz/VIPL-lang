@@ -1,15 +1,9 @@
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::process::exit;
-use std::time::{Instant, SystemTime};
-use crate::ast::RawExpression;
 use crate::utils::microsSinceEpoch;
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
-use crate::vm::dataType::{DataType, Generic};
-use crate::vm::namespace::NamespaceState::Loaded;
-use crate::vm::namespace::{GlobalMeta, Namespace};
-use crate::vm::objects::{Array, Str};
-use crate::vm::value::Value;
-use crate::vm::variableMetadata::VariableMetadata;
+use crate::vm::dataType::DataType::Int;
+use crate::vm::dataType::DataType;
+use crate::vm::namespace::Namespace;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOs(vm: &mut VirtualMachine) {

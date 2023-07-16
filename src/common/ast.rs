@@ -1,19 +1,16 @@
 use crate::ast::RawStatement::StatementExpression;
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::ops::{Index, Range};
+use std::fmt::Display;
+use std::ops::Range;
 use strum_macros::Display;
 use crate::codeGenCtx::{Body, SimpleCtx};
 
-use crate::errors::{InvalidOperation, InvalidTypeException, ParserError, TypeNotFound};
+use crate::errors::{InvalidOperation, ParserError};
 use crate::fastAccess::FastAccess;
 use crate::lexer::{Location, Token};
 use crate::lexingUnits::TokenType;
 use crate::utils::{genFunName, getRanges};
-use crate::vm::dataType::DataType::{Bool, Char, Reference};
-use crate::vm::dataType::Generic::Any;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
+use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::namespace::StructMeta;
 use crate::vm::variableMetadata::VariableMetadata;
 
@@ -182,11 +179,10 @@ impl RawExpression {
     }
     
     pub fn stringify(self) -> RawExpression {
-        if matches!(self, RawExpression::StringLiteral(_)) {
-            return self
-        }
-        else {
-            return RawExpression::Callable(Box::new(RawExpression::Variable("toString".to_string()).toExpression()), vec![self.toExpression()])
+        return if matches!(self, RawExpression::StringLiteral(_)) {
+            self
+        } else {
+            RawExpression::Callable(Box::new(RawExpression::Variable("toString".to_string()).toExpression()), vec![self.toExpression()])
         }
     }
 }

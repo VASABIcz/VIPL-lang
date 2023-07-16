@@ -67,11 +67,10 @@ impl Body {
         }
 
         if let Ok(v) = tt.clone().getRef() && let Ok(v1) = fun.returnType.clone().getRef() && v.name == v1.name {
-            if v.nullable && !v1.nullable {
-                return Err(CodeGenError::InvalidReturns)
-            }
-            else {
-                return Ok(())
+            return if v.nullable && !v1.nullable {
+                Err(CodeGenError::InvalidReturns)
+            } else {
+                Ok(())
             }
         }
 
@@ -809,7 +808,7 @@ pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionC
     
     if src.clone().isPrimitiveType() {
         let unboxed = tgt.clone().toUnboxedType();
-        assert!(unboxed == src);
+        assert_eq!(unboxed, src);
 
         return exp.genExpressionBox();
     }

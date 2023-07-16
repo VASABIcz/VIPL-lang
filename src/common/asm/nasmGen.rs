@@ -1,4 +1,4 @@
-use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R12, R13};
+use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R13};
 use crate::asm::asmLib::{writeToFile, AsmGen, AsmLocation, AsmValue, Register};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -154,6 +154,10 @@ impl AsmGen for NasmGen {
         self.writeOp2("imul", &dest.toString(), &src.toString())
     }
 
+    fn idiv(&mut self, dest: AsmLocation) {
+        self.writeOp1("div", &dest.toString())
+    }
+
     fn sysCall(&mut self) {
         self.writeLine("syscall")
     }
@@ -286,8 +290,9 @@ impl AsmGen for NasmGen {
         self.mov(reg.into(), Rax.into());
     }
 
-    fn idiv(&mut self, dest: AsmLocation) {
-        self.writeOp1("div", &dest.toString())
+    fn sete(&mut self, reg: Register) {
+        self.writeOp1("setl", "al");
+        self.mov(reg.into(), Rax.into());
     }
 
     fn beginIgnore(&mut self) {}
@@ -296,11 +301,6 @@ impl AsmGen for NasmGen {
 
     fn getStackOffset(&mut self) -> usize {
         self.stackSize
-    }
-
-    fn sete(&mut self, reg: Register) {
-        self.writeOp1("setl", "al");
-        self.mov(reg.into(), Rax.into());
     }
 }
 

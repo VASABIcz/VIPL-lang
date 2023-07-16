@@ -5,7 +5,6 @@ use crate::vm::namespace::NamespaceState::Loaded;
 use crate::vm::namespace::{GlobalMeta, Namespace};
 use crate::vm::objects::{Array, Str};
 use crate::vm::value::Value;
-use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::VirtualMachine;
 
 pub fn registerOut(vm: &mut VirtualMachine) {

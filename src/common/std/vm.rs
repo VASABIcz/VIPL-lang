@@ -1,4 +1,3 @@
-use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::vm::VirtualMachine;
 

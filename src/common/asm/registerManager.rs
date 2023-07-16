@@ -1,5 +1,4 @@
 use crate::asm::asmLib::Register;
-use core::slice::GetManyMutError;
 
 pub struct RegisterRecord {
     pub reg: Register,

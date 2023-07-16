@@ -1,40 +1,34 @@
-use std::{fs, intrinsics, ptr};
-use std::alloc::{alloc, dealloc, Layout};
-use std::cell::{RefCell, UnsafeCell};
-use std::collections::HashMap;
-use std::error::Error;
+use std::fs;
+use std::alloc::{alloc, Layout};
+use std::cell::UnsafeCell;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
-use std::intrinsics::{read_via_copy, unlikely};
-use std::mem::{size_of, transmute};
+use std::intrinsics::unlikely;
+use std::mem::transmute;
 
 use crate::asm::jitCompiler::JITCompiler;
-use crate::ast::{ASTNode, FunctionDef};
+use crate::ast::ASTNode;
 use crate::bytecodeGen::{emitOpcodes, genFunctionDef, SymbolicOpcode};
-use crate::codeGenCtx;
 use crate::codeGenCtx::{ExpressionCtx, SimpleCtx, StatementCtx};
-use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
+use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE};
 use crate::fastAccess::FastAccess;
-use crate::ffi::{allocateObject, NativeWrapper};
+use crate::ffi::NativeWrapper;
 use crate::lexer::LexingUnit;
 use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnit;
 use crate::parsingUnits::{getParsingUnits};
 use crate::symbolManager::SymbolManager;
-use crate::utils::{FastVec, genFunName, genNamespaceName, printOps, readNeighbours, transform};
+use crate::utils::{FastVec, genFunName, genNamespaceName, transform};
 use crate::viplParser::VIPLParsingState;
 use crate::vm::dataType::{DataType, RawDataType};
-use crate::vm::dataType::DataType::{Int, Void};
 use crate::vm::heap::{Allocation, Hay, HayCollector, Heap};
-use crate::vm::namespace::{FunctionTypeMeta, GlobalMeta, LoadedFunction, loadSourceFile, Namespace};
+use crate::vm::namespace::{FunctionTypeMeta, LoadedFunction, loadSourceFile, Namespace};
 use crate::vm::namespace::LoadedFunction::Native;
 use crate::vm::namespace::NamespaceState::{FailedToLoad, Loaded};
-use crate::vm::namespaceLoader::NamespaceLoader;
 use crate::vm::nativeObjects::{
-    ObjectType, SimpleObjectWrapper, UntypedObject, ViplObject, ViplObjectMeta,
+    ObjectType, UntypedObject, ViplObject, ViplObjectMeta,
 };
-use crate::vm::nativeStack::StackManager;
 use crate::vm::objects::{Array, Str};
 use crate::vm::optimizations::branchOmit::branchOmit;
 use crate::vm::optimizations::bytecodeOptimizer::optimizeBytecode;
@@ -447,7 +441,7 @@ impl VirtualMachine {
         }
 
         unsafe {
-            (*(&mut self.stack as *mut Vec<Value> as *mut Vec<Value>)).get_unchecked_mut(s - 1)
+            (*(&mut self.stack as *mut Vec<Value>)).get_unchecked_mut(s - 1)
         }
     }
 
@@ -912,7 +906,7 @@ impl VirtualMachine {
 
             let ptr2 = ptr.add(1) as *const Value;
 
-            let p = ptr2.add(fId) as *const Value;
+            let p = ptr2.add(fId);
 
             p.read()
         }

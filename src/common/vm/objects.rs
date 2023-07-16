@@ -1,7 +1,7 @@
 use crate::vm::dataType::DataType;
 use crate::vm::heap::{Allocation, Hay, HayCollector};
 use crate::vm::nativeObjects::{
-    ObjectType, UntypedObject, ViplNativeObject, ViplObject, ViplObjectMeta,
+    ObjectType, ViplNativeObject, ViplObject, ViplObjectMeta,
 };
 use crate::vm::value::{Value, Xd};
 use std::any::Any;

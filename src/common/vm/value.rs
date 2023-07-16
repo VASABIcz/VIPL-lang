@@ -1,12 +1,11 @@
 use crate::ast::RawExpression;
-use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::*;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
 
 use crate::vm::heap::{Allocation, Hay, HayCollector};
-use crate::vm::nativeObjects::{UntypedObject, ViplNativeObject, ViplObject, ViplObjectMeta};
+use crate::vm::nativeObjects::{UntypedObject, ViplObject};
 use crate::vm::objects::{Array, Str};
 use crate::vm::vm::VirtualMachine;
 

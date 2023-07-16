@@ -1,7 +1,6 @@
 #![allow(unused_assignments)]
 use crate::errors::LoadFileError;
 use crate::parser::{TokenProvider};
-use crate::vm;
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
 use crate::vm::value::Value;
@@ -9,10 +8,9 @@ use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::OpCode::{GetGlobal, LCall, SCall, SetGlobal};
 use crate::vm::vm::{OpCode, VirtualMachine};
 use std::arch::asm;
-use std::error::Error;
 use std::{env, fs};
 use std::ops::Range;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use crate::ast::{Expression, Statement};
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::bytecodeGen::SymbolicOpcode::Op;

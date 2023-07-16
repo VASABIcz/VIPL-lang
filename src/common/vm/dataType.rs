@@ -1,9 +1,6 @@
-use crate::ast::{RawExpression};
 use crate::errors::{CodeGenError, TypeError};
 use crate::vm::dataType::DataType::*;
-use crate::vm::objects::Str;
 use crate::vm::value::Value;
-use std::error::Error;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum RawDataType {

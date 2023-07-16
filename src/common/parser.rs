@@ -1,23 +1,9 @@
-use core::fmt;
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 use std::usize;
+use crate::errors::{InvalidToken, NoSuchParsingUnit, ParserError};
 
-use crate::ast;
-use crate::ast::RawExpression::{IntLiteral, NamespaceAccess};
-use crate::ast::RawStatement::{Assignable, StatementExpression};
-use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, VariableCreate, WhileS};
-
-use crate::errors::{CodeGenError, InvalidToken, LexerError, NoSuchParsingUnit, ParserError, SymbolType};
-
-use crate::lexer::{SourceProvider, Token};
-use crate::lexingUnits::TokenType;
-use crate::naughtyBox::Naughty;
+use crate::lexer::Token;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
-use crate::vm::dataType::{Generic, ObjectMeta};
-use crate::viplParser::VIPLParser;
-use crate::vm::variableMetadata::VariableMetadata;
 
 const DEBUG: bool = false;
 
@@ -291,7 +277,7 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
                 println!("parsing {:?}", unit);
             }
 
-            match typ {
+            return match typ {
                 Around | Behind => {
                     let res = match unit.parse(s2) {
                         Ok(v) => v,
@@ -300,7 +286,7 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
                         }
                     };
                     self.previousBuf.push(res);
-                    return Ok(true);
+                    Ok(true)
                 }
                 Ahead => {
                     let res = match unit.parse(s2) {
@@ -310,7 +296,7 @@ impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, 
                         }
                     };
                     self.previousBuf.push(res);
-                    return Ok(true);
+                    Ok(true)
                 }
             }
         }

@@ -49,7 +49,7 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     pub fn new(t: TokenProvider<TokenType>, units: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> VIPLParser {
         VIPLParser {
             tokens: t,
-            units: units,
+            units,
             state: Default::default(),
             previousBuf: vec![],
         }

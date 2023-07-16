@@ -1,9 +1,7 @@
-use crate::asm::asmLib::Register::{Rsi, Rsp};
+use crate::asm::asmLib::Register::Rsp;
 use crate::asm::asmLib::{AsmGen, AsmLocation, AsmValue, Register};
 use crate::asm::optimizedGen::AsmJumpType::Zero;
-use crate::asm::optimizedGen::AsmOpcode::Jmp;
-use crate::vm::vm::JmpType;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum AsmOpcode {
@@ -280,6 +278,11 @@ impl AsmGen for OptimizingGen {
         self.push(AsmOpcode::Imul(dest, src))
     }
 
+    fn idiv(&mut self, dest: AsmLocation) {
+        todo!()
+        // self.push(AsmOpcode::Add(dest, src))
+    }
+
     fn sysCall(&mut self) {
         self.push(AsmOpcode::SysCall)
     }
@@ -382,6 +385,16 @@ impl AsmGen for OptimizingGen {
         // self.push(AsmOpcode::Add(dest, src))
     }
 
+    fn offsetStack(&mut self, offset: isize) {
+        if offset < 0 {
+            self.stackOffset += (offset * -1) as usize;
+            self.sub(Rsp.into(), (8 * offset * -1).into())
+        } else if offset > 0 {
+            self.stackOffset -= offset as usize;
+            self.add(Rsp.into(), (8 * offset).into());
+        }
+    }
+
     fn setle(&mut self, reg: Register) {
         todo!()
         // self.push(AsmOpcode::Add(dest, src))
@@ -400,9 +413,8 @@ impl AsmGen for OptimizingGen {
         self.push(AsmOpcode::Setl(reg))
     }
 
-    fn idiv(&mut self, dest: AsmLocation) {
+    fn sete(&mut self, reg: Register) {
         todo!()
-        // self.push(AsmOpcode::Add(dest, src))
     }
 
     fn beginIgnore(&mut self) {
@@ -415,19 +427,5 @@ impl AsmGen for OptimizingGen {
 
     fn getStackOffset(&mut self) -> usize {
         self.stackOffset
-    }
-
-    fn offsetStack(&mut self, offset: isize) {
-        if offset < 0 {
-            self.stackOffset += (offset * -1) as usize;
-            self.sub(Rsp.into(), (8 * offset * -1).into())
-        } else if offset > 0 {
-            self.stackOffset -= offset as usize;
-            self.add(Rsp.into(), (8 * offset).into());
-        }
-    }
-
-    fn sete(&mut self, reg: Register) {
-        todo!()
     }
 }

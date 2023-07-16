@@ -1,14 +1,7 @@
-use std::arch::x86_64::_rdrand64_step;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fs;
-use std::io::Stderr;
-use std::ops::Deref;
-use std::ptr::write;
-
-use crate::asm::asmLib::Register::{Rax, Rdi, Rdx, Rsi, Rsp, R13};
-use crate::ast::ASTNode;
+use crate::asm::asmLib::Register::Rsp;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, std::marker::ConstParamTy)]
 pub enum Register {

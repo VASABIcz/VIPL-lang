@@ -1,8 +1,6 @@
-use std::alloc::{alloc, Global, Layout};
 use std::arch::asm;
 use std::hint::black_box;
-use std::ops::{Add, Sub};
-use std::ptr;
+use std::ops::Add;
 
 const SIZE: usize = 256 + 16;
 
@@ -53,8 +51,8 @@ impl<const SIZE: usize> StackManager<SIZE> {
             "push r8",
             "push r9",
             // "push 77",
-            nativePtr = in(reg) ptr as usize+size,
-            nativeBase = in(reg) ptr as usize
+            nativePtr = in(reg) ptr +size,
+            nativeBase = in(reg) ptr
             );
         }
     }

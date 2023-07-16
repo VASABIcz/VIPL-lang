@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::path::Iter;
 
 #[derive(Debug, Clone)]
 pub struct FastAccess<LOOKUP: Debug, VALUE: Debug> {

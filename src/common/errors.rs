@@ -465,16 +465,16 @@ pub struct TypeError {
 impl TypeError {
     pub fn new(expected: DataType, actual: DataType, exp: Expression) -> Self {
         Self {
-            expected: expected,
-            actual: actual,
+            expected,
+            actual,
             exp: Some(exp),
         }
     }
 
     pub fn newNone(expected: DataType, actual: DataType) -> Self {
         Self {
-            expected: expected,
-            actual: actual,
+            expected,
+            actual,
             exp: None,
         }
     }

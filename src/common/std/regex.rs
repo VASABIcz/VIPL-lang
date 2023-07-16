@@ -1,15 +1,12 @@
-use crate::ast::FunctionDef;
-use crate::ffi::stringNew;
 use crate::std::regix::Regix;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::dataType::{DataType, Generic};
 use crate::vm::heap::{Allocation, HayCollector};
-use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
+use crate::vm::namespace::Namespace;
 use crate::vm::nativeObjects::{
     blankCollect, blankDestroy, blankGetField, blankSetField, ObjectType, ViplNativeObject,
     ViplObject, ViplObjectMeta,
 };
 use crate::vm::value::Value;
-use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::VirtualMachine;
 
 #[derive(Debug)]

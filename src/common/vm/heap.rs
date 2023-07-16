@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use crate::vm::nativeObjects::UntypedObject;
 use std::ops::{Deref, DerefMut};
-use std::process::exit;
 
 const DEBUG: bool = false;
 

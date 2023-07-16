@@ -1,16 +1,13 @@
 use crate::asm::asmExec::allocateBinFunction;
 use crate::asm::asmGen::Jitter;
 use crate::asm::nasmGen::NasmGen;
-use crate::asm::optimizedGen::OptimizingGen;
 use crate::vm::namespace::Namespace;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
-use crate::vm::vm::{OpCode, VirtualMachine};
+use crate::vm::vm::VirtualMachine;
 use std::env::temp_dir;
 use std::fs;
-use std::mem::transmute;
 use std::process::Command;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::bytecodeGen::SymbolicOpcode;
 use crate::utils::microsSinceEpoch;
 

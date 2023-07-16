@@ -1,6 +1,5 @@
-use crate::errors::{CodeGenError, LexerError};
+use crate::errors::LexerError;
 use crate::lexer::SourceProvider;
-use libc::isdigit;
 use std::collections::HashSet;
 use crate::std::regix::Regix::{Char, Not};
 
@@ -222,10 +221,10 @@ impl Regix {
                 loop {
                     match inner.matchStr(buf, matches) {
                         None => {
-                            if matchCount >= *amount {
-                                return Some(matchAmount);
+                            return if matchCount >= *amount {
+                                Some(matchAmount)
                             } else {
-                                return None;
+                                None
                             }
                         }
                         Some(v) => {

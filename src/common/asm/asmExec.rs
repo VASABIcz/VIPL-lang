@@ -1,12 +1,10 @@
-use crate::vm::heap::Allocation;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
-use crate::vm::vm::{ExternFn, VirtualMachine};
-use std::alloc::{alloc, dealloc, Layout};
-use std::arch::asm;
+use crate::vm::vm::VirtualMachine;
+use std::alloc::{alloc, Layout};
 use std::fs;
-use std::mem::{forget, size_of, transmute};
-use std::ptr::{copy_nonoverlapping, null_mut};
+use std::mem::transmute;
+use std::ptr::copy_nonoverlapping;
 
 #[cfg(target_os = "windows")]
 pub fn allocateBinFunction(

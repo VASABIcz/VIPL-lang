@@ -4,7 +4,7 @@ use crate::errors::{CodeGenError, SymbolNotFoundE};
 use crate::errors::CodeGenError::SymbolNotFound;
 use crate::utils::{genFunName, genNamespaceName};
 use crate::vm::dataType::DataType;
-use crate::vm::namespace::{FunctionMeta, GlobalMeta, StructMeta};
+use crate::vm::namespace::StructMeta;
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::OpCode;
 

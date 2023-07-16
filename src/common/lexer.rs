@@ -1,9 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::errors::{LexerError, UnknownToken};
-use crate::lexer;
-use std::error::Error;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::ops::{Index, Range};
 use crate::lexingUnits::TokenType;
 
@@ -253,7 +251,7 @@ pub struct Token<T: PartialEq + Clone + Clone> {
 impl<T: PartialEq + Clone + Clone> Token<T> {
     pub fn mock(typ: T, str: &str) -> Token<T> {
         Token {
-            typ: typ,
+            typ,
             str: str.to_string(),
             location: Location {
                 row: 0,

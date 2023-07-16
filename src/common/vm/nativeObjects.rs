@@ -1,9 +1,7 @@
 use crate::vm::heap::{Allocation, HayCollector};
-use crate::vm::namespace::StructMeta;
 use crate::vm::objects::{Array, Str};
 use crate::vm::value::{Value, Xd};
 use crate::vm::vm::VirtualMachine;
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub fn blankDestroy<T>(this: &mut T) {

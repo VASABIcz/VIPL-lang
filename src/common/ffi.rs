@@ -1,14 +1,8 @@
-use libc::exit;
-use std::arch::asm;
-use std::ffi::{c_char, c_int, CStr};
+use std::ffi::{c_char, CStr};
 use std::fmt::{Debug, Formatter};
-use std::mem::forget;
 use std::ptr;
-use std::time::Duration;
 use crate::std::bootStrapVM;
-
-use crate::vm::heap::Hay;
-use crate::vm::namespace::{callNative, LoadedFunction, Namespace};
+use crate::vm::namespace::Namespace;
 use crate::vm::nativeObjects::{UntypedObject, ViplObject};
 use crate::vm::objects::{Array, Str};
 use crate::vm::stackFrame::StackFrame;

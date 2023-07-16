@@ -1,7 +1,4 @@
-use std::cell::UnsafeCell;
 use std::collections::HashMap;
-use std::error::Error;
-
 use crate::errors::{LoadFileError, ParserError};
 use crate::fastAccess::FastAccess;
 use crate::lexer::{

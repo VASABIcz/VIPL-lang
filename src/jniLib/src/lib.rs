@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use jni::{InitArgs, InitArgsBuilder, JavaVM, JNIEnv, JNIVersion};
-use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JObjectArray, JString, JValue, JValueGen};
-use jni::strings::JNIStr;
+use jni::JNIEnv;
+use jni::objects::{GlobalRef, JClass, JLongArray, JObject, JObjectArray, JString, JValue};
 use jni::sys::*;
 use vipl::utils;
 use vipl::vm::namespace::*;
 use vipl::vm::value::*;
-use vipl::vm::dataType::*;
 use vipl::vm::vm::*;
 use vipl::vm::stackFrame::*;
 use vipl::vm::value::*;

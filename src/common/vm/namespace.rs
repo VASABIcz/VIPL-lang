@@ -1,10 +1,9 @@
 use std::arch::asm;
-use std::collections::HashMap;
 use std::mem::transmute;
 
-use crate::ast::{ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement};
+use crate::ast::{ASTNode, Expression, FunctionDef, RawNode, RawStatement, Statement};
 use crate::codeGenCtx::Body;
-use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
+use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE};
 use crate::fastAccess::FastAccess;
 use crate::lexer::{LexingUnit, tokenizeSource};
 use crate::lexingUnits::TokenType;
@@ -12,21 +11,18 @@ use crate::lexingUnits::TokenType;
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnit;
 use crate::utils::{
-    genFunName, genFunNameMeta, genFunNameMetaTypes, restoreRegisters, saveRegisters,
+    genFunName, genFunNameMetaTypes, restoreRegisters, saveRegisters,
 };
 use crate::viplParser::{parseTokens, VIPLParsingState};
 use crate::vm::dataType::DataType;
 use crate::vm::dataType::DataType::{Function, Void};
-use crate::vm::heap::{Allocation, Hay, HayCollector};
+use crate::vm::heap::{Allocation, HayCollector};
 use crate::vm::nativeObjects::ViplObject;
 use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};
-use crate::wss::WhySoSlow;
-
-/*
+use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};/*
 function = object
 fn idk(): () -> () -> ! {}
     x = 5
@@ -651,7 +647,7 @@ impl Namespace {
                         RawNode::GlobalVarDef(name, default) => {
                             n.registerGlobal(GlobalMeta {
                                 name,
-                                default: default,
+                                default,
                                 typ: DataType::Void,
                             });
                         }
