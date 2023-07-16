@@ -15,7 +15,6 @@ use crate::lexer::{SourceProvider, Token};
 use crate::lexingUnits::TokenType;
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
-use crate::parsingUnits::{parsingUnits};
 use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::viplParser::VIPLParser;
 use crate::vm::variableMetadata::VariableMetadata;
@@ -243,7 +242,7 @@ pub enum ParsingUnitSearchType {
     Ahead,
 }
 
-pub trait ParsingUnit<OUT: Debug, IN: PartialEq + Clone + Debug, STATE: Debug>: Debug {
+pub trait ParsingUnit<OUT: Debug, IN: PartialEq + Clone + Debug, STATE: Debug>: Debug + Sync + Send {
     fn getType(&self) -> ParsingUnitSearchType;
 
     fn canParse(&self, parser: &Parser<IN, OUT, STATE>) -> bool;

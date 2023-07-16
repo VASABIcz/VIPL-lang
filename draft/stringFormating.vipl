@@ -1,7 +1,7 @@
-from out import print
+from out import *
+from strings import *
 
 x = "world"
 
-y = f"hello {x}"
-
-print y
+println "hello $x Nya~"
+println "5 + 5 = ${5 + 5}"

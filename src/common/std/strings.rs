@@ -104,6 +104,16 @@ pub fn registerStrings(vm: &mut VirtualMachine) {
         false
     );
 
+    n.makeNative(
+        "toString",
+        &[DataType::str()],
+        |vm, s| {
+            s.get(0)
+        },
+        DataType::str(),
+        false
+    );
+
     n.makeNative("endsWith", &[DataType::str(), DataType::str()], |vm, s| {
         let a = s.getString(0);
         let b = s.getString(1);

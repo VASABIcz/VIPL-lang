@@ -15,8 +15,8 @@ use vipl::ast::{ASTNode, RawStatement, Statement};
 use vipl::bytecodeGen::SymbolicOpcode;
 use vipl::codeGenCtx::{Body, StatementCtx};
 use vipl::errors::{LoadFileError, VIPLError};
-use vipl::lexingUnits::{lexingUnits, TokenType};
-use vipl::parsingUnits::parsingUnits;
+use vipl::lexingUnits::{getLexingUnits, lexingUnits, TokenType};
+use vipl::parsingUnits::{getParsingUnits, parsingUnits};
 use vipl::std::bootStrapVM;
 use vipl::termon::{clearScreen, enableRawMode, putChar, putStr, readRaw, testRead};
 use vipl::utils::namespacePath;
@@ -115,8 +115,8 @@ fn main() -> Result<(), ()> {
     let mut historyBuf = vec![];
     let mut vm = bootStrapVM();
     let mut localValues = vec![];
-    let mut lexingUnits = lexingUnits();
-    let mut parsingUnits = parsingUnits();
+    let mut lexingUnits = getLexingUnits();
+    let mut parsingUnits = getParsingUnits();
 
     let n = Namespace::constructNamespace(vec![], "UwU", &mut vm, vec![]);
     let generatedNamespace = vm.registerNamespace(n);
@@ -137,7 +137,7 @@ fn main() -> Result<(), ()> {
 
         historyBuf.push(userInput.clone());
 
-        let v = match loadSourceFile(&userInput, &mut lexingUnits, &mut parsingUnits) {
+        let v = match loadSourceFile(&userInput, lexingUnits, parsingUnits) {
             Ok(v) => v,
             Err(e) => {
                 match e {

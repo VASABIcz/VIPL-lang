@@ -7,8 +7,7 @@ use std::process::exit;
 use std::time::Instant;
 
 use vipl::errors::{LoadFileError, VIPLError};
-use vipl::lexingUnits::{lexingUnits, TokenType};
-use vipl::parsingUnits::parsingUnits;
+use vipl::lexingUnits::TokenType;
 use vipl::std::bootStrapVM;
 use vipl::utils::{genNamespaceName, namespacePath};
 use vipl::vm::namespace::{loadSourceFile, Namespace};

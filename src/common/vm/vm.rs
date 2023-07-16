@@ -17,10 +17,10 @@ use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE, SymbolType};
 use crate::fastAccess::FastAccess;
 use crate::ffi::{allocateObject, NativeWrapper};
 use crate::lexer::LexingUnit;
-use crate::lexingUnits::{lexingUnits, TokenType};
+use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnit;
-use crate::parsingUnits::parsingUnits;
+use crate::parsingUnits::{getParsingUnits};
 use crate::symbolManager::SymbolManager;
 use crate::utils::{FastVec, genFunName, genNamespaceName, printOps, readNeighbours, transform};
 use crate::viplParser::VIPLParsingState;
@@ -220,8 +220,8 @@ pub struct VirtualMachine {
 
     jitCompiler: JITCompiler,
 
-    lexingUnits: Vec<Box<dyn LexingUnit<TokenType>>>,
-    parsingUnits: Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>>
+    lexingUnits: &'static [Box<dyn LexingUnit<TokenType>>],
+    parsingUnits: &'static [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]
 }
 
 impl VirtualMachine {
@@ -1122,8 +1122,8 @@ impl Default for VirtualMachine {
             frames: Vec::with_capacity(32),
             namespaces: Default::default(),
             jitCompiler: Default::default(),
-            lexingUnits: lexingUnits(),
-            parsingUnits: parsingUnits(),
+            lexingUnits: getLexingUnits(),
+            parsingUnits: getParsingUnits(),
         }
     }
 }

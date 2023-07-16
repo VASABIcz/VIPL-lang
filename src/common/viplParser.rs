@@ -8,7 +8,6 @@ use crate::lexingUnits::TokenType;
 use crate::lexingUnits::TokenType::*;
 use crate::parser::{Parser, ParsingUnit, TokenProvider};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
-use crate::parsingUnits::parsingUnits;
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 
 pub const VALID_EXPRESSION_TOKENS: [TokenType; 7] = [
@@ -47,6 +46,15 @@ pub struct VIPLParsingState {
 }
 
 impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
+    pub fn new(t: TokenProvider<TokenType>, units: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> VIPLParser {
+        VIPLParser {
+            tokens: t,
+            units: units,
+            state: Default::default(),
+            previousBuf: vec![],
+        }
+    }
+
     pub fn isContext(&self, ctx: ParsingContext) -> bool {
         match self.state.parsingContext.last() {
             None => false,

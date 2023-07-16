@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use crate::errors::LexerError;
 use crate::lexer::{AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit, RangeLexingUnit, SourceProvider, Token, WhitespaceLexingUnit};
 
@@ -80,6 +81,14 @@ pub enum TokenType {
     Xor,
     NullAssert,
     Elvis
+}
+
+pub type ViplLexingUnit = Box<dyn LexingUnit<TokenType>>;
+
+pub static LEXING_UNITS: OnceLock<Vec<ViplLexingUnit>> = OnceLock::new();
+
+pub fn getLexingUnits() -> &'static [ViplLexingUnit] {
+    LEXING_UNITS.get_or_init(lexingUnits)
 }
 
 pub trait Stringable {
@@ -213,15 +222,12 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
             }
         }
 
-        if lexer.isPeek("f") {
+        if lexer.isPeekConsume("f") {
             typ = TokenType::FloatLiteral;
-            lexer.consumeOne()
-        } else if lexer.isPeek("L") {
+        } else if lexer.isPeekConsume("L") {
             typ = TokenType::LongLiteral;
-            lexer.consumeOne()
-        } else if lexer.isPeek("D") {
+        } else if lexer.isPeekConsume("D") {
             typ = TokenType::DoubleLiteral;
-            lexer.consumeOne()
         }
 
         Ok(Some(Token {
@@ -232,7 +238,7 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
     }
 }
 
-pub fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
+fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
     vec![
         WhitespaceLexingUnit::new(),
         NumericLexingUnit::new(),

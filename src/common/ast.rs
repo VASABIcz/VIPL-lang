@@ -175,6 +175,20 @@ impl RawExpression {
     pub fn isConstructable(&self) -> bool {
         matches!(self, RawExpression::Variable(..) | RawExpression::NamespaceAccess(..))
     }
+
+    pub fn toExpression(self) -> Expression {
+
+        Expression{ exp: self, loc: vec![] }
+    }
+    
+    pub fn stringify(self) -> RawExpression {
+        if matches!(self, RawExpression::StringLiteral(_)) {
+            return self
+        }
+        else {
+            return RawExpression::Callable(Box::new(RawExpression::Variable("toString".to_string()).toExpression()), vec![self.toExpression()])
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

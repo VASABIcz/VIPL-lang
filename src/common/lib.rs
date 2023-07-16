@@ -1,4 +1,7 @@
 #![allow(non_snake_case)]
+#![deny(unused_must_use)]
+#![deny(unused_assignments)]
+
 #![feature(get_mut_unchecked)]
 #![feature(downcast_unchecked)]
 #![feature(type_name_of_val)]
@@ -18,12 +21,9 @@
 #![feature(get_many_mut)]
 #![feature(slice_ptr_get)]
 #![feature(try_trait_v2)]
-#![allow(non_snake_case)]
 #![feature(slice_internals)]
 #![feature(pattern)]
 #![feature(exclusive_range_pattern)]
-#![deny(unused_must_use)]
-#![deny(unused_assignments)]
 
 // FIXME this is just quick workaround
 // #[global_allocator]
@@ -51,3 +51,4 @@ pub mod symbolManager;
 pub mod termon;
 pub mod codeGenCtx;
 mod SimpleAlloc;
+mod tests;

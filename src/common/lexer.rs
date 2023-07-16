@@ -94,8 +94,13 @@ impl SourceProvider<'_> {
         self.data.chars().nth(self.index)
     }
 
-    fn peekCharOffset(&self, offset: usize) -> Option<char> {
-        self.data.chars().nth(self.index + offset)
+    fn peekCharOffset(&self, offset: isize) -> Option<char> {
+        let temp = self.index as isize + offset;
+        if (temp) < 0 {
+            return None
+        }
+
+        self.data.chars().nth(temp as usize)
     }
 
     pub fn consumeMany(&mut self, amount: usize) {
@@ -129,6 +134,10 @@ impl SourceProvider<'_> {
             self.consumeMany(s.len());
             Ok(())
         }
+    }
+
+    pub fn isPrevChar(&self, c: char) -> bool {
+        self.peekCharOffset(-1).map_or_else(|| false, |it| it == c)
     }
 
     pub fn isPeekOffset(&self, s: &str, offset: usize) -> bool {
@@ -239,6 +248,20 @@ pub struct Token<T: PartialEq + Clone + Clone> {
     pub typ: T,
     pub str: String,
     pub location: Location,
+}
+
+impl<T: PartialEq + Clone + Clone> Token<T> {
+    pub fn mock(typ: T, str: &str) -> Token<T> {
+        Token {
+            typ: typ,
+            str: str.to_string(),
+            location: Location {
+                row: 0,
+                col: 0,
+                index: 0,
+            },
+        }
+    }
 }
 
 pub trait LexingUnit<T: Debug + PartialEq + Clone>: Send + Sync + Debug {

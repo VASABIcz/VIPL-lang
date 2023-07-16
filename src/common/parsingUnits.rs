@@ -1,4 +1,7 @@
+use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::ops::Add;
+use std::sync::OnceLock;
 
 use crate::ast;
 use crate::ast::RawExpression::NamespaceAccess;
@@ -7,19 +10,29 @@ use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, Ra
 use crate::codeGenCtx::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
-use crate::lexingUnits::TokenType;
+use crate::errors::SymbolType::DataType;
+use crate::lexer::{IdentifierLexingUnit, LexingUnit, Location, SourceProvider, Token, tokenizeSource};
+use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Elvis, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::utils::unEscapeChars;
-use crate::viplParser::{parseDataType, ParsingContext, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
+use crate::viplParser::{parseDataType, parseTokens, ParsingContext, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
 use crate::viplParser::ParsingContext::Condition;
 use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
 static mut TERNARY_PRIORITY: usize = 0;
 static EXPR_CONTEXTS: [ParsingContext; 2] = [ParsingContext::Expression, ParsingContext::Condition];
+
+type ViplParsingUnit = Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>;
+
+static PARSING_UNITS: OnceLock<Vec<ViplParsingUnit>> = OnceLock::new();
+
+pub fn getParsingUnits() -> &'static [ViplParsingUnit] {
+    PARSING_UNITS.get_or_init(parsingUnits)
+}
 
 #[derive(Debug)]
 pub struct BoolParsingUnit;
@@ -310,7 +323,59 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StringParsingUnit {
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedExpression(|parser| {
             let str = parser.tokens.getAssert(StringLiteral)?;
-            Ok(RawExpression::StringLiteral(unEscapeChars(str.str.strip_suffix('\"').unwrap().strip_prefix('\"').unwrap())))
+
+            let escpaedStr = str.str.strip_suffix('\"').unwrap().strip_prefix('\"').unwrap();
+
+            let mut strParts = vec![];
+
+            let mut src = SourceProvider::new(escpaedStr);
+
+            while !src.isDone() {
+                let s = src.consumeWhileMatches(|it| it != '$', Some(StringLiteral)).unwrap().unwrap();
+                if src.isPrevChar('\\') && src.isPeek("$") {
+                    let rawStr = unEscapeChars(&s.str);
+                    strParts.push(RawExpression::StringLiteral(rawStr.add("$")));
+                    continue
+                }
+                let rawStr = unEscapeChars(&s.str);
+                strParts.push(RawExpression::StringLiteral(rawStr));
+
+                if !src.isPeek("$") {
+                    continue
+                }
+
+                src.assertConsume("$").unwrap();
+                if src.isPeekConsume("{") {
+                    let idk = src.consumeWhileMatches(|it| it != '}', Some(StringLiteral)).unwrap().unwrap().str;
+                    let tokens = tokenizeSource(&idk, getLexingUnits()).unwrap();
+                    let ast = parseTokens(tokens, parser.units).unwrap().pop().unwrap().asExpr()?.exp;
+                    strParts.push(ast);
+                    src.assertConsume("}").unwrap();
+                }
+                else {
+                    let identifierUnit = IdentifierLexingUnit{ tokenType: Identifier };
+                    if !identifierUnit.canParse(&src) {
+                        panic!()
+                    }
+                    let identifier = identifierUnit.parse(&mut src).unwrap().unwrap();
+
+                    strParts.push(RawExpression::Variable(identifier.str))
+                }
+            }
+
+            assert!(!strParts.is_empty());
+
+            let mut buf = strParts.pop().unwrap().stringify();
+
+            for part in strParts.into_iter().rev() {
+                buf = RawExpression::BinaryOperation {
+                    right: Box::new(buf.toExpression()),
+                    left: Box::new(part.stringify().toExpression()),
+                    op: BinaryOp::Add,
+                };
+            }
+
+            return Ok(buf)
         })
     }
 
@@ -1474,27 +1539,6 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for TypeCheckParsingUnit 
 }
 
 #[derive(Debug)]
-pub struct FormatStringParsingUnit;
-
-impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FormatStringParsingUnit {
-    fn getType(&self) -> ParsingUnitSearchType {
-        Ahead
-    }
-
-    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
-        parser.tokens.isPeekType(TokenType::FormatStringLiteral)
-    }
-
-    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
-        parser.parseWrappedExpression(|parser| {
-            let t = parser.tokens.getAssert(TokenType::FormatStringLiteral)?;
-
-            Ok(RawExpression::FormatStringLiteral(t.str.strip_prefix("f\"").unwrap().strip_suffix('\"').unwrap().to_string()))
-        })
-    }
-}
-
-#[derive(Debug)]
 pub struct NegateParsingUnit;
 
 impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for NegateParsingUnit {
@@ -1601,7 +1645,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ElvisParsingUnit {
     }
 }
 
-pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
+fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>> {
     let mut x = 0;
 
     vec![
@@ -1725,10 +1769,29 @@ pub fn parsingUnits() -> Vec<Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsing
             x
         } }),
         Box::new(RepeatParsingUnit),
-        Box::new(FormatStringParsingUnit),
         Box::new(NegateParsingUnit),
         Box::new(BitwiseNotParsingUnit),
         Box::new(NullAssertParsingUnit),
         Box::new(ElvisParsingUnit{ priority: {x+= 1; x} })
     ]
+}
+
+#[test]
+fn stringLiteralTest() {
+    let token = Token::mock(StringLiteral,"\"${x} ${x}\"");
+    let token1 = Token::mock(StringLiteral,"\"cs $xdd lol\"");
+
+    let tokens = vec![token, token1];
+
+    let unit = StringParsingUnit;
+
+    let units = getParsingUnits();
+
+    let mut parser = VIPLParser::new(TokenProvider::new(tokens), units);
+
+    assert!(unit.canParse(&parser));
+
+    let a = unit.parse(&mut parser).unwrap();
+
+    println!("[OK] {:?}", a)
 }
