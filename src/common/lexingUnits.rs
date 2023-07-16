@@ -61,11 +61,6 @@ pub enum TokenType {
     Less,
     Not,
 
-    AddAs,
-    SubAs,
-    DivAs,
-    MulAs,
-
     And,
     Or,
 
@@ -81,7 +76,7 @@ pub enum TokenType {
     BitwiseNot,
     Xor,
     NullAssert,
-    Elvis
+    Elvis,
 }
 
 pub type ViplLexingUnit = Box<dyn LexingUnit<TokenType>>;
@@ -142,10 +137,6 @@ impl Stringable for TokenType {
             TokenType::Gt => ">",
             TokenType::Less => "<",
             TokenType::Not => "!",
-            TokenType::AddAs => "+=",
-            TokenType::SubAs => "-=",
-            TokenType::DivAs => "/=",
-            TokenType::MulAs => "*=",
             TokenType::And => "&&",
             TokenType::Or => "||",
             TokenType::Dot => ".",
@@ -202,14 +193,14 @@ impl LexingUnit<TokenType> for NumericLexingUnit {
                         typ,
                         str: buf,
                         location: loc,
-                    }))
+                    }));
                 }
 
                 typ = TokenType::FloatLiteral;
                 encounteredDot = true;
                 buf.push(lexer.assertChar()?);
                 buf.push(lexer.assertChar()?);
-                continue
+                continue;
             }
 
             let c = lexer.assertChar()?;
@@ -263,17 +254,12 @@ fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         AlphabeticKeywordLexingUnit::new("as", TokenType::As),
         AlphabeticKeywordLexingUnit::new("is", TokenType::Is),
         AlphabeticKeywordLexingUnit::new("from", TokenType::From),
-
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),
         RangeLexingUnit::new("#!", "\n", None),
         RangeLexingUnit::new("/*", "*/", None),
         //
-        KeywordLexingUnit::new("+=", TokenType::AddAs),
-        KeywordLexingUnit::new("-=", TokenType::SubAs),
-        KeywordLexingUnit::new("*=", TokenType::MulAs),
-        KeywordLexingUnit::new("/=", TokenType::DivAs),
         KeywordLexingUnit::new("==", TokenType::Eq),
         KeywordLexingUnit::new("!=", TokenType::NotEq),
         KeywordLexingUnit::new(">>", TokenType::ShiftRight),
@@ -282,7 +268,6 @@ fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         KeywordLexingUnit::new("->", TokenType::LambdaBegin),
         KeywordLexingUnit::new("!!", TokenType::NullAssert),
         KeywordLexingUnit::new("?:", TokenType::Elvis),
-
         KeywordLexingUnit::new(">", TokenType::Less),
         KeywordLexingUnit::new("<", TokenType::Gt),
         KeywordLexingUnit::new("!", TokenType::Not),

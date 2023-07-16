@@ -14,7 +14,7 @@ use crate::vm::dataType::{DataType, RawDataType};
 use crate::vm::namespace::StructMeta;
 use crate::vm::variableMetadata::VariableMetadata;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -120,12 +120,35 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ArithmeticOp {
     Add,
     Sub,
     Mul,
     Div,
+    Modulo,
+    ShiftLeft,
+    ShiftRight,
+    BitwiseOr,
+    BitwiseAnd,
+    Xor
+}
+
+impl ArithmeticOp {
+    pub fn toBinaryOp(self) -> BinaryOp {
+        match self {
+            ArithmeticOp::Add => BinaryOp::Add,
+            ArithmeticOp::Sub => BinaryOp::Sub,
+            ArithmeticOp::Mul => BinaryOp::Mul,
+            ArithmeticOp::Div => BinaryOp::Div,
+            ArithmeticOp::Modulo => BinaryOp::Modulo,
+            ArithmeticOp::ShiftLeft => BinaryOp::ShiftLeft,
+            ArithmeticOp::ShiftRight => BinaryOp::ShiftRight,
+            ArithmeticOp::BitwiseOr => BinaryOp::BitwiseOr,
+            ArithmeticOp::BitwiseAnd => BinaryOp::BitwiseAnd,
+            ArithmeticOp::Xor => BinaryOp::Xor,
+        }
+    }
 }
 
 #[derive(Debug, Display, Clone)]

@@ -1,12 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
 
 use crate::ast::{ArithmeticOp, BinaryOp, Expression, RawExpression, RawStatement};
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::codeGenCtx::{Body, ExpressionCtx, SimpleCtx, StatementCtx};
-use crate::errors::{
-    CodeGenError, TypeError,
-};
+use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
 use crate::errors::CodeGenError::LiteralParseError;
 use crate::lexer::*;
 use crate::parser::*;
@@ -601,7 +598,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 (ctx.ctx.getHandle())(&mut ctx, ret);
             }
         }
-        RawStatement::Assignable(dest, value, t, typeHint) => {
+        RawStatement::Assignable(dest, value, operator, typeHint) => {
             let a = ctx.ctx.makeExpressionCtx(dest).toDataType();
 
             let b = ctx.ctx.makeExpressionCtx(value).toDataType()?;
@@ -629,6 +626,10 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                         Err(_) => {
                             let t = ctx.ctx.makeExpressionCtx(value).toDataType()?;
 
+                            if operator.is_some() {
+                                return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::var(v)))
+                            }
+
                             if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
                                 ctx.ctx.registerVariable(v, DataType::Reference(r.clone()));
                             }
@@ -650,7 +651,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 },
             }
 
-            match t {
+            match operator {
                 None => {
                     ctx.ctx.makeExpressionCtx(value).genExpression()?;
                 }
@@ -664,6 +665,12 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                         ArithmeticOp::Sub => Sub(t.toRawType()?),
                         ArithmeticOp::Mul => Mul(t.toRawType()?),
                         ArithmeticOp::Div => Div(t.toRawType()?),
+                        ArithmeticOp::Modulo => OpCode::Modulo(t.toRawType()?),
+                        ArithmeticOp::ShiftLeft => OpCode::ShiftLeft,
+                        ArithmeticOp::ShiftRight => OpCode::ShiftRight,
+                        ArithmeticOp::BitwiseOr => OpCode::BitwiseOr,
+                        ArithmeticOp::BitwiseAnd => OpCode::BitwiseAnd,
+                        ArithmeticOp::Xor => OpCode::Xor,
                     };
                     ctx.ctx.push(o);
                 }

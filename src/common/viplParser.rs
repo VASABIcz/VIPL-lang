@@ -217,6 +217,18 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
         res.asExpr()
     }
 
+    pub fn parseStatement(&mut self) -> Result<Statement, ParserError<TokenType>> {
+        self.parseOne(Ahead)?.asStatement()
+    }
+
+    pub fn parseBodyOrStatement(&mut self) -> Result<Body, ParserError<TokenType>> {
+        if self.tokens.isPeekType(OCB) {
+            self.parseBody()
+        } else {
+            Ok(Body::new(vec![self.parseStatement()?]))
+        }
+    }
+
     pub fn parseBody(
         &mut self,
     ) -> Result<Body, ParserError<TokenType>> {
