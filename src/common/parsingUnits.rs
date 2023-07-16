@@ -1,26 +1,22 @@
-use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::sync::OnceLock;
 
 use crate::ast;
+use crate::ast::{ArithmeticOp, ArrayAccess, ASTNode, BinaryOp, Expression, RawExpression, RawNode, RawStatement, Statement, StructDef, WhileS};
 use crate::ast::RawExpression::NamespaceAccess;
-use crate::ast::RawStatement::Assignable;
-use crate::ast::{ASTNode, ArithmeticOp, ArrayAccess, BinaryOp, RawExpression, RawNode, RawStatement, StructDef, WhileS, Statement, Expression};
 use crate::codeGenCtx::Body;
 use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
-use crate::errors::SymbolType::DataType;
-use crate::lexer::{IdentifierLexingUnit, LexingUnit, Location, SourceProvider, Token, tokenizeSource};
+use crate::lexer::{IdentifierLexingUnit, LexingUnit, SourceProvider, Token, tokenizeSource};
 use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::lexingUnits::TokenType::{AddAs, As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, DivAs, Dot, DoubleLiteral, Else, Elvis, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, MulAs, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, SubAs, While};
 use crate::naughtyBox::Naughty;
-use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
+use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::utils::unEscapeChars;
 use crate::viplParser::{parseDataType, parseTokens, ParsingContext, VALID_EXPRESSION_TOKENS, VIPLParser, VIPLParsingState};
 use crate::viplParser::ParsingContext::Condition;
-use crate::vm::dataType::{Generic, ObjectMeta};
 use crate::vm::variableMetadata::VariableMetadata;
 
 static mut TERNARY_PRIORITY: usize = 0;

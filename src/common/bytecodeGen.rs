@@ -1,36 +1,23 @@
-use core::slice::sort::quicksort;
-use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::io::Write;
-use std::ops::Deref;
-use std::ptr::null;
+use std::fmt::Display;
 
-use libc::open;
-
-use crate::ast::{ArithmeticOp, ASTNode, BinaryOp, Expression, FunctionDef, RawExpression, RawNode, RawStatement, Statement, StructDef};
+use crate::ast::{ArithmeticOp, BinaryOp, Expression, RawExpression, RawStatement};
 use crate::bytecodeGen::SymbolicOpcode::Op;
 use crate::codeGenCtx::{Body, ExpressionCtx, SimpleCtx, StatementCtx};
 use crate::errors::{
-    CodeGenError, InvalidTypeException, NoValue, SymbolNotFoundE, SymbolType, TypeError,
-    TypeNotFound,
+    CodeGenError, TypeError,
 };
-use crate::errors::CodeGenError::{LiteralParseError, UnexpectedVoid, UntypedEmptyArray};
+use crate::errors::CodeGenError::LiteralParseError;
 use crate::lexer::*;
-use crate::lexingUnits::TokenType::In;
 use crate::parser::*;
-use crate::symbolManager::{FunctionSymbol, SymbolManager};
-use crate::utils::{genFunName, microsSinceEpoch};
-use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Value, Void};
-use crate::vm::dataType::Generic::Any;
-use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta, Namespace};
-use crate::vm::optimizations::constEval::ConstValue::B;
-use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
+use crate::symbolManager::FunctionSymbol;
+use crate::utils::microsSinceEpoch;
+use crate::vm::dataType::{DataType, RawDataType};
+use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
+use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta};
+use crate::vm::vm::{JmpType, OpCode};
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, Jmp, LCall, Less, Mul, New, Not, Pop, PushBool, PushChar, PushFloat, PushFunction, PushInt, PushIntOne, PushIntZero, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub, Swap};
+use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, LCall, Mul, New, Not, Pop, PushBool, PushChar, PushInt, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub};
 
 const DEBUG: bool = false;
 

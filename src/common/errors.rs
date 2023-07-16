@@ -1,15 +1,14 @@
-use crate::ast::{ASTNode, Expression, RawExpression, Statement};
-use crate::lexer::{Location, Token};
-use crate::parser::ParsingUnitSearchType;
-use crate::vm::dataType::DataType;
-use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::str::pattern::Pattern;
-use strum_macros::{Display, IntoStaticStr};
-use crate::lexingUnits::{Stringable};
+
+use strum_macros::Display;
+
+use crate::ast::{ASTNode, Expression, Statement};
+use crate::lexer::{Location, Token};
+use crate::parser::ParsingUnitSearchType;
 use crate::utils::{errorBody, errorBody2, errorBodys, getRanges, visualizeRange};
+use crate::vm::dataType::DataType;
 
 impl VIPLError for CodeGenError {
     fn getDomain(&self) -> String {

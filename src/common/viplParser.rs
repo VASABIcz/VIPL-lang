@@ -1,8 +1,8 @@
 use std::collections::HashMap;
+
 use crate::ast::{ASTNode, Expression, Node, RawExpression, RawNode, RawStatement, Statement};
 use crate::codeGenCtx::Body;
-use crate::errors::{CodeGenError, NoSuchParsingUnit, ParserError, SymbolType};
-
+use crate::errors::{NoSuchParsingUnit, ParserError, SymbolType};
 use crate::lexer::Token;
 use crate::lexingUnits::TokenType;
 use crate::lexingUnits::TokenType::*;

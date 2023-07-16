@@ -1,4 +1,5 @@
 use std::sync::OnceLock;
+
 use crate::errors::LexerError;
 use crate::lexer::{AlphabeticKeywordLexingUnit, IdentifierLexingUnit, KeywordLexingUnit, LexingUnit, RangeLexingUnit, SourceProvider, Token, WhitespaceLexingUnit};
 

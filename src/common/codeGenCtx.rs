@@ -1,22 +1,19 @@
 use std::cell::UnsafeCell;
-use std::collections::{HashMap, HashSet};
 
-use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, RawStatement, Statement};
+use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, Statement};
 use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
 use crate::errors::CodeGenError::UnexpectedVoid;
 use crate::symbolManager::{FunctionSymbol, GlobalSymbol, StructSymbol, SymbolManager};
 use crate::utils::genNamespaceName;
-use crate::vm::dataType::{DataType, Generic, ObjectMeta, RawDataType};
+use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
-use crate::vm::dataType::Generic::Any;
-use crate::vm::namespace::{FunctionMeta, Namespace};
+use crate::vm::namespace::Namespace;
 use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::vm::{JmpType, OpCode, VirtualMachine};
-use crate::vm::vm::OpCode::{Add, GetLocal, LCall, PushInt, SCall, SetLocal, Sub};
+use crate::vm::vm::VirtualMachine;
 
 #[derive(Debug, Clone)]
 pub struct Body {
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Statement>
 }
 
 impl Body {

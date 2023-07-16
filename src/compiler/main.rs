@@ -2,19 +2,14 @@
 #![allow(non_snake_case)]
 
 use std::{env, fs};
-use std::mem::size_of;
-use std::process::exit;
 use std::time::Instant;
 
 use vipl::errors::{LoadFileError, VIPLError};
-use vipl::lexingUnits::TokenType;
 use vipl::std::bootStrapVM;
-use vipl::utils::{genNamespaceName, namespacePath};
-use vipl::vm::namespace::{loadSourceFile, Namespace};
+use vipl::utils::namespacePath;
 use vipl::vm::stackFrame::StackFrame;
-use vipl::vm::value::Value;
-use vipl::vm::vm::{OpCode, VirtualMachine};
 use vipl::vm::vm::OpCode::Pop;
+use vipl::vm::vm::VirtualMachine;
 
 fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
@@ -32,7 +27,7 @@ fn main() -> Result<(), ()> {
                 LoadFileError::ParserError(a) => a.printUWU(&file, Some(&sourceFile)),
                 LoadFileError::LexerError(a) => a.printUWU(&file, Some(&sourceFile))
             }
-            return Err(())
+            return Err(());
         }
     };
 
@@ -46,7 +41,7 @@ fn main() -> Result<(), ()> {
             e.printUWU(&file, Some(&sourceFile));
         }
         println!();
-        return Err(())
+        return Err(());
     }
 
     let vm1 = &vm as *const VirtualMachine as *mut VirtualMachine;
