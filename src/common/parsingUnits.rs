@@ -150,7 +150,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for WhileParsingUnit {
 
             let op = parser.parseCondition()?;
 
-            let statements = parser.parseBody()?;
+            let statements = parser.parseBody(true)?;
 
             Ok(RawStatement::While(WhileS {
                 exp: op,
@@ -191,21 +191,21 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for IfParsingUnit {
 
             let condition = parser.parseCondition()?;
 
-            let body = parser.parseBodyOrStatement()?;
+            let body = parser.parseBodyOrStatement(false)?;
 
             while parser.tokens.isPeekType(Else) && parser.tokens.isPeekIndexType(If, 1) {
                 parser.tokens.getAssert(Else)?;
                 parser.tokens.getAssert(If)?;
 
                 let cond = parser.parseCondition()?;
-                let statements = parser.parseBodyOrStatement()?;
+                let statements = parser.parseBodyOrStatement(false)?;
 
                 elseIfs.push((cond, statements))
             }
 
             if parser.tokens.isPeekType(Else) {
                 parser.tokens.getAssert(Else)?;
-                elseBody = Some(parser.parseBodyOrStatement()?);
+                elseBody = Some(parser.parseBodyOrStatement(false)?);
             }
 
             Ok(RawStatement::If(ast::If {
@@ -535,7 +535,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LoopParsingUnit {
     ) -> Result<ASTNode, ParserError<TokenType>> {
         parser.parseWrappedStatement(|parser| {
             parser.tokens.getAssert(Loop)?;
-            let body = parser.parseBody()?;
+            let body = parser.parseBody(true)?;
             Ok(RawStatement::Loop(body))
         }
         )
@@ -837,9 +837,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for LambdaParsingUnit {
 
             let body = if parser.tokens.isPeekType(Equals) {
                 parser.tokens.getAssert(Equals)?;
-                Body::new(vec![Statement { exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }])
+                Body::new(vec![Statement { exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }], false)
             } else {
-                parser.parseBody()?
+                parser.parseBody(false)?
             };
 
             Ok(RawExpression::Lambda(args, body, returnType))
@@ -1110,7 +1110,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ForParsingUnit {
 
             let res = parser.parseCondition()?;
 
-            let body = parser.parseBody()?;
+            let body = parser.parseBody(true)?;
 
             Ok(RawStatement::ForLoop(varName, res, body))
         }
@@ -1287,11 +1287,11 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for RepeatParsingUnit {
             parser.tokens.getAssert(Repeat)?;
             let varName = parser.tokens.getIdentifier()?;
             let count = parser.tokens
-                .getAssert(TokenType::IntLiteral)?
+                .getAssert(IntLiteral)?
                 .str
-                .parse::<usize>().map_err(|_| ParserError::Unknown("".into()))?;
+                .parse::<usize>().map_err(|_| ParserError::Unknown("failed to parse int in RepeatParsingUnit".into()))?;
 
-            let body = parser.parseBody()?;
+            let body = parser.parseBody(true)?;
 
             Ok(RawStatement::Repeat(varName, count, body))
         }
@@ -1357,9 +1357,9 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
                 parser.tokens.getAssert(Equals)?;
                 isOneLine = true;
                 // FIXME
-                Body::new(vec![Statement { exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }])
+                Body::new(vec![Statement { exp: ast::RawStatement::Return(Some(parser.parseExpr()?)), loc: vec![] }], false)
             } else {
-                parser.parseBody()?
+                parser.parseBody(false)?
             };
 
             Ok(RawNode::FunctionDef(ast::FunctionDef {

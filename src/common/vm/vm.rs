@@ -656,7 +656,7 @@ impl VirtualMachine {
                         }
                     }
                 },
-                Return => return if returns { self.pop() } else { Value::null() },
+                Return => return if returns {  self.pop() } else { Value::null() },
                 Add(v) => unsafe {
                     let a = self.pop();
                     self.getMutTop().add(

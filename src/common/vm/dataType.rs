@@ -49,6 +49,10 @@ pub enum DataType {
 
 impl DataType {
     pub fn canAssign(&self, other: &DataType) -> bool {
+        if self.isVoid() && other.isVoid() {
+            return true;
+        }
+
         if self.isVoid() || other.isVoid() {
             return false;
         }

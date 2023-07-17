@@ -25,7 +25,7 @@ pub enum ParsingContext {
     TopLevel,
     Body,
     Condition,
-    Expression
+    Expression,
 }
 
 pub type VIPLParser<'a> = Parser<'a, TokenType, ASTNode, VIPLParsingState>;
@@ -42,7 +42,7 @@ impl TokenProvider<TokenType> {
 pub struct VIPLParsingState {
     pub symbols: HashMap<String, SymbolType>,
     pub parsingStart: Vec<Option<usize>>,
-    pub parsingContext: Vec<ParsingContext>
+    pub parsingContext: Vec<ParsingContext>,
 }
 
 impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
@@ -137,7 +137,6 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
     }
 
     pub fn isPrevExp(&self) -> bool {
-
         match self.previousBuf.last() {
             None => false,
             Some(v) => match v {
@@ -221,16 +220,17 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
         self.parseOne(Ahead)?.asStatement()
     }
 
-    pub fn parseBodyOrStatement(&mut self) -> Result<Body, ParserError<TokenType>> {
+    pub fn parseBodyOrStatement(&mut self, isLoop: bool) -> Result<Body, ParserError<TokenType>> {
         if self.tokens.isPeekType(OCB) {
-            self.parseBody()
+            self.parseBody(isLoop)
         } else {
-            Ok(Body::new(vec![self.parseStatement()?]))
+            Ok(Body::new(vec![self.parseStatement()?], false))
         }
     }
 
     pub fn parseBody(
         &mut self,
+        isLoop: bool,
     ) -> Result<Body, ParserError<TokenType>> {
         let mut statements = vec![];
 
@@ -244,7 +244,7 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 
         self.tokens.getAssert(TokenType::CCB)?;
 
-        Ok(Body::new(statements))
+        Ok(Body::new(statements, isLoop))
     }
 
     pub fn parseCondition(&mut self) -> Result<Expression, ParserError<TokenType>> {
@@ -258,11 +258,11 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
 pub fn parseTokens(toks: Vec<Token<TokenType>>, units: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]) -> Result<Vec<ASTNode>, ParserError<TokenType>> {
     let tokens = TokenProvider::new(toks);
 
-    let mut parser = Parser{
+    let mut parser = Parser {
         tokens,
         units,
         state: Default::default(),
-        previousBuf: vec![]
+        previousBuf: vec![],
     };
 
     while !parser.tokens.isDone() {
@@ -349,11 +349,10 @@ pub fn parseDataType(
                 if tokens.isPeekType(QuestionMark) {
                     tokens.getAssert(QuestionMark)?;
                     Ok(DataType::Object(true))
-                }
-                else {
+                } else {
                     Ok(DataType::Object(false))
                 }
-            },
+            }
             c => {
                 let nullable = tokens.ifPeekGet(QuestionMark).is_some();
 

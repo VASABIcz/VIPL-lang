@@ -169,7 +169,7 @@ fn main() -> Result<(), ()> {
 
         let (fMeta, f) = nn.getFunctionMut(0);
 
-        fMeta.functionType = Runtime(Body::new(buf));
+        fMeta.functionType = Runtime(Body::new(buf, false));
 
         unsafe {
             match (&mut *d).link(handleExpression) {

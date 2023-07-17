@@ -13,7 +13,8 @@ use crate::vm::vm::VirtualMachine;
 
 #[derive(Debug, Clone)]
 pub struct Body {
-    pub statements: Vec<Statement>
+    pub statements: Vec<Statement>,
+    pub isLoop: bool,
 }
 
 impl Body {
@@ -21,15 +22,15 @@ impl Body {
         self.statements.push(s)
     }
 
-    pub fn new(b: Vec<Statement>) -> Self {
-        Self { statements: b }
+    pub fn new(b: Vec<Statement>, isLoop: bool) -> Self {
+        Self { statements: b, isLoop }
     }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct LabelManager {
     labelCounter: usize,
-    loopContext: Vec<(usize, usize)>
+    loopContext: Vec<(usize, usize)>,
 }
 
 impl LabelManager {
@@ -66,7 +67,7 @@ pub struct SimpleCtx<'a, T> {
     vm: &'a mut UnsafeCell<VirtualMachine>,
     handle: fn(&mut StatementCtx<T>, DataType) -> (),
     labels: &'a mut LabelManager,
-    symbols: &'a mut SymbolManager
+    symbols: &'a mut SymbolManager,
 }
 
 impl<T> SimpleCtx<'_, T> {
@@ -76,10 +77,10 @@ impl<T> SimpleCtx<'_, T> {
         }
 
         if name.len() > 1 {
-            return self.findGlobalParts(name).is_ok()
+            return self.findGlobalParts(name).is_ok();
         }
 
-        return self.getLocal(&name[0]).is_ok() || self.findGlobalParts(name).is_ok()
+        return self.getLocal(&name[0]).is_ok() || self.findGlobalParts(name).is_ok();
     }
 
     pub fn getVMMut(&mut self) -> &mut VirtualMachine {
@@ -136,7 +137,7 @@ impl<T> SimpleCtx<'_, T> {
         handle: fn(&mut StatementCtx<T>, DataType) -> (),
         symbols: &'b mut SymbolManager,
         labels: &'b mut LabelManager,
-        ops: &'b mut Vec<T>
+        ops: &'b mut Vec<T>,
     ) -> SimpleCtx<'b, T> {
         SimpleCtx {
             ops,
@@ -150,11 +151,13 @@ impl<T> SimpleCtx<'_, T> {
 
     pub fn inflate<'a>(
         &'a mut self,
-        statement: &'a Statement
+        statement: &'a Statement,
     ) -> StatementCtx<'a, T> {
         StatementCtx {
             statement: &statement,
-            ctx: self.transfer()
+            ctx: self.transfer(),
+            isLast: false,
+            expectedReturn: Void,
         }
     }
 
@@ -204,15 +207,14 @@ impl<T> SimpleCtx<'_, T> {
     pub fn registerVariableIfNotExists(&mut self, name: &str, t: DataType) -> (DataType, usize) {
         if let Ok(v) = self.symbols.getLocal(name) {
             v.clone()
-        }
-        else {
+        } else {
             self.symbols.registerLocal(name, t)
         }
     }
 
     pub fn makeExpressionCtx<'a>(
         &'a mut self,
-        exp: &'a Expression
+        exp: &'a Expression,
     ) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
@@ -226,6 +228,10 @@ impl<T> SimpleCtx<'_, T> {
 
     pub fn getStruct(&self, name: &str) -> Result<&StructSymbol, CodeGenError> {
         self.symbols.getStruct(name)
+    }
+
+    pub fn getStructParts(&self, parts: &[String]) -> Result<&StructSymbol, CodeGenError> {
+        self.symbols.getStruct(&genNamespaceName(parts))
     }
 
     pub fn getOps(&self) -> &[T] {
@@ -244,7 +250,7 @@ impl<T> SimpleCtx<'_, T> {
 #[derive(Debug)]
 pub struct ExpressionCtx<'a, T> {
     pub exp: &'a Expression,
-    pub ctx: SimpleCtx<'a, T>
+    pub ctx: SimpleCtx<'a, T>,
 }
 
 impl<T> ExpressionCtx<'_, T> {
@@ -260,16 +266,16 @@ impl<T> ExpressionCtx<'_, T> {
 
         // FIXME not sure if this is the right thing to do
         if !t.canAssign(&t1) {
-            return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())))
+            return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())));
         }
 
         Ok(())
     }
 
-    pub fn transfer<'a>(&'a mut self, exp: &'a Expression, /*typeHint: Option<DataType>*/) -> ExpressionCtx<T> {
+    pub fn transfer<'a>(&'a mut self, exp: &'a Expression /*typeHint: Option<DataType>*/) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp,
-            ctx: self.ctx.transfer()
+            ctx: self.ctx.transfer(),
         }
     }
 
@@ -304,7 +310,7 @@ impl<T> ExpressionCtx<'_, T> {
                 let rightT = self.transfer(right).toDataType()?;
 
                 if !left.isNull() && !right.isNull() && leftT != rightT {
-                    return Err(CodeGenError::TypeError( TypeError::new(leftT, rightT, self.exp.clone())))
+                    return Err(CodeGenError::TypeError(TypeError::new(leftT, rightT, self.exp.clone())));
                 }
 
                 let t = match o {
@@ -323,20 +329,20 @@ impl<T> ExpressionCtx<'_, T> {
 
                         Bool
                     }
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Modulo  => {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Modulo => {
                         if o == &BinaryOp::Add && rightT.isString() {
-                            return Ok(DataType::str())
+                            return Ok(DataType::str());
                         }
 
                         assert!(rightT.supportsArithmetics());
 
                         leftT.toUnboxedType()
-                    },
+                    }
                     BinaryOp::Div => {
                         assert!(rightT.supportsArithmetics());
 
                         Float
-                    },
+                    }
                     BinaryOp::BitwiseAnd | BinaryOp::Xor | BinaryOp::BitwiseOr | BinaryOp::ShiftRight | BinaryOp::ShiftLeft => {
                         assert!(rightT.isBoolLike());
 
@@ -357,13 +363,13 @@ impl<T> ExpressionCtx<'_, T> {
                 }
                 Ok(v) => {
                     Ok(v.0.clone())
-                },
+                }
             },
             RawExpression::BoolLiteral(_) => Ok(Bool),
             RawExpression::CharLiteral(_) => Ok(Char),
             RawExpression::ArrayLiteral(e) => {
                 let t = self
-                    .transfer(e.get(0).ok_or_else(||CodeGenError::UntypedEmptyArray)?)
+                    .transfer(e.get(0).ok_or_else(|| CodeGenError::UntypedEmptyArray)?)
                     .toDataTypeNotVoid()?;
 
                 Ok(DataType::arr(Generic::Type(t)))
@@ -378,13 +384,13 @@ impl<T> ExpressionCtx<'_, T> {
                         }
                         Ok(o.generics
                             .first()
-                            .ok_or_else(||CodeGenError::UntypedEmptyArray)?
+                            .ok_or_else(|| CodeGenError::UntypedEmptyArray)?
                             .clone()
-                            .ok_or_else(||CodeGenError::UntypedEmptyArray)?)
+                            .ok_or_else(|| CodeGenError::UntypedEmptyArray)?)
                     }
                     _ => {
                         Err(CodeGenError::ExpectedReference)
-                    },
+                    }
                 }
             }
             RawExpression::NotExpression(i, _) => {
@@ -451,7 +457,7 @@ impl<T> ExpressionCtx<'_, T> {
                     }
                     _ => {
                         Err(CodeGenError::ExpectedCallable)
-                    },
+                    }
                 }
             },
             RawExpression::StructInit(name, _) => Ok(Reference(ObjectMeta::nunNull(name.last().unwrap()))),
@@ -474,7 +480,7 @@ impl<T> ExpressionCtx<'_, T> {
                     }
                     _ => {
                         Err(CodeGenError::ExpectedReference)
-                    },
+                    }
                 }
             }
             RawExpression::Null => Ok(Null),
@@ -488,22 +494,22 @@ impl<T> ExpressionCtx<'_, T> {
                     let mut t = a.getRef()?;
                     t.nullable = true;
 
-                    return Ok(Reference(t))
+                    return Ok(Reference(t));
                 }
 
                 if a.isNull() && b.isReference() {
                     let mut t = b.getRef()?;
                     t.nullable = true;
 
-                    return Ok(Reference(t))
+                    return Ok(Reference(t));
                 }
 
                 if a.isPrimitiveType() && b.isNull() {
-                    return Ok(a.toBoxedType().toNullable())
+                    return Ok(a.toBoxedType().toNullable());
                 }
 
                 if a.isNull() && b.isPrimitiveType() {
-                    return Ok(b.toBoxedType().toNullable())
+                    return Ok(b.toBoxedType().toNullable());
                 }
 
                 self.transfer(tr).assertType(b)?;
@@ -519,16 +525,15 @@ impl<T> ExpressionCtx<'_, T> {
                 let t = self.transfer(v).toDataType()?;
                 if !t.isNumeric() {
                     Err(CodeGenError::TypeError(TypeError::new(DataType::Int, t, *v.clone())))
-                }
-                else {
+                } else {
                     Ok(t)
                 }
             }
             RawExpression::BitwiseNot(v) => {
-                let t =  self.transfer(v).toDataType()?;
+                let t = self.transfer(v).toDataType()?;
 
                 if !t.isInt() {
-                    return Err(CodeGenError::TypeError(TypeError::new(Int, t, *v.clone())))
+                    return Err(CodeGenError::TypeError(TypeError::new(Int, t, *v.clone())));
                 }
 
                 Ok(Int)
@@ -555,7 +560,7 @@ impl<T> ExpressionCtx<'_, T> {
                 panic!();
 
                 if a.isReferenceNullable() && b.isNull() {
-                    return Ok(a)
+                    return Ok(a);
                 }
 
                 if a.isReferenceNullable() && b.isReference() {
@@ -563,7 +568,7 @@ impl<T> ExpressionCtx<'_, T> {
                     let b1 = b.getReff()?;
 
                     if a1.name == b1.name {
-                        return Ok(Reference(b1.clone()))
+                        return Ok(Reference(b1.clone()));
                     }
                 }
 
@@ -572,7 +577,7 @@ impl<T> ExpressionCtx<'_, T> {
                     let b1 = b.getReff()?;
 
                     if a1.name == b1.name {
-                        return Ok(Reference(b1.clone()))
+                        return Ok(Reference(b1.clone()));
                     }
                 }
                 panic!("{:?} {:?}", a, b);
@@ -585,7 +590,9 @@ impl<T> ExpressionCtx<'_, T> {
 #[derive(Debug)]
 pub struct StatementCtx<'a, T> {
     pub statement: &'a Statement,
-    pub ctx: SimpleCtx<'a, T>
+    pub ctx: SimpleCtx<'a, T>,
+    pub isLast: bool,
+    pub expectedReturn: DataType
 }
 
 impl<T> StatementCtx<'_, T> {
@@ -603,7 +610,9 @@ impl<T> StatementCtx<'_, T> {
     pub fn transfer<'a>(&'a mut self, statement: &'a Statement) -> StatementCtx<T> {
         StatementCtx {
             statement,
-            ctx: self.deflate()
+            expectedReturn: self.expectedReturn.clone(),
+            isLast: self.isLast,
+            ctx: self.deflate(),
         }
     }
 }

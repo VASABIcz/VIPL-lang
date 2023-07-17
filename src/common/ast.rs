@@ -202,7 +202,7 @@ impl RawExpression {
     }
     
     pub fn stringify(self) -> RawExpression {
-        return if matches!(self, RawExpression::StringLiteral(_)) {
+        if matches!(self, RawExpression::StringLiteral(_)) {
             self
         } else {
             RawExpression::Callable(Box::new(RawExpression::Variable("toString".to_string()).toExpression()), vec![self.toExpression()])
@@ -412,17 +412,7 @@ impl ASTNode {
     pub fn asStatement(self) -> Result<Statement, ParserError<TokenType>> {
         match self {
             ASTNode::Statement(s) => Ok(s),
-            ASTNode::Expr(e) => match e.exp {
-                RawExpression::NamespaceAccess(f) => todo!(),
-                RawExpression::Callable(_, _) => {
-                    let loc = e.loc.clone();
-                    Ok(Statement{ exp: StatementExpression(e), loc })
-                },
-                _ => Err(ParserError::InvalidOperation(InvalidOperation {
-                    operation: ASTNode::Expr(e),
-                    expected: String::from("Statement"),
-                })),
-            },
+            ASTNode::Expr(e) => Ok(Statement { exp: StatementExpression(e.clone()), loc: e.loc.clone() }),
             _ => Err(ParserError::InvalidOperation(InvalidOperation {
                 operation: self,
                 expected: String::from("Statement"),

@@ -1,0 +1,7 @@
+from out import *
+
+fn lol(): int {
+    4
+}
+
+println lol()

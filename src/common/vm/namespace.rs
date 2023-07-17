@@ -22,7 +22,9 @@ use crate::vm::objects::Str;
 use crate::vm::stackFrame::StackFrame;
 use crate::vm::value::Value;
 use crate::vm::variableMetadata::VariableMetadata;
-use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};/*
+use crate::vm::vm::{ImportHints, OpCode, VirtualMachine};
+
+/*
 function = object
 fn idk(): () -> () -> ! {}
     x = 5
@@ -59,7 +61,7 @@ struct Lambda {
 pub enum NamespaceState {
     Loaded,
     PartiallyLoaded,
-    FailedToLoad
+    FailedToLoad,
 }
 
 #[derive(Debug, Clone)]
@@ -117,7 +119,6 @@ pub struct EnumMeta {
 }
 
 impl StructMeta {
-
     pub fn n(name: &str, fields: FastAccess<String, VariableMetadata>) -> Self {
         Self {
             name: name.to_string(),
@@ -132,7 +133,7 @@ impl StructMeta {
     pub fn findField(&self, name: &str) -> Result<(&VariableMetadata, usize), CodeGenError> {
         self.fields
             .getSlowStr(name)
-            .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))
+            .ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))
     }
 
     #[inline]
@@ -245,7 +246,7 @@ pub enum LoadedFunction {
 #[inline(always)]
 pub fn printStack() {
     #[allow(unused_assignments)]
-    let mut ptr = 0usize;
+        let mut ptr = 0usize;
     unsafe {
         asm!(
         "mov {ptr}, rsp",
@@ -315,7 +316,7 @@ pub struct Namespace {
 
     enums: FastAccess<String, EnumMeta>,
 
-    importHints: Vec<ImportHints>
+    importHints: Vec<ImportHints>,
 }
 
 impl Allocation for Namespace {
@@ -365,7 +366,7 @@ impl Namespace {
             .getSlowStr(lookName)
             .ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(name)))?;
 
-        Ok((&id.0 .0, id.1))
+        Ok((&id.0.0, id.1))
     }
 
     pub fn findFunctionsByName(&self, name: &str) -> Vec<(FunctionMeta, usize)> {
@@ -408,7 +409,7 @@ impl Namespace {
             )
             .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::fun(&genName)))?;
 
-        Ok((&id.0 .0, id.1))
+        Ok((&id.0.0, id.1))
     }
 
     pub fn findGlobal(&self, name: &str) -> Result<(&GlobalMeta, usize), CodeGenError> {
@@ -417,7 +418,7 @@ impl Namespace {
             .getSlowStr(name)
             .ok_or(CodeGenError::SymbolNotFound(SymbolNotFoundE::global(name)))?;
 
-        Ok((&gId.0 .0, gId.1))
+        Ok((&gId.0.0, gId.1))
     }
 
     pub fn getGlobal(&self, id: usize) -> &(GlobalMeta, Value) {
@@ -460,7 +461,7 @@ impl Namespace {
         let strc = self
             .structs
             .getSlowStr(name)
-            .ok_or_else(||CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))?;
+            .ok_or_else(|| CodeGenError::SymbolNotFound(SymbolNotFoundE::obj(name)))?;
 
         Ok(strc)
     }
@@ -594,10 +595,10 @@ impl Namespace {
                     }
                     RawNode::Import(nam, syms) => {
                         self.importHints.push(ImportHints::Symbols(nam, syms))
-                    },
+                    }
                     RawNode::NamespaceImport(nam, ren) => {
                         self.importHints.push(ImportHints::Namespace(nam, ren))
-                    },
+                    }
                     RawNode::GlobalVarDef(name, default) => {
                         self.registerGlobal(GlobalMeta {
                             name,
@@ -621,7 +622,7 @@ impl Namespace {
             name: String::from("__init"),
             localsMeta: mainLocals,
             argsCount: 0,
-            body: Body::new(vec![]),
+            body: Body::new(vec![], false),
             returnType: None,
             isNative: false,
             isOneLine: false,
@@ -639,11 +640,11 @@ impl Namespace {
                         }
                         RawNode::Import(na, s) => {
                             n.importHints.push(ImportHints::Symbols(na, s))
-                        },
+                        }
                         // TODO default value
                         RawNode::NamespaceImport(na, r) => {
                             n.importHints.push(ImportHints::Namespace(na, r))
-                        },
+                        }
                         RawNode::GlobalVarDef(name, default) => {
                             n.registerGlobal(GlobalMeta {
                                 name,
@@ -659,7 +660,7 @@ impl Namespace {
                 ASTNode::Expr(e) => {
                     match e {
                         // Expression::NamespaceAccess(c) => todo!(),
-                        c => initFunction.body.push(Statement{ exp: RawStatement::StatementExpression(c), loc: vec![] }),
+                        c => initFunction.body.push(Statement { exp: RawStatement::StatementExpression(c), loc: vec![] }),
                     }
                 }
             }
@@ -672,7 +673,7 @@ impl Namespace {
 pub fn loadSourceFile(
     src: &str,
     lexingUnits: &[Box<dyn LexingUnit<TokenType>>],
-    parsingUnits: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]
+    parsingUnits: &[Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>],
 ) -> Result<Vec<ASTNode>, LoadFileError<TokenType>> {
     let tokens = match tokenizeSource(src, lexingUnits) {
         Ok(v) => v,

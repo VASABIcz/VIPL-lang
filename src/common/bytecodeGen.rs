@@ -16,7 +16,7 @@ use crate::vm::vm::{JmpType, OpCode};
 use crate::vm::vm::JmpType::{False, True};
 use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, LCall, Mul, New, Not, Pop, PushBool, PushChar, PushInt, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub};
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 impl Body {
     pub fn generate(
@@ -24,8 +24,10 @@ impl Body {
         mut ctx: SimpleCtx<SymbolicOpcode>,
     ) -> Result<(), CodeGenError> {
         ctx.enterScope();
-        for statement in &self.statements {
-            let y = ctx.inflate(statement);
+        for (i, statement) in self.statements.iter().enumerate() {
+            let mut y = ctx.inflate(statement);
+            y.isLast = i == self.statements.len()-1;
+            println!("izLast {:?}", y.isLast);
             genStatement(y)?;
         }
         ctx.exitScope();
@@ -39,28 +41,32 @@ impl Body {
         let isCovered = self.coverageCheck(ctx.transfer(), &mut s)?;
 
         if fun.returnType.isVoid() && s.is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
-        if !isCovered || s.is_empty() {
-            return Err(CodeGenError::InvalidReturns)
+        if (!isCovered || s.is_empty()) && (s.len() == 1 && !s.contains(&Void)) {
+            eprintln!("!isCovered || s.is_empty() {} {} {:?}", !isCovered, s.is_empty(), s);
+            return Err(CodeGenError::InvalidReturns);
         }
 
         if s.len() == 2 && s.contains(&Null) {
             let t = s.iter().find(|it| !it.isNull()).unwrap().clone();
             if t.isReference() && fun.returnType.isReferenceNullable() {
-                return Ok(())
+                return Ok(());
             }
         }
 
         if s.len() > 1 {
-            return Err(CodeGenError::InvalidReturns)
+            if DEBUG {
+                println!("more than 1 return ${:?}", s)
+            }
+            return Err(CodeGenError::InvalidReturns);
         }
 
         let tt = s.iter().next().unwrap();
 
         if fun.returnType.isReferenceNullable() && tt.isNull() {
-            return Ok(())
+            return Ok(());
         }
 
         if let Ok(v) = tt.clone().getRef() && let Ok(v1) = fun.returnType.clone().getRef() && v.name == v1.name {
@@ -68,13 +74,12 @@ impl Body {
                 Err(CodeGenError::InvalidReturns)
             } else {
                 Ok(())
-            }
+            };
         }
 
-        if !fun.returnType.canAssign(tt) {
-            return Err(CodeGenError::TypeError(TypeError::newNone(fun.returnType.clone(), tt.clone())))
+        if fun.returnType != Void && !fun.returnType.canAssign(tt) {
+            return Err(CodeGenError::TypeError(TypeError::newNone(fun.returnType.clone(), tt.clone())));
         }
-
 
         Ok(())
     }
@@ -88,8 +93,7 @@ impl Body {
 
                     if let Some(v) = &a.elseBody {
                         covered &= v.coverageCheck(ctx.transfer(), r)?;
-                    }
-                    else {
+                    } else {
                         covered = false;
                     }
 
@@ -98,19 +102,18 @@ impl Body {
                     }
 
                     if covered {
-                        return Ok(true)
+                        return Ok(true);
                     }
                 }
                 RawStatement::Return(e) => {
                     if let Some(e) = e {
                         let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
                         r.insert(t);
-                    }
-                    else {
+                    } else {
                         r.insert(Void);
                     }
 
-                    return Ok(true)
+                    return Ok(true);
                 }
                 RawStatement::Loop(b) => {
                     b.returnType(ctx.transfer(), r)?
@@ -123,8 +126,7 @@ impl Body {
 
                         if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
                             ctx1.ctx.registerVariable(v, DataType::Reference(r.clone()));
-                        }
-                        else {
+                        } else {
                             ctx1.ctx.registerVariable(v, t);
                         }
                     }
@@ -159,18 +161,13 @@ impl Body {
                 RawStatement::Break => {}
             }
         }
+        if let Some(v) = self.statements.last() && let RawStatement::StatementExpression(e) = &v.exp && !self.isLoop {
+            let t = ctx.makeExpressionCtx(e).toDataType()?;
 
-/*
-FIXME this is commented bcs it breaks tests on simple for
-if let Some(v) = self.statements.last() {
-            if let RawStatement::StatementExpression(e) = &v.exp {
-                let t = ctx.makeExpressionCtx(e).toDataType()?;
+            r.insert(t);
 
-                r.insert(t);
-
-                return Ok(true)
-            }
-        }*/
+            return Ok(true);
+        }
 
         Ok(false)
     }
@@ -197,8 +194,7 @@ if let Some(v) = self.statements.last() {
                     if let Some(e) = e {
                         let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
                         r.insert(t);
-                    }
-                    else {
+                    } else {
                         r.insert(Void);
                     }
                     break;
@@ -214,8 +210,7 @@ if let Some(v) = self.statements.last() {
 
                         if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
                             ctx1.ctx.registerVariable(v, Reference(r.clone()));
-                        }
-                        else {
+                        } else {
                             ctx1.ctx.registerVariable(v, t);
                         }
                     }
@@ -292,7 +287,7 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
         match sym {
             SymbolicOpcode::Op(op) => buf.push(op.clone()),
             SymbolicOpcode::Jmp(id, t) => {
-                let i = *labelLookup.get(&id).ok_or_else(||CodeGenError::VeryBadState)?;
+                let i = *labelLookup.get(&id).ok_or_else(|| CodeGenError::VeryBadState)?;
                 buf.push(OpCode::Jmp {
                     offset: i as i32 - (buf.len() + 1) as i32,
                     jmpType: *t,
@@ -337,11 +332,9 @@ impl SimpleCtx<'_, SymbolicOpcode> {
     pub fn implicitConversion(&mut self, src: DataType, tgt: DataType, exp: &Expression) -> Result<(), CodeGenError> {
         if src.isPrimitiveType() && tgt.isBoxed() {
             self.makeExpressionCtx(exp).genExpressionBox()
-        }
-        else if src.isBoxed() && tgt.isPrimitiveType() {
+        } else if src.isBoxed() && tgt.isPrimitiveType() {
             self.makeExpressionCtx(exp).genExpressionUnbox()
-        }
-        else {
+        } else {
             self.makeExpressionCtx(exp).genExpression()
         }
     }
@@ -429,7 +422,7 @@ impl ExpressionCtx<'_, SymbolicOpcode> {
         self.transfer(self.exp).genExpression()?;
 
         if t.isBoxed() {
-           self.push(GetField { fieldID: 0 });
+            self.push(GetField { fieldID: 0 });
         }
 
         Ok(())
@@ -440,8 +433,7 @@ impl ExpressionCtx<'_, SymbolicOpcode> {
 
         if t.isPrimitiveType() {
             self.ctx.boxValue(t, self.exp)
-        }
-        else {
+        } else {
             self.genExpression()
         }
     }
@@ -470,22 +462,27 @@ pub fn genFunctionDef(
         let b = ctx.getSymbols().clone();
 
         if let Err(e) = body.validate(ctx.transfer(), fun) {
-            return Err(vec![e])
+            return Err(vec![e]);
         }
 
         ctx.setSymbols(b);
 
-        for statement in &body.statements {
+
+        for (i, statement) in body.statements.iter().enumerate() {
+            let mut y = ctx.inflate(statement);
+            y.isLast = i == body.statements.len()-1;
+            y.expectedReturn = fun.returnType.clone();
+
             if DEBUG {
                 println!("gening {:?}", statement)
             }
-            let sCtx = ctx.inflate(&statement);
-            if let Err(e) = genStatement(sCtx) {
+            if let Err(e) = genStatement(y) {
                 errors.push(e)
             }
         }
+
         if !errors.is_empty() {
-            return Err(errors)
+            return Err(errors);
         }
         match ctx.getOps().last() {
             None => ctx.push(Return),
@@ -496,8 +493,7 @@ pub fn genFunctionDef(
             }
         }
         Ok(())
-    }
-    else {
+    } else {
         println!("this should never get called :3");
         Err(vec![CodeGenError::VeryBadState])
     }
@@ -549,7 +545,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.ctx.opJmp(endLabel, JmpType::Jmp);
 
             for (i, (elsExp, elsBody)) in flow.elseIfs.iter().enumerate() {
-                ctx.ctx.makeLabel(*ifLabels.get(i).ok_or_else(||CodeGenError::VeryBadState)?);
+                ctx.ctx.makeLabel(*ifLabels.get(i).ok_or_else(|| CodeGenError::VeryBadState)?);
 
                 ctx.ctx.makeExpressionCtx(&elsExp)
                     .assertType(Bool)?;
@@ -566,7 +562,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             }
 
             if let Some(els) = &flow.elseBody {
-                ctx.ctx.makeLabel(*ifLabels.last().ok_or_else(||CodeGenError::VeryBadState)?);
+                ctx.ctx.makeLabel(*ifLabels.last().ok_or_else(|| CodeGenError::VeryBadState)?);
                 els.generate(ctx.deflate())?;
             }
             ctx.ctx.makeLabel(endLabel);
@@ -594,7 +590,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
 
             eCtx.genExpression()?;
 
-            if ret != Void {
+            if (ret != Void && ctx.isLast && ctx.expectedReturn == Void) || (!ctx.isLast && ret != Void) {
                 (ctx.ctx.getHandle())(&mut ctx, ret);
             }
         }
@@ -605,12 +601,12 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
 
             if let Ok(t) = a {
                 if !t.canAssign(&b) || t.isVoid() || b.isVoid() {
-                    return Err(CodeGenError::AssignableTypeError{
+                    return Err(CodeGenError::AssignableTypeError {
                         var: dest.clone(),
                         varType: t,
                         exp: value.clone(),
                         expType: b,
-                    })
+                    });
                 }
             }
 
@@ -627,13 +623,12 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                             let t = ctx.ctx.makeExpressionCtx(value).toDataType()?;
 
                             if operator.is_some() {
-                                return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::var(v)))
+                                return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::var(v)));
                             }
 
                             if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
                                 ctx.ctx.registerVariable(v, DataType::Reference(r.clone()));
-                            }
-                            else {
+                            } else {
                                 ctx.ctx.registerVariable(v, t);
                             }
                         }
@@ -647,8 +642,8 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                     ctx.ctx.makeExpressionCtx(obj).genExpression()?;
                 }
                 _ => {
-                    return Err(CodeGenError::ExpressionIsNotAssignable)
-                },
+                    return Err(CodeGenError::ExpressionIsNotAssignable);
+                }
             }
 
             match operator {
@@ -707,8 +702,8 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                     })
                 }
                 _ => {
-                    return Err(CodeGenError::ExpressionIsNotAssignable)
-                },
+                    return Err(CodeGenError::ExpressionIsNotAssignable);
+                }
             }
         }
         RawStatement::ForLoop(var, arr, body) => {
@@ -720,7 +715,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             let lenId = ctx.ctx.registerVariable(&format!("__for-len{}", microsSinceEpoch()), Int);
             let arrId = ctx.ctx.registerVariable(&format!("__for-array{}", microsSinceEpoch()), Int);
             let counterId = ctx.ctx.registerVariable(&format!("__for-counter{}", microsSinceEpoch()), Int);
-            let varId  = ctx.ctx.registerVariable(var, t);
+            let varId = ctx.ctx.registerVariable(var, t);
 
             ctx.push(PushInt(0));
             ctx.push(SetLocal { index: counterId });
@@ -745,7 +740,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.ctx.opJmp(endLoop, True);
 
             ctx.push(GetLocal { index: arrId });
-            ctx.push(GetLocal { index: counterId  });
+            ctx.push(GetLocal { index: counterId });
             ctx.push(ArrayLoad);
             ctx.push(SetLocal { index: varId });
 
@@ -788,22 +783,22 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
 
 pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     if src.isReferenceNonNullable() && tgt.isReference() {
-        return Ok(())
+        return Ok(());
     }
     if src.isReferenceNonNullable() && tgt.isObject() {
-        return Ok(())
+        return Ok(());
     }
     if src.isReferenceNullable() && tgt.isObjectNullable() {
-        return Ok(())
+        return Ok(());
     }
     if src.isNull() && tgt.isReferenceNullable() {
-        return Ok(())
+        return Ok(());
     }
     if src.isNull() && tgt.isObjectNullable() {
-        return Ok(())
+        return Ok(());
     }
     if src.isObjectNonNullable() && tgt.isObject() {
-        return Ok(())
+        return Ok(());
     }
 
     if src.clone().isBoxedNonNull() {
@@ -812,7 +807,7 @@ pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionC
 
         return exp.genExpressionUnbox();
     }
-    
+
     if src.clone().isPrimitiveType() {
         let unboxed = tgt.clone().toUnboxedType();
         assert_eq!(unboxed, src);
@@ -827,7 +822,7 @@ pub fn genExpressionExpecting(mut ctx: ExpressionCtx<SymbolicOpcode>, expect: Op
     if let Some(tgt) = expect {
         let src = ctx.clone().toDataType()?;
         if src != tgt {
-            return generateImplicitConversion(src, tgt, ctx.clone())
+            return generateImplicitConversion(src, tgt, ctx.clone());
         }
     }
 
@@ -851,10 +846,9 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 r.push(Dup);
                 r.ctx.opJmp(endLabel, if isAnd { False } else { True });
                 r.transfer(right).genExpressionExpecting(Bool)?;
-               if isAnd {
-                   r.push(And);
-               }
-               else {
+                if isAnd {
+                    r.push(And);
+                } else {
                     r.push(OpCode::Or);
                 }
 
@@ -885,8 +879,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 if dat1.isNull() || dat.isNull() {
                     r.transfer(left).genExpression()?;
                     r.transfer(right).genExpression()?;
-                }
-                else {
+                } else {
                     r.transfer(left).genExpressionUnbox()?;
                     r.transfer(right).genExpressionUnbox()?;
                 }
@@ -894,7 +887,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 if dat.isString() {
                     let f = r.ctx.findFunction("concat", &[DataType::str(), DataType::str()])?;
                     r.push(f.callInstruction());
-                    return Ok(())
+                    return Ok(());
                 }
 
                 let rawT = dat.clone().toRawType()?;
@@ -910,7 +903,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                         println!("doing eq {:?} {:?} {:?}", rawT, dat, dat1);
 
                         vec![OpCode::Equals(rawT)]
-                    },
+                    }
                     BinaryOp::Modulo => vec![OpCode::Modulo(rawT)],
                     BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not],
                     _ => unreachable!()
@@ -924,7 +917,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::StringLiteral(i) => {
                 let sId = r.ctx.allocateOrGetString(i);
                 r.push(StrNew(sId));
-            },
+            }
             RawExpression::BoolLiteral(i) => r.push(PushBool(*i)),
             RawExpression::Variable(v) => {
                 match r.ctx.getLocal(v) {
@@ -939,7 +932,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                         r.push(f.pushInstruction())
                     }
                 }
-            },
+            }
             RawExpression::CharLiteral(c) => r.push(PushChar(*c)),
             RawExpression::ArrayLiteral(i) => {
                 r.push(PushInt(i.len() as isize));
@@ -958,18 +951,17 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     r.transfer(&i.expr).genExpression()?;
                     r.transfer(&i.index).genExpression()?;
                     r.push(GetChar);
-                    return Ok(())
-                }
-                else if d.isArray() {
+                    return Ok(());
+                } else if d.isArray() {
                     r.transfer(&i.expr).genExpression()?;
                     r.transfer(&i.index).genExpression()?;
 
                     r.push(ArrayLoad);
 
-                    return Ok(())
+                    return Ok(());
                 }
 
-                return Err(CodeGenError::ExpectedReference)
+                return Err(CodeGenError::ExpectedReference);
             }
             RawExpression::NotExpression(e, _) => {
                 r.transfer(e).genExpression()?;
@@ -1002,8 +994,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                             let (args, prevT) = r.transfer(prev).toDataType()?.getFunction()?;
 
                             args
-                        }
-                        else {
+                        } else {
                             let func = r.ctx.findFunction(v, &argTypes)?;
 
                             funcMeta = Some(func.clone());
@@ -1016,8 +1007,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                             let (args, prevT) = r.transfer(prev).toDataType()?.getFunction()?;
 
                             args
-                        }
-                        else {
+                        } else {
                             let func = r.ctx.findFunctionParts(n, &argTypes)?;
 
                             funcMeta = Some(func.clone());
@@ -1029,8 +1019,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     RawExpression::FieldAccess(obj, fieldName) => {
                         if let Ok(t) = r.transfer(prev).toDataType() && let Ok(v) = t.getFunction() {
                             v.0
-                        }
-                        else {
+                        } else {
                             let prevT = r.transfer(obj).toDataTypeNotVoid()?;
 
                             argExpressions.insert(0, *obj.clone());
@@ -1059,15 +1048,14 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                         r.transfer(prev).genExpression()?;
 
                         r.push(DynamicCall { returns: !f.1.isVoid(), argsCount: f.0.len() })
-                    },
+                    }
                     Some(v) => {
                         r.push(v.callInstruction())
                     }
                 }
             },
             RawExpression::StructInit(name, init) => {
-                // FIXME doesnt support other namespaces
-                let s = r.ctx.getStruct(name.last().unwrap())?;
+                let s = r.ctx.getStructParts(name)?;
 
                 let namespaceID = s.nId as u32;
                 let structID = s.sId as u32;
@@ -1136,23 +1124,15 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
                 if &src == target || target.isValue() || src.isValue() {
                     r.transfer(exp).genExpression()?;
-                }
-
-                else if src.isInt() && target.isFloat() {
+                } else if src.isInt() && target.isFloat() {
                     r.transfer(exp).genExpression()?;
                     r.push(I2F);
-                }
-
-                else if target.isInt() && src.isFloat() {
+                } else if target.isInt() && src.isFloat() {
                     r.transfer(exp).genExpression()?;
                     r.push(F2I);
-                }
-
-                else if src.isReferenceNonNullable() && target.isObjectNonNullable() {
+                } else if src.isReferenceNonNullable() && target.isObjectNonNullable() {
                     r.transfer(exp).genExpression()?;
-                }
-
-                else {
+                } else {
                     todo!("src: {:?} tgt: {:?}", src, target);
                 }
             }
@@ -1166,8 +1146,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     let t = r.ctx.getStruct(&target.toString())?;
 
                     r.push(IsStruct { namespaceId: t.nId, structId: t.sId })
-                }
-                else {
+                } else {
                     r.push(PushBool(&src == target))
                 }
             }
@@ -1178,13 +1157,11 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     r.push(OpCode::PushFloat(0.0));
                     r.transfer(e).genExpression()?;
                     r.push(Sub(RawDataType::Float));
-                }
-                else if t.isInt() {
+                } else if t.isInt() {
                     r.push(OpCode::PushInt(0));
                     r.transfer(e).genExpression()?;
                     r.push(Sub(RawDataType::Int));
-                }
-                else {
+                } else {
                     unreachable!("invalid type, type should be float or int")
                 }
             }
