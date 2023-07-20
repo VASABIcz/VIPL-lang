@@ -1,10 +1,11 @@
 use std::cell::UnsafeCell;
+use std::mem::swap;
 
 use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, Statement};
 use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
 use crate::errors::CodeGenError::UnexpectedVoid;
 use crate::symbolManager::{FunctionSymbol, GlobalSymbol, StructSymbol, SymbolManager};
-use crate::utils::genNamespaceName;
+use crate::utils::{genNamespaceName, swapChain};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
 use crate::vm::namespace::Namespace;
@@ -71,6 +72,20 @@ pub struct SimpleCtx<'a, T> {
 }
 
 impl<T> SimpleCtx<'_, T> {
+    pub fn argsToDataTypes(&mut self, args: &[Expression]) -> Result<Vec<DataType>, CodeGenError> {
+        args
+            .iter()
+            .map(|it| self.makeExpressionCtx(it).toDataType())
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub fn metaToDataTypes(&mut self, args: &[VariableMetadata]) -> Vec<DataType> {
+        args
+            .iter()
+            .map(|it| it.typ.clone())
+            .collect::<Vec<_>>()
+    }
+
     pub fn isVariableParts(&mut self, name: &[String]) -> bool {
         if name.is_empty() {
             return false;
@@ -289,6 +304,14 @@ impl<T> ExpressionCtx<'_, T> {
         Ok(t)
     }
 
+    pub fn toDataTypeAssertEq(&mut self, f: fn(&DataType) -> bool) -> Result<DataType, CodeGenError> {
+        let t = self.toDataType()?;
+        if !f(&t) {
+            panic!()
+        }
+        Ok(t)
+    }
+
     pub fn toDataTypeAssert(&mut self, t1: DataType) -> Result<DataType, CodeGenError> {
         let t = self.toDataType()?;
 
@@ -357,7 +380,7 @@ impl<T> ExpressionCtx<'_, T> {
             RawExpression::StringLiteral(_) => Ok(DataType::str()),
             RawExpression::Variable(name) => match self.ctx.getLocal(name) {
                 Err(_) => {
-                    let (funcName, fun) = self.ctx.lookupFunctionByBaseName(name)?;
+                    let (_, fun) = self.ctx.lookupFunctionByBaseName(name)?;
 
                     Ok(DataType::Function { args: fun.args.clone(), ret: Box::new(fun.returnType.clone()) })
                 }
@@ -405,7 +428,7 @@ impl<T> ExpressionCtx<'_, T> {
             }
             RawExpression::Lambda(l, _, ret) => {
                 Ok(DataType::Function {
-                    args: l.iter().map(|it| it.typ.clone()).collect(),
+                    args: self.ctx.metaToDataTypes(l),
                     ret: Box::new(ret.clone().unwrap_or(Void)),
                 })
             }
@@ -413,10 +436,7 @@ impl<T> ExpressionCtx<'_, T> {
                 match &prev.exp {
                     RawExpression::Variable(v) => {
                         if self.ctx.getLocal(v).is_err() {
-                            let gz = args
-                                .iter()
-                                .map(|it| self.transfer(it).toDataType())
-                                .collect::<Result<Vec<_>, _>>()?;
+                            let gz = self.ctx.argsToDataTypes(args)?;
 
                             let funcId = self.ctx.symbols.getFunctionArgs(&v, &gz)?;
                             return Ok(funcId.returnType.clone());
@@ -429,10 +449,7 @@ impl<T> ExpressionCtx<'_, T> {
                         }
                     }
                     RawExpression::NamespaceAccess(v) => {
-                        let argz = args
-                            .iter()
-                            .map(|it| self.transfer(it).toDataType())
-                            .collect::<Result<Vec<_>, _>>()?;
+                        let argz = self.ctx.argsToDataTypes(args)?;
 
                         Ok(self.ctx.symbols.getFunctionPartsArgs(&v, &argz)?.returnType.clone())
                     }
@@ -444,10 +461,7 @@ impl<T> ExpressionCtx<'_, T> {
                             t => {
                                 let mut fArgs = vec![];
                                 fArgs.push(t);
-                                fArgs.extend(
-                                    args.iter()
-                                        .map(|it| self.transfer(it).toDataType()).collect::<Result<Vec<_>, _>>()?,
-                                );
+                                fArgs.extend(self.ctx.argsToDataTypes(args)?);
 
                                 let f = self.ctx.findFunction(b, &fArgs)?;
 
@@ -465,9 +479,8 @@ impl<T> ExpressionCtx<'_, T> {
                 let e = self.transfer(prev).toDataType()?;
                 match e {
                     Reference(o) => {
-                        match o.name.as_str() {
-                            "Array" | "String" => return Ok(Int),
-                            _ => {}
+                        if matches!(o.name.as_str(), "Array" | "String") {
+                            return Ok(Int)
                         }
 
                         let (structMeta, _) = self
@@ -490,31 +503,13 @@ impl<T> ExpressionCtx<'_, T> {
                 let a = self.transfer(&tr).toDataType()?;
                 let b = self.transfer(&fal).toDataType()?;
 
-                if b.isNull() && a.isReference() {
-                    let mut t = a.getRef()?;
-                    t.nullable = true;
-
-                    return Ok(Reference(t));
+                if let Some(v) = swapChain(&a, &b, |a, b| { if (a.canAssign(b)) { Some(a.clone()) } else { None } }) {
+                    return Ok(v)
                 }
-
-                if a.isNull() && b.isReference() {
-                    let mut t = b.getRef()?;
-                    t.nullable = true;
-
-                    return Ok(Reference(t));
+                if let Some(v) = swapChain(&a, &b, |a, b| { if  b.isReferenceNonNullable() && a.isNull() { Some(b.clone().toNullable()) } else { None } }) {
+                    return Ok(v)
                 }
-
-                if a.isPrimitiveType() && b.isNull() {
-                    return Ok(a.toBoxedType().toNullable());
-                }
-
-                if a.isNull() && b.isPrimitiveType() {
-                    return Ok(b.toBoxedType().toNullable());
-                }
-
-                self.transfer(tr).assertType(b)?;
-
-                Ok(a)
+                panic!("{:?} {:?}", a, b)
             }
             // FIXME check if cast is possible
             RawExpression::TypeCast(_, t) => Ok(t.clone()),
@@ -522,19 +517,12 @@ impl<T> ExpressionCtx<'_, T> {
             // FIXME
             RawExpression::TypeCheck(_, _) => Ok(DataType::Bool),
             RawExpression::Negate(v) => {
-                let t = self.transfer(v).toDataType()?;
-                if !t.isNumeric() {
-                    Err(CodeGenError::TypeError(TypeError::new(DataType::Int, t, *v.clone())))
-                } else {
-                    Ok(t)
-                }
+                let t = self.transfer(v).toDataTypeAssertEq(|it| it.isNumeric())?;
+
+                Ok(t)
             }
             RawExpression::BitwiseNot(v) => {
-                let t = self.transfer(v).toDataType()?;
-
-                if !t.isInt() {
-                    return Err(CodeGenError::TypeError(TypeError::new(Int, t, *v.clone())));
-                }
+                self.transfer(v).toDataTypeAssert(Int)?;
 
                 Ok(Int)
             }
@@ -548,40 +536,16 @@ impl<T> ExpressionCtx<'_, T> {
                 Ok(Reference(r))
             }
             RawExpression::Elvis(nullable, otherwise) => {
-                let a = self.transfer(nullable).toDataTypeNotVoid()?;
+                let mut a = self.transfer(nullable).toDataTypeNotVoid()?;
                 let b = self.transfer(otherwise).toDataTypeNotVoid()?;
 
-                if a.canAssign(&b) && let Ok(mut v) = a.getRef() {
+                if a.canAssign(&b) && let Ok(v) = a.getReffM() {
                     v.nullable = false;
 
-                    return Ok(Reference(v));
-                }
-
-                panic!();
-
-                if a.isReferenceNullable() && b.isNull() {
                     return Ok(a);
                 }
 
-                if a.isReferenceNullable() && b.isReference() {
-                    let a1 = a.getReff()?;
-                    let b1 = b.getReff()?;
-
-                    if a1.name == b1.name {
-                        return Ok(Reference(b1.clone()));
-                    }
-                }
-
-                if a.isReference() && b.isReference() && !a.isReferenceNullable() && !b.isReferenceNullable() {
-                    let a1 = a.getReff()?;
-                    let b1 = b.getReff()?;
-
-                    if a1.name == b1.name {
-                        return Ok(Reference(b1.clone()));
-                    }
-                }
-                panic!("{:?} {:?}", a, b);
-                Err(CodeGenError::ExpectedReference)
+                Err(CodeGenError::TypeError(TypeError::new(a, b, self.exp.clone())))
             }
         }
     }

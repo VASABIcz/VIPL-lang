@@ -1,8 +1,8 @@
 #![feature(slice_ptr_get)]
 #![allow(non_snake_case)]
 
-use std::{env, fs};
-use std::time::Instant;
+use std::{env, fs, thread};
+use std::time::{Duration, Instant};
 
 use vipl::errors::{LoadFileError, VIPLError};
 use vipl::std::bootStrapVM;
@@ -13,6 +13,15 @@ use vipl::vm::vm::VirtualMachine;
 
 fn main() -> Result<(), ()> {
     let mut vm = bootStrapVM();
+
+    let mut r = &mut vm as *mut VirtualMachine as usize;
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(10));
+            unsafe { (*(r as *mut VirtualMachine)).triggerInterrupt(); }
+        }
+    });
 
     vm.loadNamespace("draft/core.vipl", &["core".into()]).unwrap();
 

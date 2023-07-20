@@ -1,5 +1,5 @@
 #![allow(unused_assignments)]
-use crate::errors::LoadFileError;
+use crate::errors::{CodeGenError, LoadFileError};
 use crate::parser::{TokenProvider};
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::Namespace;
@@ -110,9 +110,9 @@ pub fn namespacePath(path: &str) -> Vec<String> {
         }
     }
     let id = strBuf.len() - 1;
-    strBuf
-        .get_mut(id)
-        .map(|it| *it = it.strip_suffix(".vipl").unwrap().to_string());
+    if let Some(it) = strBuf.get_mut(id) {
+        *it = it.strip_suffix(".vipl").unwrap().to_string()
+    }
     strBuf
 }
 
@@ -556,4 +556,17 @@ pub fn unEscapeChars(input: &str) -> String {
     s.shrink_to_fit();
 
     s
+}
+
+// FIXME I am to lazy to come up with name
+pub fn swapChain<T, R, F: Fn(&T, &T) -> Option<R>>(a: &T, b: &T, f: F) -> Option<R> {
+    if let Some(v) = f(a, b) {
+        return Some(v);
+    }
+
+    if let Some(v) = f(&b, &a) {
+        return Some(v);
+    }
+
+    return None;
 }

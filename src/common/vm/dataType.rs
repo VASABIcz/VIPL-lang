@@ -185,7 +185,15 @@ impl DataType {
         match self {
             Reference(v) => Ok(v),
             _ => {
-                panic!();
+                Err(CodeGenError::ExpectedReference)
+            }
+        }
+    }
+
+    pub fn getReffM(&mut self) -> Result<&mut ObjectMeta, CodeGenError> {
+        match self {
+            Reference(v) => Ok(v),
+            _ => {
                 Err(CodeGenError::ExpectedReference)
             }
         }

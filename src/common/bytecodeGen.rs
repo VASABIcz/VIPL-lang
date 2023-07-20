@@ -502,10 +502,9 @@ pub fn genFunctionDef(
 pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     match &ctx.statement.exp {
         RawStatement::While(w) => {
-            ctx.ctx.makeExpressionCtx(&w.exp)
-                .assertType(Bool)?;
+            ctx.ctx.makeExpressionCtx(&w.exp).assertType(Bool)?;
 
-            let (loopStart, loopEnd) = ctx.ctx.beginLoop();
+            let (_, loopEnd) = ctx.ctx.beginLoop();
 
             ctx.ctx.makeExpressionCtx(&w.exp).genExpression()?;
 

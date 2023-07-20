@@ -1,6 +1,6 @@
 use std::ffi::{c_char, CStr};
 use std::fmt::{Debug, Formatter};
-use std::ptr;
+use std::{ptr, thread};
 use crate::std::bootStrapVM;
 use crate::vm::namespace::Namespace;
 use crate::vm::nativeObjects::{UntypedObject, ViplObject};
@@ -15,6 +15,7 @@ const DEBUG: bool = true;
 pub extern "C" fn createVm() -> *mut VirtualMachine {
     let vm = Box::new(bootStrapVM());
     let ptr = Box::into_raw(vm);
+
     ptr
 }
 

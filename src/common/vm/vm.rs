@@ -1,10 +1,12 @@
-use std::fs;
 use std::alloc::{alloc, Layout};
 use std::cell::UnsafeCell;
 use std::fmt::{Debug, Formatter};
+use std::fs;
 use std::hint::unreachable_unchecked;
 use std::intrinsics::unlikely;
 use std::mem::transmute;
+use std::ops::Not;
+use std::sync::Mutex;
 
 use crate::asm::jitCompiler::JITCompiler;
 use crate::ast::ASTNode;
@@ -17,7 +19,7 @@ use crate::lexer::LexingUnit;
 use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::naughtyBox::Naughty;
 use crate::parser::ParsingUnit;
-use crate::parsingUnits::{getParsingUnits};
+use crate::parsingUnits::getParsingUnits;
 use crate::symbolManager::SymbolManager;
 use crate::utils::{FastVec, genFunName, genNamespaceName, transform};
 use crate::viplParser::VIPLParsingState;
@@ -63,7 +65,7 @@ pub enum OpCode {
     PushInt(isize),
     PushFunction {
         namespaceId: u32,
-        functionId: u32
+        functionId: u32,
     },
     PushIntOne,
     PushIntZero,
@@ -92,7 +94,7 @@ pub enum OpCode {
     },
     DynamicCall {
         returns: bool,
-        argsCount: usize
+        argsCount: usize,
     },
     Return,
 
@@ -160,7 +162,7 @@ pub enum OpCode {
         structId: usize,
     },
     PushNull,
-    AssertNotNull
+    AssertNotNull,
 }
 
 #[derive(Debug, Clone)]
@@ -215,10 +217,19 @@ pub struct VirtualMachine {
     jitCompiler: JITCompiler,
 
     lexingUnits: &'static [Box<dyn LexingUnit<TokenType>>],
-    parsingUnits: &'static [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>]
+    parsingUnits: &'static [Box<dyn ParsingUnit<ASTNode, TokenType, VIPLParsingState>>],
+
+    interruptMutex: Mutex<bool>,
 }
 
+unsafe impl Send for VirtualMachine {}
+
 impl VirtualMachine {
+    pub fn triggerInterrupt(&mut self) {
+        let guard = self.interruptMutex.get_mut().unwrap();
+        *guard = true;
+    }
+
     pub fn allocate<T: Allocation>(&mut self, v: T) -> Hay<T> {
         self.heap.allocate(v)
     }
@@ -598,6 +609,10 @@ impl VirtualMachine {
         let vm1 = unsafe { &mut *mother };
 
         loop {
+            if let Ok(mut guard) = vm1.interruptMutex.try_lock() && *guard {
+                println!("[INTERRUPTED]");
+                *guard = false;
+            }
             let (op1, _) = (*vm1).nextOpcode2(opCodes);
 
             let op = match op1 {
@@ -656,7 +671,7 @@ impl VirtualMachine {
                         }
                     }
                 },
-                Return => return if returns {  self.pop() } else { Value::null() },
+                Return => return if returns { self.pop() } else { Value::null() },
                 Add(v) => unsafe {
                     let a = self.pop();
                     self.getMutTop().add(
@@ -753,7 +768,7 @@ impl VirtualMachine {
 
                     (*vm).call(frame.namespaceId, *id)
                 }
-                DynamicCall{ .. } => {
+                DynamicCall { .. } => {
                     let (namespaceRaw, idRaw) = self.pop().asFunction();
                     let namespace = namespaceRaw as usize;
                     let id = idRaw as usize;
@@ -761,7 +776,7 @@ impl VirtualMachine {
                     vm.call(namespace, id)
                 }
                 LCall { namespace, id } => vm.call(*namespace as usize, *id as usize),
-                PushFunction{ namespaceId, functionId } => {
+                PushFunction { namespaceId, functionId } => {
                     self.push(Value::makeFunction(*namespaceId, *functionId));
                 }
                 New {
@@ -990,7 +1005,7 @@ impl VirtualMachine {
 
                     let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
                         exp: &g.0.default,
-                        ctx: simpleCtx
+                        ctx: simpleCtx,
                     };
                     g.0.typ = ctx.toDataType().map_err(|it| vec![it])?;
                 }
@@ -1118,6 +1133,7 @@ impl Default for VirtualMachine {
             jitCompiler: Default::default(),
             lexingUnits: getLexingUnits(),
             parsingUnits: getParsingUnits(),
+            interruptMutex: Mutex::new(false),
         }
     }
 }
