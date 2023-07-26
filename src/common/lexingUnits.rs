@@ -42,6 +42,9 @@ pub enum TokenType {
     Null,
     As,
     Is,
+    Var,
+    Val,
+    Mut,
 
     ORB,
     CRB,
@@ -156,7 +159,10 @@ impl Stringable for TokenType {
             TokenType::BitwiseNot => "~",
             TokenType::Xor => "^",
             TokenType::NullAssert => "!!",
-            TokenType::Elvis => "?:"
+            TokenType::Elvis => "?:",
+            TokenType::Var => "var",
+            TokenType::Val => "val",
+            TokenType::Mut => "mut"
         }
     }
 }
@@ -254,6 +260,10 @@ fn lexingUnits() -> Vec<Box<dyn LexingUnit<TokenType>>> {
         AlphabeticKeywordLexingUnit::new("as", TokenType::As),
         AlphabeticKeywordLexingUnit::new("is", TokenType::Is),
         AlphabeticKeywordLexingUnit::new("from", TokenType::From),
+        AlphabeticKeywordLexingUnit::new("var", TokenType::Var),
+        AlphabeticKeywordLexingUnit::new("val", TokenType::Val),
+        AlphabeticKeywordLexingUnit::new("mut", TokenType::Mut),
+
         KeywordLexingUnit::new("&&", TokenType::And),
         KeywordLexingUnit::new("||", TokenType::Or),
         RangeLexingUnit::new("//", "\n", None),

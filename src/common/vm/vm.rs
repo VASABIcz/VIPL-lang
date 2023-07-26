@@ -15,6 +15,7 @@ use crate::codeGenCtx::{ExpressionCtx, SimpleCtx, StatementCtx};
 use crate::errors::{CodeGenError, LoadFileError, SymbolNotFoundE};
 use crate::fastAccess::FastAccess;
 use crate::ffi::NativeWrapper;
+use crate::implicitConverter::{implicitConversionRules, ImplicitConverter};
 use crate::lexer::LexingUnit;
 use crate::lexingUnits::{getLexingUnits, TokenType};
 use crate::naughtyBox::Naughty;
@@ -48,8 +49,10 @@ pub enum ImportHints {
 }
 
 // FIXME DEBUG is faster than default
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const TRACE: bool = false;
+const OPTIMIZE: bool = false;
+const CALL_TRACE: bool = TRACE || true;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum JmpType {
@@ -572,7 +575,7 @@ impl VirtualMachine {
             vm.push(Value::null());
         }
 
-        if TRACE {
+        if CALL_TRACE {
             println!("[call] {} {:?} args count {}", fMeta.name, fMeta.localsMeta, fMeta.argsCount);
         }
 
@@ -993,6 +996,7 @@ impl VirtualMachine {
                 {
                     let mut a = Default::default();
                     let mut b = vec![];
+                    let mut converter = ImplicitConverter{ rules: implicitConversionRules() };
 
                     let mut simpleCtx = SimpleCtx::new(
                         anotherWarCrime,
@@ -1001,6 +1005,7 @@ impl VirtualMachine {
                         &mut symbols,
                         &mut a,
                         &mut b,
+                        & converter
                     );
 
                     let mut ctx: ExpressionCtx<SymbolicOpcode> = ExpressionCtx {
@@ -1025,6 +1030,7 @@ impl VirtualMachine {
                         }
 
                         let mut ops = vec![];
+                        let implicitConversion = ImplicitConverter{ rules: implicitConversionRules() };
 
                         let mut manager = Default::default();
                         let mut ctx = SimpleCtx::new(
@@ -1034,6 +1040,7 @@ impl VirtualMachine {
                             &mut symbols,
                             &mut manager,
                             &mut ops,
+                            &implicitConversion
                         );
 
                         match genFunctionDef(f, &mut ctx) {
@@ -1063,24 +1070,26 @@ impl VirtualMachine {
                             println!("[generated] N: {}, F: {} {} {:?} {:?}", nId, index, f.name, ops, f);
                         }
 
-                        ops = transform(ops, |it| {
-                            let r = constEvaluation(it);
-                            optimizeBytecode(r)
-                        });
+                        if OPTIMIZE {
+                            ops = transform(ops, |it| {
+                                let r = constEvaluation(it);
+                                optimizeBytecode(r)
+                            });
 
-                        let opz = branchOmit(ops).0;
+                            ops  = branchOmit(ops).0;
+                        }
 
 
                         if DEBUG {
-                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, opz);
+                            println!("[optimized] N: {}, F: {} {} {:?}", nId, index, f.name, ops);
                             println!("locals meta{:?}", f.localsMeta);
                         }
 
                         if false {
-                            let nf = warCrime.get_mut().jitCompiler.compile(&opz, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
+                            let nf = warCrime.get_mut().jitCompiler.compile(&ops, mother2.getMut(), anotherWarCrime.get_mut(), f.returns());
                             *a = Some(Native(nf));
                         } else {
-                            let opt = emitOpcodes(opz).map_err(|it| vec![it])?;
+                            let opt = emitOpcodes(ops).map_err(|it| vec![it])?;
                             *a = Some(LoadedFunction::Virtual(opt));
                         }
 

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::errors::{CodeGenError, SymbolNotFoundE};
 use crate::errors::CodeGenError::SymbolNotFound;
+use crate::implicitConverter::getImplicitConverter;
 use crate::utils::{genFunName, genNamespaceName};
 use crate::vm::dataType::DataType;
 use crate::vm::namespace::StructMeta;
@@ -31,6 +32,12 @@ pub struct StructSymbol {
     pub meta: StructMeta,
     pub nId: usize,
     pub sId: usize
+}
+
+impl StructSymbol {
+    pub fn newInstruction(&self) -> OpCode {
+        OpCode::New { namespaceID: self.nId as u32, structID: self.sId as u32 }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,8 +102,7 @@ impl SymbolManager {
         if args.is_empty() {
             return self.getFunction(&genFunName(name, args))
         }
-
-
+        let conveter = getImplicitConverter();
 
         let first = self.getFunction(&genFunName(name, args));
         if let Ok(v) = first {
@@ -117,7 +123,7 @@ impl SymbolManager {
             }
 
             for (i, arg) in fMeta.args.iter().enumerate() {
-                if !possibilities[i].iter().any(|it| arg.canAssign(&it)) {
+                if !possibilities[i].iter().any(|it| conveter.findConversionChain(it, arg).is_some()) {
                     continue
                 }
                 return Ok(fMeta)

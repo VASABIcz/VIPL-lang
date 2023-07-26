@@ -4,6 +4,8 @@ use crate::errors::{InvalidToken, NoSuchParsingUnit, ParserError};
 
 use crate::lexer::Token;
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
+use crate::vm::dataType::DataType;
+use crate::vm::optimizations::constEval::ConstValue::I;
 
 const DEBUG: bool = false;
 
@@ -14,6 +16,15 @@ pub struct TokenProvider<T: PartialEq + Clone> {
 }
 
 impl<T: PartialEq + Debug + Clone + Copy + 'static> TokenProvider<T> {
+    pub fn isPeekConsume(&mut self, typ: T) -> bool {
+        if self.isPeekType(typ) {
+            self.consume();
+            return true
+        }
+        
+        false
+    }
+    
     pub fn findOffsetIgnoring(&self, increment: T, decrement: T, startOffset: isize) -> Option<isize> {
         let mut count = 0;
         let mut index = (self.index as isize) + startOffset;
@@ -252,6 +263,10 @@ pub struct Parser<'a, IN: Clone + PartialEq + Debug + 'static, OUT: Debug, STATE
 }
 
 impl<IN: Clone + PartialEq + Debug + Copy, OUT: Debug, STATE: Debug> Parser<'_, IN, OUT, STATE> {
+    pub fn isNoPrev(&self) -> bool {
+        self.previousBuf.is_empty()
+    }
+    
     pub fn prevPop(&mut self) -> Result<OUT, ParserError<IN>> {
         self.previousBuf.pop().ok_or(ParserError::Unknown("fuuck".to_string().into()))
     }

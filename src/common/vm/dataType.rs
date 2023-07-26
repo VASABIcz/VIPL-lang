@@ -48,71 +48,16 @@ pub enum DataType {
 }
 
 impl DataType {
-    pub fn canAssign(&self, other: &DataType) -> bool {
-        if self.isVoid() && other.isVoid() {
-            return true;
-        }
-
-        if self.isVoid() || other.isVoid() {
-            return false;
-        }
-
-        if self == other || self.isValue() {
-            return true;
-        }
-
-        if self.isObjectNonNullable() && other.isReferenceNonNullable() {
-            return true
-        }
-
-        if self.isObjectNullable() && other.isReference() {
-            return true;
-        }
-
-        if let Reference(r) = self && let Reference(r1) = other {
-            return r.name == r1.name && (r.nullable == r1.nullable || r.nullable)
-        }
-
-        if self.isReferenceNullable() && other.isNull() {
-            return true
-        }
-
-        if self.isInt() && other.isRefNamed("Int") {
-            return true
-        }
-
-        if self.isFloat() && other.isRefNamed("Float") {
-            return true
-        }
-
-        if self.isBool() && other.isRefNamed("Bool") {
-            return true
-        }
-
-        if self.isChar() && other.isRefNamed("Char") {
-            return true
-        }
-
-        if other.isInt() && self.isRefNamed("Int") {
-            return true
-        }
-
-        if other.isFloat() && self.isRefNamed("Float") {
-            return true
-        }
-
-        if other.isBool() && self.isRefNamed("Bool") {
-            return true
-        }
-
-        if other.isChar() && self.isRefNamed("Char") {
-            return true
-        }
-        return false
+    pub fn getRefName(&self) -> &str {
+        &self.getReff().unwrap().name
     }
 
     pub fn isReference(&self) -> bool {
         matches!(self, DataType::Reference(_))
+    }
+    
+    pub fn isReferenceLike(&self) -> bool {
+        self.isObject() || self.isReference() || self.isNull()
     }
 
     pub fn isRefNamed(&self, name: &str) -> bool {
@@ -127,7 +72,10 @@ impl DataType {
     }
 
     pub fn isReferenceNonNullable(&self) -> bool {
-        matches!(self, DataType::Reference(ObjectMeta{name, generics, nullable: false}))
+        match self {
+            Reference(v) => !v.nullable,
+            _ => false
+        }
     }
 
     pub fn isObjectNullable(&self) -> bool {
@@ -207,17 +155,11 @@ impl DataType {
     }
 
     pub fn isString(&self) -> bool {
-        match self {
-            Reference(o) => return o.name.as_str() == "String",
-            _ => false,
-        }
+        return self.isRefNamed("String")
     }
 
     pub fn isArray(&self) -> bool {
-        match self {
-            Reference(o) => return o.name.as_str() == "Array",
-            _ => false,
-        }
+        return self.isRefNamed("Array")
     }
 
     pub fn isValue(&self) -> bool {
@@ -517,7 +459,7 @@ impl ObjectMeta {
         Self {
             name: name.to_string(),
             generics: Box::new([]),
-            nullable: true,
+            nullable: false,
         }
     }
 }

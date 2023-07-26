@@ -372,8 +372,8 @@ impl Namespace {
     pub fn findFunctionsByName(&self, name: &str) -> Vec<(FunctionMeta, usize)> {
         self.functions.actual
             .iter()
-            .filter(|it| it.0.name == name)
             .enumerate()
+            .filter(|it| it.1.0.name == name)
             .map(|(id, it)| (it.0.clone(), id))
             .collect::<Vec<_>>()
     }

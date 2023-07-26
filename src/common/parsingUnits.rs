@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::var;
 use std::ops::Add;
 use std::sync::OnceLock;
 
@@ -10,7 +11,7 @@ use crate::errors::{InvalidToken, ParserError};
 use crate::errors::ParserError::InvalidCharLiteral;
 use crate::lexer::{IdentifierLexingUnit, LexingUnit, SourceProvider, Token, tokenizeSource};
 use crate::lexingUnits::{getLexingUnits, TokenType};
-use crate::lexingUnits::TokenType::{As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, DoubleLiteral, Else, Elvis, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, While};
+use crate::lexingUnits::TokenType::{As, BitwiseNot, CCB, CharLiteral, Colon, Comma, Continue, CRB, CSB, Dot, DoubleLiteral, Else, Elvis, Equals, FloatLiteral, Fn, For, From, Global, Identifier, If, Import, In, IntLiteral, Is, LongLiteral, Loop, Minus, Mul, Mut, Namespace, Not, Null, NullAssert, OCB, ORB, OSB, QuestionMark, Repeat, Return, StringLiteral, Struct, While};
 use crate::naughtyBox::Naughty;
 use crate::parser::{Parser, ParsingUnit, ParsingUnitSearchType, TokenProvider};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
@@ -600,17 +601,15 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for StructParsingUnit {
             parser.tokens.getAssert(OCB)?;
 
             while !parser.tokens.isPeekType(CCB) {
-                let fieldName = parser.tokens.getIdentifier()?;
-                parser.tokens.getAssert(Colon)?;
-                let fieldType = parser.parseDataType()?;
+                let varMeta = parser.parseVarMeta()?;
 
-                if fields.contains_key(&fieldName) {
+                if fields.contains_key(&varMeta.name) {
                     // FIXME
                     panic!()
                     // None.ok_or("struct cant have duplicate fields")?;
                 }
 
-                fields.insert(fieldName, fieldType);
+                fields.insert(varMeta.name, varMeta.typ);
             }
 
             parser.tokens.getAssert(CCB)?;
@@ -1335,10 +1334,7 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for FunctionParsingUnit {
 
                 let t = parser.parseDataType()?;
 
-                args.push(VariableMetadata {
-                    name: argName,
-                    typ: t,
-                });
+                args.push(VariableMetadata::new(argName, t));
                 argCount += 1;
                 if parser.tokens.isPeekType(Comma) {
                     parser.tokens.consume();
@@ -1678,6 +1674,23 @@ impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for ElvisParsingUnit {
 
     fn getPriority(&self) -> usize {
         self.priority
+    }
+}
+
+#[derive(Debug)]
+struct VarParsingUnit;
+
+impl ParsingUnit<ASTNode, TokenType, VIPLParsingState> for VarParsingUnit {
+    fn getType(&self) -> ParsingUnitSearchType {
+        Ahead
+    }
+
+    fn canParse(&self, parser: &Parser<TokenType, ASTNode, VIPLParsingState>) -> bool {
+        parser.isNoPrev() && parser.tokens.isPeekOneOf(&[TokenType::Val, TokenType::Var])
+    }
+
+    fn parse(&self, parser: &mut Parser<TokenType, ASTNode, VIPLParsingState>) -> Result<ASTNode, ParserError<TokenType>> {
+        todo!()
     }
 }
 

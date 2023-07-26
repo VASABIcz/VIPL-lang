@@ -81,7 +81,12 @@ fn main() -> Result<(), ()> {
     unsafe { Box::from_raw(ptr) };
     println!("Elapsed: {:.2?}", elapsed);
     if vm.stackSize() != 0 {
-        println!("bytecode: {:?}", f.as_ref().unwrap().getBytecode().unwrap());
+        for (ff, f) in nn.getFunctions() {
+            println!("{} bytecode: {:?}", ff.name, f.as_ref().unwrap().getBytecode().unwrap());
+        }
+        while vm.stackSize() != 0 {
+            println!("{:?}", vm.pop());
+        }
         panic!("something went wrong :(")
     }
 

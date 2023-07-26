@@ -9,6 +9,7 @@ use crate::lexingUnits::TokenType::*;
 use crate::parser::{Parser, ParsingUnit, TokenProvider};
 use crate::parser::ParsingUnitSearchType::{Ahead, Around, Behind};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
+use crate::vm::variableMetadata::VariableMetadata;
 
 pub const VALID_EXPRESSION_TOKENS: [TokenType; 7] = [
     StringLiteral,
@@ -252,6 +253,21 @@ impl Parser<'_, TokenType, ASTNode, VIPLParsingState> {
         let res = self.parseOne(Ahead)?.asExpr();
         self.state.parsingContext.pop();
         res
+    }
+    
+    pub fn parseVarMeta(&mut self) -> Result<VariableMetadata, ParserError<TokenType>> {
+        let mutable = self.tokens.isPeekConsume(Mut);
+        
+        let name = self.tokens.getIdentifier()?;
+        self.tokens.getAssert(Colon)?;
+        let typ = self.parseDataType()?;
+
+
+        Ok(VariableMetadata {
+            name,
+            typ,
+            mutable,
+        })
     }
 }
 

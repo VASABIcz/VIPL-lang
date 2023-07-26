@@ -9,8 +9,4 @@ fn fact(n: int): int {
     return n*fact(n-1)
 }
 
-x = 0
-
-fact(4)
-x += 1
-println(x)
+println fact 1

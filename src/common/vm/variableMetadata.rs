@@ -6,6 +6,7 @@ use crate::vm::dataType::DataType::{Bool, Char, Float, Int};
 pub struct VariableMetadata {
     pub name: String,
     pub typ: DataType,
+    pub mutable: bool
 }
 
 impl From<DataType> for VariableMetadata {
@@ -13,35 +14,17 @@ impl From<DataType> for VariableMetadata {
         Self {
             name: "unknown".to_string(),
             typ: value,
+            mutable: false,
         }
     }
 }
 
 impl VariableMetadata {
-    pub fn f(name: String) -> Self {
-        Self { name, typ: Float }
-    }
-
-    pub fn i(name: String) -> Self {
-        Self { name, typ: Int }
-    }
-
-    pub fn c(name: String) -> Self {
-        Self { name, typ: Char }
-    }
-
-    pub fn b(name: String) -> Self {
-        Self { name, typ: Bool }
-    }
-
     pub fn n(name: &str, t: DataType) -> Self {
-        Self {
-            name: name.to_string(),
-            typ: t,
-        }
+        Self::new(name.to_string(), t)
     }
 
     pub fn new(name: String, t: DataType) -> Self {
-        Self { name, typ: t }
+        Self { name, typ: t, mutable: false }
     }
 }

@@ -1,0 +1,12 @@
+from out import println
+
+fn bl(): Int {
+    return 0
+}
+
+if bl() == null {
+    println "OwO"
+}
+else {
+    println "UwU"
+}

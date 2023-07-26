@@ -1,16 +1,20 @@
 use std::cell::UnsafeCell;
-use std::mem::swap;
+use std::collections::HashSet;
+use std::fmt::Debug;
 
-use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, Statement};
+use crate::ast::{ASTNode, BinaryOp, Expression, RawExpression, RawStatement, Statement};
 use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
 use crate::errors::CodeGenError::UnexpectedVoid;
+use crate::implicitConverter::{getImplicitConverter, ImplicitConverter};
 use crate::symbolManager::{FunctionSymbol, GlobalSymbol, StructSymbol, SymbolManager};
 use crate::utils::{genNamespaceName, swapChain};
 use crate::vm::dataType::{DataType, Generic, ObjectMeta};
 use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
-use crate::vm::namespace::Namespace;
+use crate::vm::namespace::{FunctionMeta, Namespace};
 use crate::vm::variableMetadata::VariableMetadata;
 use crate::vm::vm::VirtualMachine;
+
+const DEBUG: bool = false;
 
 #[derive(Debug, Clone)]
 pub struct Body {
@@ -19,12 +23,247 @@ pub struct Body {
 }
 
 impl Body {
+    pub fn generate<T: Debug, FN: Fn(StatementCtx<T>) -> Result<(), CodeGenError>>(
+        &self,
+        mut ctx: SimpleCtx<T>,
+        expectedReturn: DataType,
+        f: FN
+    ) -> Result<(), CodeGenError> {
+        ctx.enterScope();
+        for (i, statement) in self.statements.iter().enumerate() {
+            let mut y = ctx.inflate(statement);
+            y.expectedReturn = expectedReturn.clone();
+            y.isLast = i == self.statements.len() - 1;
+            f(y)?;
+        }
+        ctx.exitScope();
+
+        Ok(())
+    }
+
+    pub fn generateWithStatement<T: Debug, FN: Fn(StatementCtx<T>) -> Result<(), CodeGenError>>(
+        &self,
+        ctx: &mut StatementCtx<T>,
+        f: FN
+    ) -> Result<(), CodeGenError> {
+        let ret = ctx.expectedReturn.clone();
+        self.generate(ctx.deflate(), ret, f)
+    }
+
     pub fn push(&mut self, s: Statement) {
         self.statements.push(s)
     }
 
     pub fn new(b: Vec<Statement>, isLoop: bool) -> Self {
         Self { statements: b, isLoop }
+    }
+
+    pub fn validate<T: Debug>(&self, mut ctx: SimpleCtx<T>, fun: &FunctionMeta) -> Result<(), CodeGenError> {
+        let mut s = HashSet::new();
+
+        let isCovered = self.coverageCheck(ctx.transfer(), &mut s)?;
+
+        if fun.returnType.isVoid() && s.is_empty() {
+            return Ok(());
+        }
+
+        if (!isCovered || s.is_empty()) && (s.len() == 1 && !s.contains(&Void)) {
+            return Err(CodeGenError::InvalidReturns);
+        }
+
+        if s.len() == 2 && s.contains(&Null) {
+            let t = s.iter().find(|it| !it.isNull()).unwrap().clone();
+            if t.isReference() && fun.returnType.isReferenceNullable() {
+                return Ok(());
+            }
+        }
+
+        if s.len() > 1 {
+            if DEBUG {
+                eprintln!("more than 1 return ${:?}", s)
+            }
+            return Err(CodeGenError::InvalidReturns);
+        }
+
+        let tt = s.iter().next().unwrap();
+
+        if fun.returnType.isReferenceNullable() && tt.isNull() {
+            return Ok(());
+        }
+
+        if let Ok(v) = tt.clone().getRef() && let Ok(v1) = fun.returnType.clone().getRef() && v.name == v1.name {
+            return if v.nullable && !v1.nullable {
+                Err(CodeGenError::InvalidReturns)
+            } else {
+                Ok(())
+            };
+        }
+
+        if fun.returnType != Void && !ctx.canConvert(tt, &fun.returnType) {
+            return Err(CodeGenError::TypeError(TypeError::newNone(fun.returnType.clone(), tt.clone())));
+        }
+
+        Ok(())
+    }
+
+    pub fn coverageCheck<T: Debug>(&self, mut ctx: SimpleCtx<T>, r: &mut HashSet<DataType>) -> Result<bool, CodeGenError> {
+        for s1 in &self.statements {
+            let s = &s1.exp;
+            match s {
+                RawStatement::If(a) => {
+                    let mut covered = a.body.coverageCheck(ctx.transfer(), r)?;
+
+                    if let Some(v) = &a.elseBody {
+                        covered &= v.coverageCheck(ctx.transfer(), r)?;
+                    } else {
+                        covered = false;
+                    }
+
+                    for (_, b) in &a.elseIfs {
+                        covered &= b.coverageCheck(ctx.transfer(), r)?;
+                    }
+
+                    if covered {
+                        return Ok(true);
+                    }
+                }
+                RawStatement::Return(e) => {
+                    if let Some(e) = e {
+                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
+                        r.insert(t);
+                    } else {
+                        r.insert(Void);
+                    }
+
+                    return Ok(true);
+                }
+                RawStatement::Loop(b) => {
+                    b.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::StatementExpression(_) => {}
+                RawStatement::Assignable(a, b, c, typeHint) => {
+                    if let RawExpression::Variable(v) = &a.exp {
+                        let mut ctx1 = ctx.inflate(s1);
+                        let t = ctx1.ctx.makeExpressionCtx(b).toDataTypeNotVoid()?;
+
+                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
+                            ctx1.ctx.registerVariable(v, DataType::Reference(r.clone()));
+                        } else {
+                            ctx1.ctx.registerVariable(v, t);
+                        }
+                    }
+                }
+                RawStatement::ForLoop(name, e, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.ctx.enterScope();
+
+                    let d = ctx1.ctx.makeExpressionCtx(e).toDataTypeNotVoid()?.getArrayType()?;
+                    ctx1.ctx.registerVariable(name, d);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.ctx.exitScope()
+                }
+                RawStatement::Repeat(name, _, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.ctx.enterScope();
+
+                    ctx1.ctx.registerVariable(name, Int);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.ctx.exitScope()
+                }
+                RawStatement::While(w) => {
+                    w.body.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::Continue => {}
+                RawStatement::Break => {}
+            }
+        }
+        if let Some(v) = self.statements.last() && let RawStatement::StatementExpression(e) = &v.exp && !self.isLoop {
+            let t = ctx.makeExpressionCtx(e).toDataType()?;
+
+            r.insert(t);
+
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    pub fn returnType<T: Debug>(&self, mut ctx: SimpleCtx<T>, r: &mut HashSet<DataType>) -> Result<(), CodeGenError> {
+        for s1 in &self.statements {
+            let s = &s1.exp;
+            match s {
+                RawStatement::While(w) => {
+                    w.body.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::If(a) => {
+                    a.body.returnType(ctx.transfer(), r)?;
+
+                    if let Some(v) = &a.elseBody {
+                        v.returnType(ctx.transfer(), r)?;
+                    }
+
+                    for (_, b) in &a.elseIfs {
+                        b.returnType(ctx.transfer(), r)?;
+                    }
+                }
+                RawStatement::Return(e) => {
+                    if let Some(e) = e {
+                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
+                        r.insert(t);
+                    } else {
+                        r.insert(Void);
+                    }
+                    break;
+                }
+                RawStatement::Loop(b) => {
+                    b.returnType(ctx.transfer(), r)?
+                }
+                RawStatement::StatementExpression(_) => {}
+                RawStatement::Assignable(a, b, c, typeHint) => {
+                    if let RawExpression::Variable(v) = &a.exp {
+                        let mut ctx1 = ctx.inflate(s1);
+                        let t = ctx1.ctx.makeExpressionCtx(b).toDataTypeNotVoid()?;
+
+                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
+                            ctx1.ctx.registerVariable(v, Reference(r.clone()));
+                        } else {
+                            ctx1.ctx.registerVariable(v, t);
+                        }
+                    }
+                }
+                RawStatement::ForLoop(name, e, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+
+                    ctx1.ctx.enterScope();
+
+                    let d = ctx1.ctx.makeExpressionCtx(e).toDataTypeNotVoid()?.getArrayType()?;
+                    ctx1.ctx.registerVariable(name, d);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.ctx.exitScope()
+                }
+                RawStatement::Repeat(name, _, b) => {
+                    let mut ctx1 = ctx.inflate(s1);
+                    ctx1.ctx.enterScope();
+                    ctx1.ctx.registerVariable(name, Int);
+
+                    b.returnType(ctx1.deflate().transfer(), r)?;
+
+                    ctx1.ctx.exitScope()
+                }
+                RawStatement::Continue => {}
+                RawStatement::Break => {}
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -71,7 +310,43 @@ pub struct SimpleCtx<'a, T> {
     symbols: &'a mut SymbolManager,
 }
 
-impl<T> SimpleCtx<'_, T> {
+impl<T: Debug> SimpleCtx<'_, T>  {
+    pub fn genConversion(&mut self, src: DataType, tgt: DataType, converter: &ImplicitConverter<T>) -> Result<(), CodeGenError> {
+        // FIXME [gen] converting Int to Void using [BoxConverter { ac: 604 }, ObjectConverter { ac: 600 }, ObjNullifyConverter { ac: 601 }]
+        if tgt.isVoid() {
+            return Err(CodeGenError::VeryBadState);
+        }
+        // FIXME proper errors
+        let converters = converter.findConversionChain(&src, &tgt).expect(&format!("failed to convert {:?} to {:?}", src, tgt));
+
+        println!("[gen] converting {:?} to {:?} using {:?}", src, tgt, converters);
+
+        for converter in converters {
+            // FIXME this doesnt work bcs we dont provide the actual data type, it could be deduced tho
+            converter.genConvert(src.clone(), tgt.clone(), self.transfer())?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T: Debug> SimpleCtx<'_, T> {
+    pub fn genConversionAbstract<F: Fn(&DataType) -> bool>(&mut self, src: DataType, tgt: F, converter: &ImplicitConverter<T>) -> Result<DataType, CodeGenError> {
+        // FIXME proper errors
+        let (converters, finalType) = converter.findAbstractConversion(src.clone(), tgt).expect(&format!("failed to convert {:?} to specified rule", src));
+
+        for converter in converters {
+            // FIXME this doesnt work bcs we dont provide the actual data type, it could be deduced tho
+            converter.genBlindConvert(src.clone(), self.transfer())?;
+        }
+
+        Ok(finalType)
+    }
+
+    pub fn canConvert(&self, src: &DataType, tgt: &DataType) -> bool {
+        getImplicitConverter().findConversionChain(src, tgt).is_some()
+    }
+
     pub fn argsToDataTypes(&mut self, args: &[Expression]) -> Result<Vec<DataType>, CodeGenError> {
         args
             .iter()
@@ -153,6 +428,7 @@ impl<T> SimpleCtx<'_, T> {
         symbols: &'b mut SymbolManager,
         labels: &'b mut LabelManager,
         ops: &'b mut Vec<T>,
+        implicitConverter: &'b ImplicitConverter<T>,
     ) -> SimpleCtx<'b, T> {
         SimpleCtx {
             ops,
@@ -268,7 +544,7 @@ pub struct ExpressionCtx<'a, T> {
     pub ctx: SimpleCtx<'a, T>,
 }
 
-impl<T> ExpressionCtx<'_, T> {
+impl<T: Debug> ExpressionCtx<'_, T> {
     pub fn clone(&mut self) -> ExpressionCtx<T> {
         ExpressionCtx {
             exp: self.exp,
@@ -280,9 +556,10 @@ impl<T> ExpressionCtx<'_, T> {
         let t1 = self.toDataType()?;
 
         // FIXME not sure if this is the right thing to do
-        if !t.canAssign(&t1) {
-            return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())));
-        }
+        /*        self.ctx.makeExpressionCtx(self).
+                if !t.canAssign(&t1) {
+                    return Err(CodeGenError::TypeError(TypeError::new(t, t1, self.exp.clone())));
+                }*/
 
         Ok(())
     }
@@ -480,7 +757,7 @@ impl<T> ExpressionCtx<'_, T> {
                 match e {
                     Reference(o) => {
                         if matches!(o.name.as_str(), "Array" | "String") {
-                            return Ok(Int)
+                            return Ok(Int);
                         }
 
                         let (structMeta, _) = self
@@ -503,11 +780,11 @@ impl<T> ExpressionCtx<'_, T> {
                 let a = self.transfer(&tr).toDataType()?;
                 let b = self.transfer(&fal).toDataType()?;
 
-                if let Some(v) = swapChain(&a, &b, |a, b| { if (a.canAssign(b)) { Some(a.clone()) } else { None } }) {
-                    return Ok(v)
+                if let Some(v) = swapChain(&a, &b, |a, b| { if self.ctx.canConvert(b, a) { Some(a.clone()) } else { None } }) {
+                    return Ok(v);
                 }
-                if let Some(v) = swapChain(&a, &b, |a, b| { if  b.isReferenceNonNullable() && a.isNull() { Some(b.clone().toNullable()) } else { None } }) {
-                    return Ok(v)
+                if let Some(v) = swapChain(&a, &b, |a, b| { if b.isReferenceNonNullable() && a.isNull() { Some(b.clone().toNullable()) } else { None } }) {
+                    return Ok(v);
                 }
                 panic!("{:?} {:?}", a, b)
             }
@@ -539,7 +816,7 @@ impl<T> ExpressionCtx<'_, T> {
                 let mut a = self.transfer(nullable).toDataTypeNotVoid()?;
                 let b = self.transfer(otherwise).toDataTypeNotVoid()?;
 
-                if a.canAssign(&b) && let Ok(v) = a.getReffM() {
+                if self.ctx.canConvert(&b, &a) && let Ok(v) = a.getReffM() {
                     v.nullable = false;
 
                     return Ok(a);
@@ -556,10 +833,10 @@ pub struct StatementCtx<'a, T> {
     pub statement: &'a Statement,
     pub ctx: SimpleCtx<'a, T>,
     pub isLast: bool,
-    pub expectedReturn: DataType
+    pub expectedReturn: DataType,
 }
 
-impl<T> StatementCtx<'_, T> {
+impl<T: Debug> StatementCtx<'_, T> {
     pub fn deflate(&mut self) -> SimpleCtx<T> {
         SimpleCtx {
             ops: self.ctx.ops,

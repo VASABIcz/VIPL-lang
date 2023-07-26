@@ -1,249 +1,23 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::ast::{ArithmeticOp, BinaryOp, Expression, RawExpression, RawStatement};
+use crate::ast::{ArithmeticOp, BinaryOp, RawExpression, RawStatement};
 use crate::bytecodeGen::SymbolicOpcode::Op;
-use crate::codeGenCtx::{Body, ExpressionCtx, SimpleCtx, StatementCtx};
-use crate::errors::{CodeGenError, SymbolNotFoundE, TypeError};
+use crate::codeGenCtx::{ExpressionCtx, SimpleCtx, StatementCtx};
+use crate::errors::{CodeGenError, SymbolNotFoundE};
 use crate::errors::CodeGenError::LiteralParseError;
+use crate::implicitConverter::getImplicitConverter;
 use crate::lexer::*;
 use crate::parser::*;
 use crate::symbolManager::FunctionSymbol;
 use crate::utils::microsSinceEpoch;
 use crate::vm::dataType::{DataType, RawDataType};
-use crate::vm::dataType::DataType::{Bool, Char, Float, Int, Null, Reference, Void};
+use crate::vm::dataType::DataType::{Bool, Float, Int, Reference, Void};
 use crate::vm::namespace::{FunctionMeta, FunctionTypeMeta};
 use crate::vm::vm::{JmpType, OpCode};
 use crate::vm::vm::JmpType::{False, True};
-use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, LCall, Mul, New, Not, Pop, PushBool, PushChar, PushInt, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub};
+use crate::vm::vm::OpCode::{Add, And, ArrayLength, ArrayLoad, ArrayNew, ArrayStore, AssertNotNull, Div, Dup, DynamicCall, F2I, GetChar, GetField, GetLocal, Greater, I2F, IsStruct, LCall, Mul, New, Not, Pop, PushBool, PushChar, PushFloat, PushInt, PushNull, Return, SCall, SetField, SetGlobal, SetLocal, StringLength, StrNew, Sub, Swap};
 
 const DEBUG: bool = true;
-
-impl Body {
-    pub fn generate(
-        &self,
-        mut ctx: SimpleCtx<SymbolicOpcode>,
-    ) -> Result<(), CodeGenError> {
-        ctx.enterScope();
-        for (i, statement) in self.statements.iter().enumerate() {
-            let mut y = ctx.inflate(statement);
-            y.isLast = i == self.statements.len()-1;
-            println!("izLast {:?}", y.isLast);
-            genStatement(y)?;
-        }
-        ctx.exitScope();
-
-        Ok(())
-    }
-
-    pub fn validate(&self, mut ctx: SimpleCtx<SymbolicOpcode>, fun: &FunctionMeta) -> Result<(), CodeGenError> {
-        let mut s = HashSet::new();
-
-        let isCovered = self.coverageCheck(ctx.transfer(), &mut s)?;
-
-        if fun.returnType.isVoid() && s.is_empty() {
-            return Ok(());
-        }
-
-        if (!isCovered || s.is_empty()) && (s.len() == 1 && !s.contains(&Void)) {
-            eprintln!("!isCovered || s.is_empty() {} {} {:?}", !isCovered, s.is_empty(), s);
-            return Err(CodeGenError::InvalidReturns);
-        }
-
-        if s.len() == 2 && s.contains(&Null) {
-            let t = s.iter().find(|it| !it.isNull()).unwrap().clone();
-            if t.isReference() && fun.returnType.isReferenceNullable() {
-                return Ok(());
-            }
-        }
-
-        if s.len() > 1 {
-            if DEBUG {
-                println!("more than 1 return ${:?}", s)
-            }
-            return Err(CodeGenError::InvalidReturns);
-        }
-
-        let tt = s.iter().next().unwrap();
-
-        if fun.returnType.isReferenceNullable() && tt.isNull() {
-            return Ok(());
-        }
-
-        if let Ok(v) = tt.clone().getRef() && let Ok(v1) = fun.returnType.clone().getRef() && v.name == v1.name {
-            return if v.nullable && !v1.nullable {
-                Err(CodeGenError::InvalidReturns)
-            } else {
-                Ok(())
-            };
-        }
-
-        if fun.returnType != Void && !fun.returnType.canAssign(tt) {
-            return Err(CodeGenError::TypeError(TypeError::newNone(fun.returnType.clone(), tt.clone())));
-        }
-
-        Ok(())
-    }
-
-    pub fn coverageCheck(&self, mut ctx: SimpleCtx<SymbolicOpcode>, r: &mut HashSet<DataType>) -> Result<bool, CodeGenError> {
-        for s1 in &self.statements {
-            let s = &s1.exp;
-            match s {
-                RawStatement::If(a) => {
-                    let mut covered = a.body.coverageCheck(ctx.transfer(), r)?;
-
-                    if let Some(v) = &a.elseBody {
-                        covered &= v.coverageCheck(ctx.transfer(), r)?;
-                    } else {
-                        covered = false;
-                    }
-
-                    for (_, b) in &a.elseIfs {
-                        covered &= b.coverageCheck(ctx.transfer(), r)?;
-                    }
-
-                    if covered {
-                        return Ok(true);
-                    }
-                }
-                RawStatement::Return(e) => {
-                    if let Some(e) = e {
-                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
-                        r.insert(t);
-                    } else {
-                        r.insert(Void);
-                    }
-
-                    return Ok(true);
-                }
-                RawStatement::Loop(b) => {
-                    b.returnType(ctx.transfer(), r)?
-                }
-                RawStatement::StatementExpression(_) => {}
-                RawStatement::Assignable(a, b, c, typeHint) => {
-                    if let RawExpression::Variable(v) = &a.exp {
-                        let mut ctx1 = ctx.inflate(s1);
-                        let t = ctx1.ctx.makeExpressionCtx(b).toDataTypeNotVoid()?;
-
-                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
-                            ctx1.ctx.registerVariable(v, DataType::Reference(r.clone()));
-                        } else {
-                            ctx1.ctx.registerVariable(v, t);
-                        }
-                    }
-                }
-                RawStatement::ForLoop(name, e, b) => {
-                    let mut ctx1 = ctx.inflate(s1);
-
-                    ctx1.ctx.enterScope();
-
-                    let d = ctx1.ctx.makeExpressionCtx(e).toDataTypeNotVoid()?.getArrayType()?;
-                    ctx1.ctx.registerVariable(name, d);
-
-                    b.returnType(ctx1.deflate().transfer(), r)?;
-
-                    ctx1.ctx.exitScope()
-                }
-                RawStatement::Repeat(name, _, b) => {
-                    let mut ctx1 = ctx.inflate(s1);
-
-                    ctx1.ctx.enterScope();
-
-                    ctx1.ctx.registerVariable(name, Int);
-
-                    b.returnType(ctx1.deflate().transfer(), r)?;
-
-                    ctx1.ctx.exitScope()
-                }
-                RawStatement::While(w) => {
-                    w.body.returnType(ctx.transfer(), r)?
-                }
-                RawStatement::Continue => {}
-                RawStatement::Break => {}
-            }
-        }
-        if let Some(v) = self.statements.last() && let RawStatement::StatementExpression(e) = &v.exp && !self.isLoop {
-            let t = ctx.makeExpressionCtx(e).toDataType()?;
-
-            r.insert(t);
-
-            return Ok(true);
-        }
-
-        Ok(false)
-    }
-
-    pub fn returnType(&self, mut ctx: SimpleCtx<SymbolicOpcode>, r: &mut HashSet<DataType>) -> Result<(), CodeGenError> {
-        for s1 in &self.statements {
-            let s = &s1.exp;
-            match s {
-                RawStatement::While(w) => {
-                    w.body.returnType(ctx.transfer(), r)?
-                }
-                RawStatement::If(a) => {
-                    a.body.returnType(ctx.transfer(), r)?;
-
-                    if let Some(v) = &a.elseBody {
-                        v.returnType(ctx.transfer(), r)?;
-                    }
-
-                    for (_, b) in &a.elseIfs {
-                        b.returnType(ctx.transfer(), r)?;
-                    }
-                }
-                RawStatement::Return(e) => {
-                    if let Some(e) = e {
-                        let t = ctx.inflate(s1).ctx.makeExpressionCtx(e).toDataType()?;
-                        r.insert(t);
-                    } else {
-                        r.insert(Void);
-                    }
-                    break;
-                }
-                RawStatement::Loop(b) => {
-                    b.returnType(ctx.transfer(), r)?
-                }
-                RawStatement::StatementExpression(_) => {}
-                RawStatement::Assignable(a, b, c, typeHint) => {
-                    if let RawExpression::Variable(v) = &a.exp {
-                        let mut ctx1 = ctx.inflate(s1);
-                        let t = ctx1.ctx.makeExpressionCtx(b).toDataTypeNotVoid()?;
-
-                        if let Some(Reference(r)) = typeHint && r.nullable && t.isNull() {
-                            ctx1.ctx.registerVariable(v, Reference(r.clone()));
-                        } else {
-                            ctx1.ctx.registerVariable(v, t);
-                        }
-                    }
-                }
-                RawStatement::ForLoop(name, e, b) => {
-                    let mut ctx1 = ctx.inflate(s1);
-
-                    ctx1.ctx.enterScope();
-
-                    let d = ctx1.ctx.makeExpressionCtx(e).toDataTypeNotVoid()?.getArrayType()?;
-                    ctx1.ctx.registerVariable(name, d);
-
-                    b.returnType(ctx1.deflate().transfer(), r)?;
-
-                    ctx1.ctx.exitScope()
-                }
-                RawStatement::Repeat(name, _, b) => {
-                    let mut ctx1 = ctx.inflate(s1);
-                    ctx1.ctx.enterScope();
-                    ctx1.ctx.registerVariable(name, Int);
-
-                    b.returnType(ctx1.deflate().transfer(), r)?;
-
-                    ctx1.ctx.exitScope()
-                }
-                RawStatement::Continue => {}
-                RawStatement::Break => {}
-            }
-        }
-
-        Ok(())
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum SymbolicOpcode {
@@ -283,7 +57,7 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
         }
     }
 
-    for (i, sym) in syms.iter().enumerate() {
+    for sym in syms.iter() {
         match sym {
             SymbolicOpcode::Op(op) => buf.push(op.clone()),
             SymbolicOpcode::Jmp(id, t) => {
@@ -301,44 +75,6 @@ pub fn emitOpcodes(syms: Vec<SymbolicOpcode>) -> Result<Vec<OpCode>, CodeGenErro
 }
 
 impl SimpleCtx<'_, SymbolicOpcode> {
-    pub fn boxValue(&mut self, t: DataType, exp: &Expression) -> Result<(), CodeGenError> {
-        match t {
-            Int => {
-                let s = self.getStruct("Float")?;
-                self.push(New { namespaceID: s.nId as u32, structID: s.sId as u32 });
-            }
-            Float => {
-                let s = self.getStruct("Float")?;
-                self.push(New { namespaceID: s.nId as u32, structID: s.sId as u32 });
-            }
-            Bool => {
-                let s = self.getStruct("Float")?;
-                self.push(New { namespaceID: s.nId as u32, structID: s.sId as u32 });
-            }
-            Char => {
-                let s = self.getStruct("Float")?;
-                self.push(New { namespaceID: s.nId as u32, structID: s.sId as u32 });
-            }
-            _ => unreachable!()
-        }
-
-        self.push(Dup);
-        self.makeExpressionCtx(exp).genExpression()?;
-        self.push(SetField { fieldID: 0 });
-
-        Ok(())
-    }
-
-    pub fn implicitConversion(&mut self, src: DataType, tgt: DataType, exp: &Expression) -> Result<(), CodeGenError> {
-        if src.isPrimitiveType() && tgt.isBoxed() {
-            self.makeExpressionCtx(exp).genExpressionBox()
-        } else if src.isBoxed() && tgt.isPrimitiveType() {
-            self.makeExpressionCtx(exp).genExpressionUnbox()
-        } else {
-            self.makeExpressionCtx(exp).genExpression()
-        }
-    }
-
     pub fn decrementLocal(&mut self, localId: usize) {
         self.push(GetLocal { index: localId });
         self.push(PushInt(1));
@@ -417,29 +153,16 @@ impl ExpressionCtx<'_, SymbolicOpcode> {
         genExpression(self)
     }
 
-    pub fn genExpressionUnbox(mut self) -> Result<(), CodeGenError> {
-        let t = self.toDataType()?;
-        self.transfer(self.exp).genExpression()?;
-
-        if t.isBoxed() {
-            self.push(GetField { fieldID: 0 });
-        }
-
-        Ok(())
+    pub fn genExpressionExpecting(mut self, tgt: DataType) -> Result<(), CodeGenError> {
+        let src = self.toDataType()?;
+        self.clone().genExpression()?;
+        self.ctx.genConversion(src, tgt, getImplicitConverter())
     }
 
-    pub fn genExpressionBox(mut self) -> Result<(), CodeGenError> {
-        let t = self.toDataType()?;
-
-        if t.isPrimitiveType() {
-            self.ctx.boxValue(t, self.exp)
-        } else {
-            self.genExpression()
-        }
-    }
-
-    pub fn genExpressionExpecting(mut self, t: DataType) -> Result<(), CodeGenError> {
-        genExpressionExpecting(self, Some(t))
+    pub fn genExpressionExpectingLike<F: Fn(&DataType) -> bool>(mut self, tgt: F) -> Result<DataType, CodeGenError> {
+        let src = self.toDataType()?;
+        self.clone().genExpression()?;
+        self.ctx.genConversionAbstract(src, tgt, getImplicitConverter())
     }
 
     pub fn genCondition(mut self) -> Result<(), CodeGenError> {
@@ -470,7 +193,7 @@ pub fn genFunctionDef(
 
         for (i, statement) in body.statements.iter().enumerate() {
             let mut y = ctx.inflate(statement);
-            y.isLast = i == body.statements.len()-1;
+            y.isLast = i == body.statements.len() - 1;
             y.expectedReturn = fun.returnType.clone();
 
             if DEBUG {
@@ -502,24 +225,19 @@ pub fn genFunctionDef(
 pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     match &ctx.statement.exp {
         RawStatement::While(w) => {
-            ctx.ctx.makeExpressionCtx(&w.exp).assertType(Bool)?;
-
             let (_, loopEnd) = ctx.ctx.beginLoop();
 
-            ctx.ctx.makeExpressionCtx(&w.exp).genExpression()?;
+            ctx.ctx.makeExpressionCtx(&w.exp).genCondition()?;
 
             ctx.ctx.opJmp(loopEnd, False);
 
-            w.body.generate(ctx.deflate())?;
+            w.body.generateWithStatement(&mut ctx, genStatement)?;
 
             ctx.opContinue()?;
 
             ctx.ctx.endLoop()?;
         }
         RawStatement::If(flow) => {
-            ctx.ctx.makeExpressionCtx(&flow.condition)
-                .assertType(Bool)?;
-
             let endLabel = ctx.ctx.nextLabel();
 
             let mut ifLabels = vec![];
@@ -532,23 +250,21 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 ifLabels.push(ctx.ctx.nextLabel());
             }
 
-            ctx.ctx.makeExpressionCtx(&flow.condition).genExpression()?;
+            ctx.ctx.makeExpressionCtx(&flow.condition).genCondition()?;
             if let Some(v) = ifLabels.first() {
                 ctx.ctx.opJmp(*v, False);
             } else {
                 ctx.ctx.opJmp(endLabel, False)
             }
 
-            flow.body.generate(ctx.deflate())?;
+            flow.body.generateWithStatement(&mut ctx, genStatement)?;
 
             ctx.ctx.opJmp(endLabel, JmpType::Jmp);
 
             for (i, (elsExp, elsBody)) in flow.elseIfs.iter().enumerate() {
                 ctx.ctx.makeLabel(*ifLabels.get(i).ok_or_else(|| CodeGenError::VeryBadState)?);
 
-                ctx.ctx.makeExpressionCtx(&elsExp)
-                    .assertType(Bool)?;
-                ctx.ctx.makeExpressionCtx(&elsExp).genExpression()?;
+                ctx.ctx.makeExpressionCtx(&elsExp).genCondition()?;
 
                 if let Some(v) = ifLabels.get(i + 1) {
                     ctx.ctx.opJmp(*v, False);
@@ -556,19 +272,19 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                     ctx.ctx.opJmp(endLabel, False);
                 }
 
-                elsBody.generate(ctx.deflate())?;
+                elsBody.generateWithStatement(&mut ctx, genStatement)?;
                 ctx.ctx.opJmp(endLabel, JmpType::Jmp);
             }
 
             if let Some(els) = &flow.elseBody {
                 ctx.ctx.makeLabel(*ifLabels.last().ok_or_else(|| CodeGenError::VeryBadState)?);
-                els.generate(ctx.deflate())?;
+                els.generateWithStatement(&mut ctx, genStatement)?;
             }
             ctx.ctx.makeLabel(endLabel);
         }
         RawStatement::Return(ret) => {
             if let Some(ret) = ret {
-                ctx.ctx.makeExpressionCtx(&ret).genExpression()?;
+                ctx.ctx.makeExpressionCtx(&ret).genExpressionExpecting(ctx.expectedReturn.clone())?;
             }
             ctx.ctx.push(Return)
         }
@@ -577,7 +293,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
         RawStatement::Loop(body) => {
             ctx.ctx.beginLoop();
 
-            body.generate(ctx.deflate())?;
+            body.generateWithStatement(&mut ctx, genStatement)?;
 
             ctx.opContinue()?;
             ctx.ctx.endLoop()?;
@@ -593,33 +309,32 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 (ctx.ctx.getHandle())(&mut ctx, ret);
             }
         }
-        RawStatement::Assignable(dest, value, operator, typeHint) => {
-            let a = ctx.ctx.makeExpressionCtx(dest).toDataType();
+        RawStatement::Assignable(destExp, valueExp, operator, typeHint) => {
+            let dest = ctx.ctx.makeExpressionCtx(destExp).toDataType();
 
-            let b = ctx.ctx.makeExpressionCtx(value).toDataType()?;
+            let srcType = ctx.ctx.makeExpressionCtx(valueExp).toDataType()?;
 
-            if let Ok(t) = a {
-                if !t.canAssign(&b) || t.isVoid() || b.isVoid() {
+            if let Ok(destType) = dest {
+                if !ctx.deflate().canConvert(&srcType, &destType) || destType.isVoid() || srcType.isVoid() {
                     return Err(CodeGenError::AssignableTypeError {
-                        var: dest.clone(),
-                        varType: t,
-                        exp: value.clone(),
-                        expType: b,
+                        var: destExp.clone(),
+                        varType: destType,
+                        exp: valueExp.clone(),
+                        expType: srcType,
                     });
                 }
             }
 
-            ctx.ctx.makeExpressionCtx(value).toDataTypeNotVoid()?;
-
-            match &dest.exp {
+            // FIXME this looks kinda sus
+            match &destExp.exp {
                 RawExpression::Variable(v) => {
                     match ctx.ctx.getLocal(v) {
                         Ok(v) => {
                             let d = v.0.clone();
-                            ctx.ctx.makeExpressionCtx(value).assertType(d)?;
+                            ctx.ctx.makeExpressionCtx(valueExp).assertType(d)?;
                         }
                         Err(_) => {
-                            let t = ctx.ctx.makeExpressionCtx(value).toDataType()?;
+                            let t = ctx.ctx.makeExpressionCtx(valueExp).toDataType()?;
 
                             if operator.is_some() {
                                 return Err(CodeGenError::SymbolNotFound(SymbolNotFoundE::var(v)));
@@ -647,13 +362,14 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
 
             match operator {
                 None => {
-                    ctx.ctx.makeExpressionCtx(value).genExpression()?;
+                    ctx.ctx.makeExpressionCtx(valueExp).genExpression()?;
                 }
                 Some(v) => {
-                    let mut c1 = ctx.ctx.makeExpressionCtx(dest);
+                    let mut c1 = ctx.ctx.makeExpressionCtx(destExp);
                     let t = c1.toDataType()?;
+                    // FIXME make generic function that generates arithmetics THIS IS BAD!
                     c1.genExpression()?;
-                    ctx.ctx.makeExpressionCtx(value).genExpression()?;
+                    ctx.ctx.makeExpressionCtx(valueExp).genExpression()?;
                     let o = match v {
                         ArithmeticOp::Add => Add(t.toRawType()?),
                         ArithmeticOp::Sub => Sub(t.toRawType()?),
@@ -670,14 +386,14 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
                 }
             }
 
-            match &dest.exp {
+            match &destExp.exp {
                 RawExpression::Variable(v) => {
                     let var = ctx.ctx.getLocal(v)?.1;
 
                     ctx.ctx.push(SetLocal { index: var })
                 }
                 RawExpression::ArrayIndexing(v) => {
-                    ctx.ctx.makeExpressionCtx(&v.index).genExpression()?;
+                    ctx.ctx.makeExpressionCtx(&v.index).genExpressionExpecting(Int)?;
 
                     ctx.ctx.push(ArrayStore)
                 }
@@ -719,7 +435,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.push(PushInt(0));
             ctx.push(SetLocal { index: counterId });
 
-            ctx.ctx.makeExpressionCtx(arr).genExpression()?;
+            ctx.ctx.makeExpressionCtx(arr).genExpressionExpectingLike(|it| it.isArray())?;
             ctx.push(Dup);
             ctx.push(ArrayLength);
             ctx.push(SetLocal { index: lenId });
@@ -743,7 +459,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.push(ArrayLoad);
             ctx.push(SetLocal { index: varId });
 
-            body.generate(ctx.deflate())?;
+            body.generateWithStatement(&mut ctx, genStatement)?;
 
             ctx.opContinue()?;
 
@@ -769,7 +485,7 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
             ctx.push(Greater(Int.toRawType()?));
             ctx.ctx.opJmp(endLoop, False);
 
-            body.generate(ctx.deflate())?;
+            body.generateWithStatement(&mut ctx, genStatement)?;
 
             ctx.opContinue()?;
 
@@ -780,71 +496,21 @@ pub fn genStatement(mut ctx: StatementCtx<SymbolicOpcode>) -> Result<(), CodeGen
     Ok(())
 }
 
-pub fn generateImplicitConversion(src: DataType, tgt: DataType, exp: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
-    if src.isReferenceNonNullable() && tgt.isReference() {
-        return Ok(());
-    }
-    if src.isReferenceNonNullable() && tgt.isObject() {
-        return Ok(());
-    }
-    if src.isReferenceNullable() && tgt.isObjectNullable() {
-        return Ok(());
-    }
-    if src.isNull() && tgt.isReferenceNullable() {
-        return Ok(());
-    }
-    if src.isNull() && tgt.isObjectNullable() {
-        return Ok(());
-    }
-    if src.isObjectNonNullable() && tgt.isObject() {
-        return Ok(());
-    }
-
-    if src.clone().isBoxedNonNull() {
-        let unboxed = src.toUnboxedType();
-        assert_eq!(unboxed, tgt);
-
-        return exp.genExpressionUnbox();
-    }
-
-    if src.clone().isPrimitiveType() {
-        let unboxed = tgt.clone().toUnboxedType();
-        assert_eq!(unboxed, src);
-
-        return exp.genExpressionBox();
-    }
-
-    todo!("src: {src:?}, tgt: {tgt:?}")
-}
-
-pub fn genExpressionExpecting(mut ctx: ExpressionCtx<SymbolicOpcode>, expect: Option<DataType>) -> Result<(), CodeGenError> {
-    if let Some(tgt) = expect {
-        let src = ctx.clone().toDataType()?;
-        if src != tgt {
-            return generateImplicitConversion(src, tgt, ctx.clone());
-        }
-    }
-
-    genExpression(ctx)
-}
-
 pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenError> {
     let mut r = ctx;
 
     unsafe {
         match &r.exp.exp {
             RawExpression::BinaryOperation { left, right, op } if matches!(op, BinaryOp::And | BinaryOp::Or) => {
-                r.transfer(right).assertType(Bool)?;
-                r.transfer(left).assertType(Bool)?;
                 let isAnd = op == &BinaryOp::And;
 
                 let endLabel = r.ctx.nextLabel();
 
-                r.transfer(left).genExpressionExpecting(Bool)?;
+                r.transfer(left).genCondition()?;
 
                 r.push(Dup);
                 r.ctx.opJmp(endLabel, if isAnd { False } else { True });
-                r.transfer(right).genExpressionExpecting(Bool)?;
+                r.transfer(right).genCondition()?;
                 if isAnd {
                     r.push(And);
                 } else {
@@ -871,25 +537,67 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             }
 
             RawExpression::BinaryOperation { left, right, op } => {
+                // FIXME !!!!! this is huge mess it would be best to refactor it to smaller parts
+                // FIXME it looks like we dont even support string comparison :)
+
                 let dat = r.transfer(left).toDataTypeNotVoid()?;
                 let dat1 = r.transfer(right).toDataTypeNotVoid()?;
 
+                if dat.isString() || dat1.isString() {
+                    r.transfer(left).genExpressionExpecting(DataType::str())?;
+                    r.transfer(right).genExpressionExpecting(DataType::str())?;
 
-                if dat1.isNull() || dat.isNull() {
-                    r.transfer(left).genExpression()?;
-                    r.transfer(right).genExpression()?;
-                } else {
-                    r.transfer(left).genExpressionUnbox()?;
-                    r.transfer(right).genExpressionUnbox()?;
-                }
-
-                if dat.isString() {
-                    let f = r.ctx.findFunction("concat", &[DataType::str(), DataType::str()])?;
-                    r.push(f.callInstruction());
+                    match op {
+                        BinaryOp::Add => {
+                            let f = r.ctx.findFunction("concat", &[DataType::str(), DataType::str()])?;
+                            r.push(f.callInstruction());
+                        }
+                        BinaryOp::Eq => {
+                            todo!("planed implementation of string eq")
+                        }
+                        BinaryOp::NotEq => {
+                            todo!("planed implementation string neq")
+                        }
+                        _ => panic!()
+                    }
                     return Ok(());
                 }
 
-                let rawT = dat.clone().toRawType()?;
+
+                if dat1.isReferenceLike() || dat.isReferenceLike() {
+                    r.transfer(left).genExpressionExpectingLike(|it| it.isReferenceLike())?;
+                    r.transfer(right).genExpressionExpectingLike(|it| it.isReferenceLike())?;
+
+                    match op {
+                        BinaryOp::Eq => {
+                            r.push(OpCode::Equals(RawDataType::Int))
+                        }
+                        BinaryOp::NotEq => {
+                            r.push(OpCode::Equals(RawDataType::Int));
+                            r.push(Not)
+                        }
+                        _ => panic!()
+                    }
+
+                    return Ok(());
+                }
+
+                let finalTypA = r.transfer(left).genExpressionExpectingLike(|it| it.isPrimitiveType())?;
+                let finalTypB = r.transfer(right).genExpressionExpectingLike(|it| it.isPrimitiveType())?;
+                let isOneFloat = finalTypA.isFloat() || finalTypB.isFloat();
+                let mut rawT = finalTypA.toRawType()?;
+
+                if isOneFloat {
+                    // FIXME this is pretty / slow
+                    if finalTypB.isFloat() {
+                        r.push(Swap);
+                        r.push(I2F);
+                        r.push(Swap);
+                    } else {
+                        r.push(I2F);
+                    }
+                    rawT = RawDataType::Float;
+                }
 
                 let ts = match op {
                     BinaryOp::Add => vec![OpCode::Add(rawT)],
@@ -898,11 +606,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                     BinaryOp::Div => vec![OpCode::Div(rawT)],
                     BinaryOp::Gt => vec![OpCode::Greater(rawT)],
                     BinaryOp::Less => vec![OpCode::Less(rawT)],
-                    BinaryOp::Eq => {
-                        println!("doing eq {:?} {:?} {:?}", rawT, dat, dat1);
-
-                        vec![OpCode::Equals(rawT)]
-                    }
+                    BinaryOp::Eq => vec![OpCode::Equals(rawT)],
                     BinaryOp::Modulo => vec![OpCode::Modulo(rawT)],
                     BinaryOp::NotEq => vec![OpCode::Equals(rawT), Not],
                     _ => unreachable!()
@@ -934,11 +638,21 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             }
             RawExpression::CharLiteral(c) => r.push(PushChar(*c)),
             RawExpression::ArrayLiteral(i) => {
+                let t = if let Some(v) = i.get(0) {
+                    Some(r.transfer(v).toDataType()?)
+                } else {
+                    None
+                };
+
                 r.push(PushInt(i.len() as isize));
                 r.push(ArrayNew);
                 for (ind, exp) in i.iter().enumerate() {
                     r.push(Dup);
-                    r.transfer(exp).genExpression()?;
+                    if let Some(t1) = t.clone() {
+                        r.transfer(exp).genExpressionExpecting(t1)?;
+                    } else {
+                        r.transfer(exp).genExpression()?;
+                    }
                     r.push(PushInt(ind as isize));
                     r.push(ArrayStore);
                 }
@@ -946,15 +660,12 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::ArrayIndexing(i) => {
                 let d = r.transfer(&i.expr).toDataTypeNotVoid()?;
 
+                r.transfer(&i.expr).genExpressionExpectingLike(|it| it.isArray())?;
+                r.transfer(&i.index).genExpressionExpecting(Int)?;
                 if d.isString() {
-                    r.transfer(&i.expr).genExpression()?;
-                    r.transfer(&i.index).genExpression()?;
                     r.push(GetChar);
                     return Ok(());
                 } else if d.isArray() {
-                    r.transfer(&i.expr).genExpression()?;
-                    r.transfer(&i.index).genExpression()?;
-
                     r.push(ArrayLoad);
 
                     return Ok(());
@@ -963,7 +674,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 return Err(CodeGenError::ExpectedReference);
             }
             RawExpression::NotExpression(e, _) => {
-                r.transfer(e).genExpression()?;
+                r.transfer(e).genCondition()?;
                 r.push(Not)
             }
             RawExpression::NamespaceAccess(parts) => {
@@ -977,13 +688,12 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::Lambda(args, body, ret) => {
                 todo!();
             }
-            RawExpression::Callable(prev, args) => unsafe {
+            RawExpression::Callable(prev, args) => {
+                // TODO create better function detection using implicit conversions
+
                 let mut argExpressions = args.clone();
 
-                let mut argTypes = args
-                    .iter()
-                    .map(|it| r.transfer(it).toDataType())
-                    .collect::<Result<Vec<_>, _>>()?;
+                let mut argTypes = r.ctx.argsToDataTypes(args)?;
 
                 let mut funcMeta: Option<FunctionSymbol> = None;
 
@@ -1036,15 +746,14 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 };
 
                 for ((src, dest), exp) in argTypes.into_iter().zip(expectedTypes).zip(argExpressions) {
-                    // FIXME
-                    r.ctx.implicitConversion(src, dest, &exp)?;
+                    r.transfer(&exp).genExpressionExpecting(dest)?;
                 }
 
                 match funcMeta {
                     None => {
                         // FIXME not sure if this is working
                         let f = r.transfer(prev).toDataType()?.getFunction()?;
-                        r.transfer(prev).genExpression()?;
+                        r.transfer(prev).genExpressionExpectingLike(|it| it.isFunction())?;
 
                         r.push(DynamicCall { returns: !f.1.isVoid(), argsCount: f.0.len() })
                     }
@@ -1052,7 +761,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                         r.push(v.callInstruction())
                     }
                 }
-            },
+            }
             RawExpression::StructInit(name, init) => {
                 let s = r.ctx.getStructParts(name)?;
 
@@ -1068,15 +777,16 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 for (fieldName, value) in init {
                     r.push(Dup);
                     let s1 = r.ctx.getStruct(name.last().unwrap())?;
-                    let (_, fieldID) = s1.meta.findField(fieldName)?;
-                    r.transfer(value).genExpression()?;
+                    let (var, fieldID) = s1.meta.findField(fieldName)?;
+                    let fieldType = var.typ.clone();
+                    r.transfer(value).genExpressionExpecting(fieldType)?;
                     r.push(SetField {
                         fieldID,
                     })
                 }
             }
             RawExpression::FieldAccess(prev, fieldName) => {
-                r.transfer(prev).genExpression()?;
+                r.transfer(prev).genExpressionExpectingLike(|it| it.isReferenceNonNullable())?;
 
                 let e = r.transfer(prev).toDataTypeNotVoid()?;
 
@@ -1109,12 +819,11 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
 
                 r.ctx.opJmp(falseLabel, False);
 
-                // FIXME this should propably be gen expecting but it causes segfault investigate
-                r.transfer(tr).genExpression()?;
+                r.transfer(tr).genExpressionExpecting(t.clone())?;
                 r.ctx.opJmp(endLabel, JmpType::Jmp);
 
                 r.ctx.makeLabel(falseLabel);
-                r.transfer(fal).genExpression()?;
+                r.transfer(fal).genExpressionExpecting(t)?;
 
                 r.ctx.makeLabel(endLabel);
             }
@@ -1152,17 +861,16 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::Negate(e) => {
                 let t = r.transfer(e).toDataType()?;
 
-                if t.isFloat() {
-                    r.push(OpCode::PushFloat(0.0));
-                    r.transfer(e).genExpression()?;
-                    r.push(Sub(RawDataType::Float));
-                } else if t.isInt() {
-                    r.push(OpCode::PushInt(0));
-                    r.transfer(e).genExpression()?;
+                if r.ctx.canConvert(&t, &Int) {
+                    r.push(PushInt(0));
+                    r.transfer(e).genExpressionExpecting(Int)?;
                     r.push(Sub(RawDataType::Int));
                 } else {
-                    unreachable!("invalid type, type should be float or int")
+                    r.push(PushFloat(0.0));
+                    r.transfer(e).genExpressionExpecting(Float)?;
+                    r.push(Sub(RawDataType::Float));
                 }
+                println!("FINISH")
             }
             RawExpression::BitwiseNot(e) => {
                 r.transfer(e).genExpressionExpecting(Int)?;
@@ -1170,7 +878,7 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
                 r.push(OpCode::BitwiseNot)
             }
             RawExpression::NullAssert(e) => {
-                r.transfer(e).genExpression()?;
+                r.transfer(e).genExpressionExpectingLike(|it| it.isReference() || it.isObject())?;
 
                 r.push(Dup);
                 r.push(AssertNotNull);
@@ -1178,14 +886,14 @@ pub fn genExpression(ctx: ExpressionCtx<SymbolicOpcode>) -> Result<(), CodeGenEr
             RawExpression::Elvis(a, b) => {
                 let endLabel = r.ctx.nextLabel();
 
-                r.transfer(a).genExpression()?;
+                let t = r.transfer(a).genExpressionExpectingLike(|it| it.isReference() || it.isObject())?;
 
                 r.push(Dup);
                 r.push(PushInt(0));
                 r.push(OpCode::Equals(RawDataType::Int));
                 r.ctx.opJmp(endLabel, False);
                 r.push(Pop);
-                r.transfer(b).genExpressionBox()?;
+                r.transfer(b).genExpressionExpecting(t)?;
                 r.ctx.makeLabel(endLabel);
             }
         }
